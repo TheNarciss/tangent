@@ -25,8 +25,19 @@ class PortfolioStat(TypedDict):
 
 
 def daily_log_returns(prices: pd.DataFrame) -> pd.DataFrame:
-    """Log returns; first row dropped."""
-    return np.log(prices / prices.shift(1)).dropna()
+    """Log returns; first row dropped.
+
+    Raises:
+        ValueError: if `prices` is empty or has fewer than 2 observations.
+    """
+    if prices is None or prices.empty:
+        raise ValueError("Aucune donnée de prix.")
+    if len(prices) < 2:
+        raise ValueError(f"Au moins 2 observations sont nécessaires, reçu {len(prices)}.")
+    rets = np.log(prices / prices.shift(1)).dropna()
+    if rets.empty:
+        raise ValueError("Calcul des rendements impossible (toutes les lignes invalides).")
+    return rets
 
 
 def annualized_stats(returns: pd.DataFrame, risk_free: float = RISK_FREE) -> dict[str, AssetStat]:
@@ -125,8 +136,14 @@ def deterministic_projection(
     annual_return: float,
     annual_vol: float,
     months: int,
+    monthly_fee: "Callable[[float], float] | None" = None,
 ) -> dict[str, list[float]]:
-    """Three deterministic DCA paths: bear (μ-σ), base (μ), bull (μ+σ)."""
+    """Three deterministic DCA paths: bear (μ-σ), base (μ), bull (μ+σ).
+
+    If `monthly_fee(value) -> €` is supplied, fees are deducted at each month-end
+    so they compound (lost money does not grow further).
+    """
+    fee = monthly_fee or (lambda _v: 0.0)
     paths: dict[str, list[float]] = {}
     for label, mu in (("bear", annual_return - annual_vol),
                        ("base", annual_return),
@@ -135,7 +152,7 @@ def deterministic_projection(
         v = initial
         series = [v]
         for _ in range(months):
-            v = v * (1 + rm) + monthly_contribution
+            v = v * (1 + rm) + monthly_contribution - fee(v)
             series.append(v)
         paths[label] = series
     return paths
@@ -146,14 +163,19 @@ def monte_carlo_projection(
     initial: float,
     monthly_contribution: float,
     months: int,
+    monthly_fee: "Callable[[float], float] | None" = None,
     n_paths: int = 1000,
     seed: int = 42,
-) -> dict[str, list[float]]:
+) -> dict[str, list[float] | np.ndarray]:
     """Parametric Monte Carlo on monthly log-returns derived from daily history.
 
     Returns percentile bands p10/p25/p50/p75/p90 at each month, plus the
     probability of reaching `goal` at each month if provided via wrapper.
+    Fees (if given) deducted per-path per-month and compound correctly.
     """
+    if daily_log_returns is None or daily_log_returns.empty:
+        raise ValueError("Aucun rendement historique pour la simulation Monte-Carlo.")
+
     rng = np.random.default_rng(seed)
     days_per_month = TRADING_DAYS / 12  # ≈ 21
     mu = float(daily_log_returns.mean()) * days_per_month
@@ -162,10 +184,16 @@ def monte_carlo_projection(
     log_rets = rng.normal(mu, sigma, size=(n_paths, months))
     gross = np.exp(log_rets)
 
+    fee = monthly_fee or (lambda _v: 0.0)
+
     values = np.empty((n_paths, months + 1), dtype=np.float64)
     values[:, 0] = initial
     for t in range(months):
-        values[:, t + 1] = values[:, t] * gross[:, t] + monthly_contribution
+        next_val = values[:, t] * gross[:, t] + monthly_contribution
+        # Apply fees per-path on the pre-fee value
+        if monthly_fee is not None:
+            next_val = next_val - np.array([fee(v) for v in values[:, t]])
+        values[:, t + 1] = next_val
 
     bands = np.percentile(values, [10, 25, 50, 75, 90], axis=0)
     return {

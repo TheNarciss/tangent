@@ -7,6 +7,7 @@ optimal allocations, and the smooth efficient frontier curve as visual aid.
 import numpy as np
 
 from . import analytics, market, portfolio
+from .errors import ConfigurationError, PortfolioEmptyError
 from .models import (
     FrontierCurve,
     OptimizerResponse,
@@ -20,11 +21,11 @@ VALID_OBJECTIVES = ("max_sharpe", "min_variance")
 
 def build(objective: str) -> OptimizerResponse:
     if objective not in VALID_OBJECTIVES:
-        raise ValueError(f"Objectif inconnu: {objective!r}. Valeurs: {VALID_OBJECTIVES}.")
+        raise ConfigurationError(f"Objectif inconnu: {objective!r}. Valeurs: {VALID_OBJECTIVES}.")
 
     pf = portfolio.load()
     if not pf.positions:
-        raise ValueError("Aucune position enregistrée.")
+        raise PortfolioEmptyError("Aucune position enregistrée.")
 
     tickers = [p.ticker for p in pf.positions]
     prices = market.fetch_prices(tickers, period="5y")

@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 
 from . import analytics, market, portfolio
+from .errors import PortfolioEmptyError
 from .models import TimeseriesResponse
 
 BENCHMARK_TICKER = "CW8.PA"  # Amundi MSCI World, 5y+ history, broad-market proxy
@@ -21,7 +22,7 @@ ROLLING_WINDOW = 126         # trading days ≈ 6 months
 def build() -> TimeseriesResponse:
     pf = portfolio.load()
     if not pf.positions:
-        raise ValueError("Aucune position enregistrée.")
+        raise PortfolioEmptyError("Aucune position enregistrée.")
 
     tickers = [p.ticker for p in pf.positions]
     prices = market.fetch_prices(tickers, period="5y")

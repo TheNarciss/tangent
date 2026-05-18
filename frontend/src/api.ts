@@ -90,6 +90,29 @@ export interface ProjectionResponse {
   goal: number | null;
   goal_prob_at_end: number | null;
   goal_prob_by_month: number[] | null;
+  // Broker fee impact
+  broker_id: string;
+  broker: string;
+  gross_p50: number[];                       // P50 without fees, for comparison
+  cumulative_fees: number[];                 // €, per-month cumulative
+}
+
+export interface BrokerInfo {
+  id: string;
+  name: string;
+}
+
+export interface BrokersResponse {
+  default: string;
+  brokers: BrokerInfo[];
+}
+
+/** Structured error from the backend's AppError handler. */
+export class ApiError extends Error {
+  constructor(public status: number, public type: string, message: string) {
+    super(message);
+    this.name = "ApiError";
+  }
 }
 
 export type OptimizerObjective = "max_sharpe" | "min_variance";
@@ -138,7 +161,21 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { "Content-Type": "application/json" },
     ...init,
   });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  if (!res.ok) {
+    // Backend errors return {detail, type}; surface both for typed handling upstream.
+    let detail = `${res.status} ${res.statusText}`;
+    let type = "HttpError";
+    try {
+      const body = await res.json();
+      if (body && typeof body === "object") {
+        if (typeof body.detail === "string") detail = body.detail;
+        if (typeof body.type === "string") type = body.type;
+      }
+    } catch {
+      /* response wasn't JSON; keep status text */
+    }
+    throw new ApiError(res.status, type, detail);
+  }
   return res.json() as Promise<T>;
 }
 
@@ -158,15 +195,24 @@ export function useTimeseries() {
   });
 }
 
-export function useProjection(monthly: number, years: number, goal?: number) {
+export function useProjection(monthly: number, years: number, goal?: number, brokerId?: string) {
   return useQuery({
-    queryKey: ["projection", monthly, years, goal ?? null],
+    queryKey: ["projection", monthly, years, goal ?? null, brokerId ?? null],
     queryFn: () => {
       const params = new URLSearchParams({ monthly: String(monthly), years: String(years) });
       if (goal !== undefined && goal > 0) params.set("goal", String(goal));
+      if (brokerId) params.set("broker", brokerId);
       return http<ProjectionResponse>(`/projection?${params.toString()}`);
     },
     enabled: monthly >= 0 && years > 0,
+  });
+}
+
+export function useBrokers() {
+  return useQuery({
+    queryKey: ["brokers"],
+    queryFn: () => http<BrokersResponse>("/brokers"),
+    staleTime: Infinity,  // config rarely changes during a session
   });
 }
 

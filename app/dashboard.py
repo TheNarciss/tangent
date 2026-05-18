@@ -1,26 +1,30 @@
 """Dashboard service: composes portfolio + market + analytics + diagnostic."""
+import logging
 from datetime import date
 
 import numpy as np
 
 from . import analytics, diagnostic, market, portfolio
+from .errors import InsufficientHistoryError, PortfolioEmptyError
 from .models import AssetMetrics, DashboardResponse, FrontierCloud, PortfolioMetrics
 
-
-class EmptyPortfolioError(Exception):
-    """Raised when /dashboard is requested with no positions."""
+logger = logging.getLogger(__name__)
 
 
 def build() -> DashboardResponse:
     pf = portfolio.load()
     if not pf.positions:
-        raise EmptyPortfolioError("Aucune position enregistrée.")
+        raise PortfolioEmptyError("Aucune position enregistrée. Ajoute des positions via PUT /portfolio.")
 
     tickers = [p.ticker for p in pf.positions]
     prices = market.fetch_prices(tickers, period="5y")
     latest = {t: float(prices[t].dropna().iloc[-1]) for t in tickers}
 
-    returns = analytics.daily_log_returns(prices[tickers])
+    try:
+        returns = analytics.daily_log_returns(prices[tickers])
+    except ValueError as exc:
+        raise InsufficientHistoryError(f"Calcul des rendements impossible: {exc}") from exc
+
     asset_stats = analytics.annualized_stats(returns)
 
     values = np.array([p.quantity * latest[p.ticker] for p in pf.positions])
@@ -44,6 +48,7 @@ def build() -> DashboardResponse:
         assets=assets,
         correlation=analytics.correlation_matrix(returns),
     )
+    logger.info("dashboard built: %d assets, total %.2f €", len(assets), total_value)
     return DashboardResponse(
         as_of=date.today(),
         metrics=metrics,

@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import {
+  ApiError,
   useDashboard,
   useOptimizer,
   usePortfolio,
@@ -42,11 +43,7 @@ export default function App() {
         </header>
 
         {dashboard.isLoading && <p className="text-sm text-muted-foreground">Chargement…</p>}
-        {dashboard.isError && (
-          <p className="text-sm text-[hsl(var(--loss))]">
-            Erreur : {(dashboard.error as Error).message}
-          </p>
-        )}
+        {dashboard.isError && <DashboardErrorPanel error={dashboard.error} />}
 
         {dashboard.data && (
           <Tabs defaultValue="overview" className="space-y-6">
@@ -106,4 +103,48 @@ function OptimizationTab({ dashboard }: { dashboard: NonNullable<ReturnType<type
       <Correlation matrix={dashboard.metrics.correlation} />
     </div>
   );
+}
+
+/* Friendly error panel: maps known AppError types from the backend to actionable messages. */
+function DashboardErrorPanel({ error }: { error: unknown }) {
+  if (!(error instanceof ApiError)) {
+    return (
+      <p className="text-sm text-[hsl(var(--loss))]">
+        Erreur : {error instanceof Error ? error.message : "inconnue"}
+      </p>
+    );
+  }
+  const advice = errorAdvice(error.type);
+  return (
+    <div className="rounded-md border border-[hsl(var(--loss))] bg-card/40 p-4 space-y-1.5">
+      <div className="text-sm font-medium text-[hsl(var(--loss))]">
+        {humanType(error.type)}
+      </div>
+      <div className="text-sm text-muted-foreground">{error.message}</div>
+      {advice && <div className="text-xs text-muted-foreground italic">{advice}</div>}
+    </div>
+  );
+}
+
+function humanType(type: string): string {
+  return {
+    PortfolioEmptyError: "Portefeuille vide",
+    PortfolioCorruptedError: "Données du portefeuille corrompues",
+    TickerNotFoundError: "Ticker introuvable",
+    MarketDataError: "Données de marché indisponibles",
+    InsufficientHistoryError: "Historique insuffisant",
+    ConfigurationError: "Erreur de configuration",
+    UnknownBrokerError: "Broker inconnu",
+  }[type] ?? "Erreur";
+}
+
+function errorAdvice(type: string): string | null {
+  return {
+    PortfolioEmptyError: "Clique sur « Modifier positions » pour ajouter au moins une ligne.",
+    TickerNotFoundError: "Vérifie l'orthographe Yahoo Finance (ex: CW8.PA pour Amundi MSCI World, .PA pour Paris, .DE pour Frankfurt).",
+    MarketDataError: "Yahoo Finance est peut-être en panne ou ta connexion ne passe pas. Réessaie dans quelques minutes.",
+    InsufficientHistoryError: "Tes tickers n'ont pas assez d'historique commun. Ajoute des ETFs plus anciens (5+ ans) ou retire les plus récents.",
+    ConfigurationError: "Vérifie config/brokers.yaml côté serveur.",
+    UnknownBrokerError: "Choisis un broker dans la liste du dropdown (cf. /brokers).",
+  }[type] ?? null;
 }
