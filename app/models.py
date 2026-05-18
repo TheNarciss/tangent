@@ -1,12 +1,13 @@
 """Pydantic schemas used both as API contracts and domain models."""
 from datetime import date
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class Position(BaseModel):
     ticker: str = Field(min_length=1)
-    quantity: float = Field(gt=0)
-    avg_cost: float = Field(gt=0)
+    quantity: float = Field(ge=0)   # 0 autorisé pour watchlist
+    avg_cost: float = Field(ge=0)
+
 
 
 class Portfolio(BaseModel):
@@ -24,6 +25,9 @@ class AssetMetrics(BaseModel):
     annual_return: float
     annual_vol: float
     sharpe: float
+    drawdown_estimate: float = 0.0    # = −2 × annual_vol (loi normale, 97,5 %)
+    cvar_95: float = 0.0              # perte moyenne dans les 5 % pires journées (annualisé)
+    max_drawdown_observed: float = 0.0  # plus grosse chute peak-to-trough sur l'historique
 
 
 class PortfolioMetrics(BaseModel):
@@ -34,6 +38,9 @@ class PortfolioMetrics(BaseModel):
     expected_return: float
     volatility: float
     sharpe: float
+    drawdown_estimate: float = 0.0    # = −2 × volatility
+    cvar_95: float = 0.0              # CVaR 95 % du portefeuille agrégé
+    max_drawdown_observed: float = 0.0  # max drawdown du portefeuille reconstruit
     assets: list[AssetMetrics]
     correlation: dict[str, dict[str, float]]
 
@@ -55,6 +62,7 @@ class DashboardResponse(BaseModel):
     metrics: PortfolioMetrics
     frontier: FrontierCloud
     insights: list[Insight]
+    stress_tests: list["StressTestResult"] = Field(default_factory=list)
 
 
 class TimeseriesResponse(BaseModel):
@@ -104,6 +112,38 @@ class BrokersResponse(BaseModel):
     brokers: list[BrokerInfo]
 
 
+class EligibilityRequest(BaseModel):
+    age: int = Field(ge=0, le=120)
+    rfr: float = Field(ge=0, description="Revenu Fiscal de Référence N-2 (€)")
+    fiscal_shares: float = Field(ge=0.5, le=20, description="Nombre de parts fiscales")
+
+
+class EnvelopeEligibility(BaseModel):
+    id: str
+    name: str
+    rate_pct: float
+    ceiling_eur: float | None
+    tax_status: str
+    liquidity_days: int
+    eligible: bool
+    note: str
+
+
+class EligibleEnvelopesResponse(BaseModel):
+    envelopes: list[EnvelopeEligibility]
+
+
+class Transaction(BaseModel):
+    """A single dated cashflow or trade. Source of truth for portfolio state."""
+    date: str = Field(description="ISO date or datetime (YYYY-MM-DD or YYYY-MM-DDTHH:MM)")
+    type: str = Field(pattern="^(buy|sell|deposit|withdrawal|dividend)$")
+    ticker: str | None = None
+    qty: float = Field(default=0, ge=0)
+    unit_price: float = Field(default=0, ge=0)
+    fees: float = Field(default=0, ge=0)
+    amount_eur: float | None = Field(default=None, description="For deposits, withdrawals, and dividends")
+
+
 class PortfolioPoint(BaseModel):
     weights: list[float]
     expected_return: float
@@ -130,12 +170,143 @@ class FrontierCurve(BaseModel):
     sharpe: list[float]
 
 
+class ExpertSettings(BaseModel):
+    """Paramètres avancés pour curieux ; tous optionnels avec défauts intelligents.
+
+    - cma_shrinkage : 0 = pure μ historique 5y (gonflé), 1 = pure CMA long-terme.
+      Défaut backend : 0.70 (70 % CMA, 30 % historique).
+    - cma_overrides : map ticker → μ forward-looking (fraction). Surcharge le YAML.
+    - historical_period : période yfinance pour calcul de σ et corrélations.
+    - risk_free_rate : taux sans risque utilisé par Sharpe et Kelly. Défaut 2,5 %.
+    - cov_estimator : "sample" (défaut) ou "shrunk" (Ledoit-Wolf simplifié).
+    - cov_shrinkage : fraction de shrinkage si "shrunk", défaut 0.20.
+    """
+    cma_shrinkage: float | None = Field(default=None, ge=0, le=1)
+    cma_overrides: dict[str, float] = Field(default_factory=dict)
+    historical_period: str | None = Field(default=None, pattern="^(1y|2y|3y|5y|10y|max)$")
+    risk_free_rate: float | None = Field(default=None, ge=0, le=0.20)
+    cov_estimator: str = Field(default="sample", pattern="^(sample|shrunk)$")
+    cov_shrinkage: float = Field(default=0.20, ge=0, le=1)
+
+
+class KellyLeverage(BaseModel):
+    """Indicateur Kelly : combien le solveur Kelly investirait sous contrainte relâchée."""
+    full_kelly_leverage: float
+    half_kelly_leverage: float
+    interpretation: str
+
+
+class StressTestResult(BaseModel):
+    id: str
+    label: str
+    description: str
+    start: str
+    end: str
+    pnl_pct: float
+    drawdown_pct: float
+
+
+class ScanRequest(BaseModel):
+    """Configuration du scan : modes activés + paramètres ΔSharpe."""
+    modes: list[str] = Field(
+        default_factory=lambda: ["broad_eu", "tech_growth", "defensive"],
+        description="Liste de modes à activer : broad_eu, tech_growth, defensive",
+    )
+    hypothesis_fraction: float = Field(default=0.10, gt=0, le=0.50,
+                                       description="Fraction d'ajout simulée pour ΔSharpe (10 % = 0.10)")
+    n_results: int = Field(default=10, ge=1, le=50)
+    expert: ExpertSettings | None = None
+
+
+class ScanCandidate(BaseModel):
+    ticker: str
+    name: str
+    sector: str
+    market_cap: float
+    own_mu: float                      # μ blendé du candidat
+    own_sigma: float                   # σ historique
+    own_sharpe: float                  # Sharpe propre standalone
+    correlation_with_portfolio: float  # ρ avec le portfolio actuel
+    delta_sharpe: float                # ΔSharpe si ajouté à h % du portfolio
+    pea_eligible: bool
+    rationale: str                     # phrase explicative courte
+
+
+class ScanResponse(BaseModel):
+    candidates: list[ScanCandidate]
+    universe_size: int                 # nombre brut de tickers screenés avant ranking
+    modes_used: list[str]
+    elapsed_seconds: float
+
+
+class EnvelopePoint(BaseModel):
+    """Coordinates (σ, μ) of a regulated envelope on the risk-return scatter.
+    σ ≈ 0 by construction (livrets, fonds €): a guaranteed-rate asset has no
+    dispersion of returns. Rendered as a small marker so the user sees where
+    the optimizer is placing its 'low-risk' envelopes."""
+    label: str
+    expected_return: float                  # annualized, e.g. 0.030 for Livret A 3 %
+    volatility: float                       # ~0, the model uses 1e-3 for SLSQP stability
+
+
+class CeilingsUsed(BaseModel):
+    livret_a: float = 0
+    livret_a_jeune: float = 0
+    ldds: float = 0
+    lep: float = 0
+    pel: float = 0
+
+
+class OptimizerRequest(BaseModel):
+    objective: str = Field(default="max_sharpe", pattern="^(max_sharpe|min_variance|target_volatility|from_strategy)$")
+    # Risk-target objective (required when objective == 'target_volatility' or 'from_strategy')
+    max_volatility: float | None = Field(default=None, ge=0, le=1)
+    # Return-target (required when objective == 'from_strategy')
+    target_return: float | None = Field(default=None, ge=0, le=2)
+    # Envelope inclusion + profile (all required together for eligibility)
+    include_envelopes: bool = False
+    age: int | None = Field(default=None, ge=0, le=120)
+    rfr: float | None = Field(default=None, ge=0)
+    fiscal_shares: float | None = Field(default=None, ge=0.5, le=20)
+    ceilings_used: CeilingsUsed | None = None
+    # Optional total capital pool (€). Defaults to current ETF portfolio value.
+    total_capital: float | None = Field(default=None, ge=0)
+    # Expert overrides (shrinkage, CMA, periods…). Tous champs optionnels, défauts intelligents.
+    expert: ExpertSettings | None = None
+
+    @model_validator(mode="after")
+    def _check_objective_params(self) -> "OptimizerRequest":
+        if self.objective == "target_volatility" and self.max_volatility is None:
+            raise ValueError("max_volatility est requis quand objective='target_volatility'.")
+        if self.objective == "from_strategy" and (self.max_volatility is None or self.target_return is None):
+            raise ValueError("max_volatility ET target_return sont requis quand objective='from_strategy'.")
+        return self
+
+
 class OptimizerResponse(BaseModel):
     objective: str
-    tickers: list[str]
+    # All asset universe (ETFs first, envelopes after)
+    asset_ids: list[str]
+    asset_kinds: list[str]                   # "etf" | "envelope"
+    asset_labels: list[str]                  # human-readable names
+    total_capital: float                     # € pool used to resolve euro amounts
     current: PortfolioPoint
     optimal: PortfolioPoint
     actions: list[RebalanceAction]
     risk_contributions_current: RiskContribution
     risk_contributions_optimal: RiskContribution
-    frontier_curve: FrontierCurve
+    frontier_curve: FrontierCurve            # ETF-only curve (envelope-augmented frontier is just a kink)
+    envelope_points: list[EnvelopePoint] = Field(default_factory=list)
+    kelly_leverage: KellyLeverage | None = None  # sanity-check : Kelly recommande-t-il levier ou cash ?
+
+
+class StrategyRequest(BaseModel):
+    """Calcule la stratégie recommandée via glide path à partir du profil minimal."""
+    age: int = Field(ge=0, le=120)
+    horizon_years: int = Field(ge=1, le=100)
+    rule: str = Field(default="120_age", pattern="^(100_age|120_age|custom)$")
+    custom_multiplier: float | None = Field(default=None, ge=0, le=1)
+
+
+# Forward-ref resolution: DashboardResponse references StressTestResult defined later
+DashboardResponse.model_rebuild()

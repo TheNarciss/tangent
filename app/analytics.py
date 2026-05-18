@@ -40,9 +40,21 @@ def daily_log_returns(prices: pd.DataFrame) -> pd.DataFrame:
     return rets
 
 
-def annualized_stats(returns: pd.DataFrame, risk_free: float = RISK_FREE) -> dict[str, AssetStat]:
-    """Per-asset annualized mean, volatility, Sharpe."""
+def annualized_stats(
+    returns: pd.DataFrame,
+    risk_free: float = RISK_FREE,
+    mu_override: dict[str, float] | None = None,
+) -> dict[str, AssetStat]:
+    """Per-asset annualized mean, volatility, Sharpe.
+
+    If `mu_override` provided, use those μ instead of the historical mean.
+    σ is always computed from historical data (CMAs target μ, not σ).
+    """
     mu = returns.mean() * TRADING_DAYS
+    if mu_override:
+        for t in returns.columns:
+            if t in mu_override:
+                mu[t] = mu_override[t]
     sigma = returns.std() * np.sqrt(TRADING_DAYS)
     sharpe = (mu - risk_free) / sigma
     return {
@@ -55,14 +67,95 @@ def portfolio_stats(
     returns: pd.DataFrame,
     weights: np.ndarray,
     risk_free: float = RISK_FREE,
+    mu_override: dict[str, float] | None = None,
 ) -> PortfolioStat:
-    """E(R), σ, Sharpe for weighted portfolio. Weights aligned with `returns.columns`."""
-    mu = returns.mean().values * TRADING_DAYS
+    """E(R), σ, Sharpe for weighted portfolio.
+
+    If `mu_override` given, asset μ are overridden before weighting.
+    """
+    if mu_override:
+        mu_per_asset = np.array([
+            mu_override.get(t, returns[t].mean() * TRADING_DAYS) for t in returns.columns
+        ])
+    else:
+        mu_per_asset = returns.mean().values * TRADING_DAYS
     cov = returns.cov().values * TRADING_DAYS
-    expected = float(weights @ mu)
+    expected = float(weights @ mu_per_asset)
     vol = float(np.sqrt(weights @ cov @ weights))
     sharpe = (expected - risk_free) / vol if vol > 0 else 0.0
     return PortfolioStat(expected_return=expected, volatility=vol, sharpe=sharpe)
+
+
+def cvar_95(returns_series: pd.Series) -> float:
+    """Conditional VaR à 95 % (Expected Shortfall) — annualisé.
+
+    = moyenne des rendements quotidiens dans le pire 5 %, × √252 pour annualiser
+    Plus honnête que VaR car prend la moyenne de la queue, pas juste le seuil.
+    Renvoie un nombre négatif (perte attendue dans les pires journées).
+    """
+    if returns_series.empty:
+        return 0.0
+    threshold = np.percentile(returns_series.values, 5)  # 5e percentile = seuil VaR
+    tail = returns_series[returns_series <= threshold]
+    if tail.empty:
+        return float(threshold * np.sqrt(TRADING_DAYS))
+    return float(tail.mean() * np.sqrt(TRADING_DAYS))
+
+
+def max_drawdown(price_series: pd.Series) -> float:
+    """Plus grande chute peak-to-trough observée. Nombre négatif.
+
+    Calcule l'equity curve cumulative max, puis la dérive max((p − cummax) / cummax).
+    """
+    if price_series.empty or len(price_series) < 2:
+        return 0.0
+    series = price_series.dropna()
+    if series.empty:
+        return 0.0
+    cummax = series.cummax()
+    drawdown = (series - cummax) / cummax
+    return float(drawdown.min())
+
+
+def shrunk_covariance(returns: pd.DataFrame, shrinkage: float = 0.20) -> np.ndarray:
+    """Shrinkage style Ledoit-Wolf simplifié : pull la matrice d'échantillon
+    vers une cible diagonale (variance moyenne × I). Stabilise Σ quand l'échantillon
+    est court (peu d'historique, fréquent en finance retail).
+
+    shrinkage ∈ [0, 1] : 0 = pure sample, 1 = pure diagonal target.
+    """
+    cov_sample = returns.cov().values * TRADING_DAYS
+    avg_var = float(np.mean(np.diag(cov_sample)))
+    target = avg_var * np.eye(cov_sample.shape[0])
+    s = max(0.0, min(1.0, shrinkage))
+    return s * target + (1 - s) * cov_sample
+
+
+def kelly_leverage(mu: np.ndarray, cov: np.ndarray, risk_free: float = RISK_FREE) -> dict[str, float]:
+    """Kelly leverage indicator : combien le solveur Kelly théorique investirait
+    si la contrainte sum(w)=1 et long-only étaient relâchées.
+
+    Formule : w_kelly = Σ⁻¹ (μ − r_f×1)  ;  leverage = sum(w_kelly)
+
+    Interprétation :
+    - leverage > 1 : Kelly suggère du levier (les actifs sont très attractifs ;
+      sans levier dispo, l'investissement plein sans cash est rationnel)
+    - leverage < 1 : Kelly suggère de garder du cash (risk-reward médiocre)
+    - leverage ≈ 1 : fully invested sans levier est juste
+
+    Half-Kelly applique un facteur 0,5 pour gérer l'incertitude sur μ.
+    """
+    excess = mu - risk_free
+    try:
+        raw = np.linalg.solve(cov, excess)
+    except np.linalg.LinAlgError:
+        # Σ singulière → fallback diagonale
+        raw = excess / np.maximum(np.diag(cov), 1e-10)
+    full_leverage = float(raw.sum())
+    return {
+        "full_kelly_leverage": full_leverage,
+        "half_kelly_leverage": full_leverage / 2,
+    }
 
 
 def correlation_matrix(returns: pd.DataFrame) -> dict[str, dict[str, float]]:
@@ -214,74 +307,184 @@ def goal_probability(paths: np.ndarray, goal: float) -> list[float]:
 # ─── Portfolio optimization ────────────────────────────────────────────────
 
 
-def optimize_portfolio(
-    returns: pd.DataFrame,
-    objective: str = "max_sharpe",
-    risk_free: float = RISK_FREE,
+def _solve_slsqp(
+    mu: np.ndarray,
+    cov: np.ndarray,
+    bounds: list[tuple[float, float]],
+    objective: str,
+    risk_free: float,
+    max_vol: float | None,
+    target_return: float | None = None,
 ) -> dict[str, float | list[float]]:
-    """Solve via SLSQP for a long-only fully-invested portfolio.
+    """Common SLSQP body. mu, cov, bounds already finalized (possibly augmented)."""
+    from scipy.optimize import minimize
 
-    objective ∈ {"max_sharpe", "min_variance"}.
-    Returns weights aligned with `returns.columns` plus expected_return/volatility/sharpe.
-    """
-    from scipy.optimize import minimize  # lazy import to keep cold-start cheap
-
-    n = returns.shape[1]
-    mu = returns.mean().values * TRADING_DAYS
-    cov = returns.cov().values * TRADING_DAYS
-
-    def neg_sharpe(w: np.ndarray) -> float:
-        vol = float(np.sqrt(w @ cov @ w))
-        return -(float(w @ mu) - risk_free) / vol if vol > 0 else 1e6
-
-    def variance(w: np.ndarray) -> float:
-        return float(w @ cov @ w)
-
-    fn = {"max_sharpe": neg_sharpe, "min_variance": variance}.get(objective)
-    if fn is None:
-        raise ValueError(f"Unknown objective: {objective!r}")
-
+    n = len(mu)
     w0 = np.full(n, 1 / n)
-    bounds = [(0.0, 1.0)] * n
-    constraints = [{"type": "eq", "fun": lambda w: w.sum() - 1.0}]
+    constraints: list[dict] = [{"type": "eq", "fun": lambda w: w.sum() - 1.0}]
+
+    if objective == "max_sharpe":
+        def fn(w: np.ndarray) -> float:
+            vol = float(np.sqrt(w @ cov @ w))
+            return -(float(w @ mu) - risk_free) / vol if vol > 1e-10 else 1e6
+    elif objective == "min_variance":
+        def fn(w: np.ndarray) -> float:
+            return float(w @ cov @ w)
+    elif objective == "target_volatility":
+        if max_vol is None:
+            raise ValueError("target_volatility requires max_vol")
+        def fn(w: np.ndarray) -> float:
+            return -float(w @ mu)
+        constraints.append({
+            "type": "ineq",
+            "fun": lambda w: float(max_vol) - float(np.sqrt(w @ cov @ w)),
+        })
+    elif objective == "from_strategy":
+        if max_vol is None or target_return is None:
+            raise ValueError("from_strategy requires both max_vol and target_return")
+        # Maximize Sharpe subject to σ ≤ max_vol AND μ ≥ target_return
+        def fn(w: np.ndarray) -> float:
+            vol = float(np.sqrt(w @ cov @ w))
+            return -(float(w @ mu) - risk_free) / vol if vol > 1e-10 else 1e6
+        constraints.append({
+            "type": "ineq",
+            "fun": lambda w: float(max_vol) - float(np.sqrt(w @ cov @ w)),
+        })
+        constraints.append({
+            "type": "ineq",
+            "fun": lambda w: float(w @ mu) - float(target_return),
+        })
+    else:
+        raise ValueError(f"Unknown objective: {objective!r}")
 
     res = minimize(fn, w0, method="SLSQP", bounds=bounds, constraints=constraints,
                    options={"ftol": 1e-10, "maxiter": 200})
-
     w_opt = res.x
     vol = float(np.sqrt(w_opt @ cov @ w_opt))
     ret = float(w_opt @ mu)
-    sharpe = (ret - risk_free) / vol if vol > 0 else 0.0
+    sharpe = (ret - risk_free) / vol if vol > 1e-10 else 0.0
     return {
         "weights": w_opt.tolist(),
         "expected_return": ret,
         "volatility": vol,
         "sharpe": sharpe,
+        "success": bool(res.success),
     }
+
+
+def build_asset_stats(
+    returns: pd.DataFrame,
+    envelope_rates: list[float] | None = None,
+    envelope_max_weights: list[float] | None = None,
+    sigma_envelope: float = 1e-3,
+    mu_override: dict[str, float] | None = None,
+    cov_estimator: str = "sample",
+    cov_shrinkage: float = 0.20,
+) -> tuple[np.ndarray, np.ndarray, list[tuple[float, float]]]:
+    """Build (mu, cov, bounds) from historical returns + optional synthetic envelope assets.
+
+    cov_estimator : "sample" (défaut) ou "shrunk" (shrinkage Ledoit-Wolf simplifié).
+    cov_shrinkage : fraction de shrinkage si cov_estimator="shrunk", défaut 0.20.
+    """
+    n = returns.shape[1]
+    if mu_override:
+        mu = np.array([
+            mu_override.get(t, float(returns[t].mean() * TRADING_DAYS)) for t in returns.columns
+        ])
+    else:
+        mu = returns.mean().values * TRADING_DAYS
+    if cov_estimator == "shrunk":
+        cov = shrunk_covariance(returns, shrinkage=cov_shrinkage)
+    else:
+        cov = returns.cov().values * TRADING_DAYS
+    bounds: list[tuple[float, float]] = [(0.0, 1.0)] * n
+
+    if envelope_rates:
+        assert envelope_max_weights is not None and len(envelope_max_weights) == len(envelope_rates)
+        k = len(envelope_rates)
+        mu_aug = np.concatenate([mu, np.array(envelope_rates)])
+        cov_aug = np.zeros((n + k, n + k))
+        cov_aug[:n, :n] = cov
+        for i in range(k):
+            cov_aug[n + i, n + i] = sigma_envelope ** 2
+        bounds_aug = bounds + [(0.0, max(0.0, min(1.0, mw))) for mw in envelope_max_weights]
+        return mu_aug, cov_aug, bounds_aug
+
+    return mu, cov, bounds
+
+
+def optimize_portfolio(
+    returns: pd.DataFrame,
+    objective: str = "max_sharpe",
+    risk_free: float = RISK_FREE,
+    *,
+    envelope_rates: list[float] | None = None,
+    envelope_max_weights: list[float] | None = None,
+    max_vol: float | None = None,
+) -> dict[str, float | list[float]]:
+    """Solve via SLSQP for a long-only fully-invested portfolio.
+
+    objective ∈ {"max_sharpe", "min_variance", "target_volatility"}.
+    Returns weights aligned with `returns.columns` extended by envelopes if any.
+    """
+    mu, cov, bounds = build_asset_stats(returns, envelope_rates, envelope_max_weights)
+    return _solve_slsqp(mu, cov, bounds, objective, risk_free, max_vol)
+
+
+def euler_risk_contributions(weights: np.ndarray, cov: np.ndarray) -> list[float]:
+    """Generic Euler decomposition for any (weights, cov). Returns fractions summing to 1."""
+    vol = float(np.sqrt(weights @ cov @ weights))
+    if vol <= 1e-10:
+        return [0.0] * len(weights)
+    marginal = (cov @ weights) / vol
+    rc = weights * marginal
+    return (rc / vol).tolist()
 
 
 def efficient_frontier_curve(
     returns: pd.DataFrame,
     n_points: int = 30,
     risk_free: float = RISK_FREE,
+    mu: np.ndarray | None = None,
+    cov: np.ndarray | None = None,
+    bounds_override: list[tuple[float, float]] | None = None,
 ) -> dict[str, list[float]]:
-    """Smooth efficient frontier as N (σ, μ) points from min-variance to max-return."""
+    """Smooth efficient frontier as N (σ, μ) points from min-variance to max-return.
+
+    Quand mu et cov sont fournis, ils définissent l'univers entier (ETFs seuls ou
+    augmenté avec enveloppes). bounds_override permet de plafonner les poids des
+    enveloppes par leur headroom (ceilings).
+    """
     from scipy.optimize import minimize
 
-    n = returns.shape[1]
-    mu = returns.mean().values * TRADING_DAYS
-    cov = returns.cov().values * TRADING_DAYS
+    if mu is None:
+        mu = returns.mean().values * TRADING_DAYS
+    if cov is None:
+        cov = returns.cov().values * TRADING_DAYS
 
-    # Endpoints: μ at the min-variance portfolio (lower bound) and the single max-μ asset (upper bound)
-    min_var = optimize_portfolio(returns, "min_variance", risk_free)
-    mu_min = float(min_var["expected_return"])
+    n = len(mu)
+    bounds = bounds_override if bounds_override is not None else [(0.0, 1.0)] * n
+
+    # Min-variance portfolio computed directly avec le cov passé (augmenté ou pas).
+    # IMPORTANT : on n'utilise plus optimize_portfolio(returns) ici car ça
+    # bypasserait le cov augmenté quand des enveloppes sont dans l'univers.
+    res_minvar = minimize(
+        lambda w: float(w @ cov @ w),
+        np.full(n, 1 / n),
+        method="SLSQP", bounds=bounds,
+        constraints=[{"type": "eq", "fun": lambda w: w.sum() - 1.0}],
+        options={"ftol": 1e-10, "maxiter": 300},
+    )
+    if not res_minvar.success:
+        return {"vol": [], "ret": [], "sharpe": []}
+
+    mu_min = float(res_minvar.x @ mu)
     mu_max = float(mu.max())
 
     if mu_max <= mu_min:
         return {"vol": [], "ret": [], "sharpe": []}
 
     targets = np.linspace(mu_min, mu_max, n_points)
-    bounds = [(0.0, 1.0)] * n
 
     vols: list[float] = []
     rets: list[float] = []
@@ -294,7 +497,7 @@ def efficient_frontier_curve(
         ]
         res = minimize(lambda w: float(w @ cov @ w), np.full(n, 1 / n),
                        method="SLSQP", bounds=bounds, constraints=constraints,
-                       options={"ftol": 1e-10, "maxiter": 200})
+                       options={"ftol": 1e-10, "maxiter": 300})
         if not res.success:
             continue
         w = res.x

@@ -6,26 +6,33 @@ from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from . import dashboard, fees, logging_config, optimizer, portfolio, projection, timeseries
+from . import bengen, dashboard, envelopes, fees, glide_path, logging_config, optimizer, portfolio, projection, scanner, timeseries, watchlist
 from .errors import AppError
 from .models import (
     BrokerInfo,
     BrokersResponse,
     DashboardResponse,
+    EligibilityRequest,
+    EligibleEnvelopesResponse,
+    EnvelopeEligibility,
+    OptimizerRequest,
     OptimizerResponse,
     Portfolio,
     ProjectionResponse,
+    ScanRequest,
+    ScanResponse,
+    StrategyRequest,
     TimeseriesResponse,
 )
 
 logging_config.configure()
 logger = logging.getLogger("app")
 
-app = FastAPI(title="Portfolio Dashboard", version="0.6.0")
+app = FastAPI(title="Portfolio Dashboard", version="0.7.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://localhost:5173"],
-    allow_methods=["GET", "PUT"],
+    allow_methods=["GET", "PUT", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -80,8 +87,16 @@ def write_portfolio(new: Portfolio) -> Portfolio:
 
 
 @app.get("/dashboard", response_model=DashboardResponse)
-def read_dashboard() -> DashboardResponse:
-    return dashboard.build()
+def read_dashboard(
+    cma_shrinkage: float | None = Query(None, ge=0, le=1, description="0=pure historique, 1=pure CMA. Défaut backend: 0.7"),
+    historical_period: str = Query("5y", pattern="^(1y|2y|3y|5y|10y|max)$", description="Période yfinance pour σ et corrélation"),
+    risk_free: float | None = Query(None, ge=0, le=0.20, description="Taux sans risque (fraction). Défaut: 0.025"),
+) -> DashboardResponse:
+    return dashboard.build(
+        cma_shrinkage=cma_shrinkage,
+        historical_period=historical_period,
+        risk_free=risk_free,
+    )
 
 
 @app.get("/timeseries", response_model=TimeseriesResponse)
@@ -99,12 +114,51 @@ def read_projection(
     return projection.build(monthly, years, goal, broker)
 
 
-@app.get("/optimizer", response_model=OptimizerResponse)
-def read_optimizer(
-    objective: str = Query("max_sharpe", pattern="^(max_sharpe|min_variance)$",
-                            description="max_sharpe ou min_variance"),
-) -> OptimizerResponse:
-    return optimizer.build(objective)
+@app.post("/optimizer", response_model=OptimizerResponse)
+def read_optimizer(req: OptimizerRequest) -> OptimizerResponse:
+    return optimizer.build(req)
+
+
+@app.post("/strategy", response_model=glide_path.GlidePathResult)
+def read_strategy(req: StrategyRequest) -> glide_path.GlidePathResult:
+    """Calcule la stratégie recommandée pour ce profil via glide path."""
+    return glide_path.compute(
+        age=req.age,
+        horizon_years=req.horizon_years,
+        rule=req.rule,                                          # type: ignore[arg-type]
+        custom_multiplier=req.custom_multiplier or 0.20,
+    )
+
+
+@app.post("/bengen", response_model=bengen.BengenResponse)
+def read_bengen(req: bengen.BengenRequest) -> bengen.BengenResponse:
+    """Capital nécessaire pour générer un revenu mensuel soutenable + projection inverse."""
+    return bengen.compute(req)
+
+
+@app.post("/scan", response_model=ScanResponse)
+def read_scan(req: ScanRequest) -> ScanResponse:
+    """Découvre des actifs PEA-éligibles via screening dynamique yfinance,
+    calcule leur ΔSharpe marginal vs ton portfolio actuel."""
+    return scanner.scan(req)
+
+
+@app.get("/watchlist", response_model=list[str])
+def read_watchlist() -> list[str]:
+    """Liste des tickers suivis (apparaissent dans le portfolio avec quantity=0)."""
+    return watchlist.load()
+
+
+@app.post("/watchlist/{ticker}", response_model=list[str])
+def add_watchlist(ticker: str) -> list[str]:
+    """Ajoute un ticker à la watchlist."""
+    return watchlist.add(ticker)
+
+
+@app.delete("/watchlist/{ticker}", response_model=list[str])
+def remove_watchlist(ticker: str) -> list[str]:
+    """Retire un ticker de la watchlist."""
+    return watchlist.remove(ticker)
 
 
 @app.get("/brokers", response_model=BrokersResponse)
@@ -115,3 +169,23 @@ def read_brokers() -> BrokersResponse:
         default=cfg.default_broker,
         brokers=[BrokerInfo(id=bid, name=fee.name) for bid, fee in cfg.brokers.items()],
     )
+
+
+@app.post("/envelopes/eligible", response_model=EligibleEnvelopesResponse)
+def list_eligible_envelopes(req: EligibilityRequest) -> EligibleEnvelopesResponse:
+    """Retourne le catalogue d'enveloppes avec leur statut d'éligibilité pour ce profil."""
+    cfg = envelopes.config()
+    results = []
+    for eid, env in cfg.envelopes.items():
+        eligible, note = envelopes.check_eligibility(env, req.age, req.rfr, req.fiscal_shares)
+        results.append(EnvelopeEligibility(
+            id=eid,
+            name=env.name,
+            rate_pct=env.rate_pct,
+            ceiling_eur=env.ceiling_eur,
+            tax_status=env.tax_status,
+            liquidity_days=env.liquidity_days,
+            eligible=eligible,
+            note=note,
+        ))
+    return EligibleEnvelopesResponse(envelopes=results)

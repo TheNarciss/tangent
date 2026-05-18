@@ -27,6 +27,8 @@ export function Assets({ assets }: Props) {
               <TableHead className="text-right">P/L</TableHead>
               <TableHead className="text-right">μ</TableHead>
               <TableHead className="text-right">σ</TableHead>
+              <TableHead className="text-right">CVaR 95 %</TableHead>
+              <TableHead className="text-right">Max DD</TableHead>
               <TableHead className="text-right">Sharpe</TableHead>
             </TableRow>
           </TableHeader>
@@ -50,6 +52,12 @@ export function Assets({ assets }: Props) {
                   </TableCell>
                   <TableCell className="text-right font-mono tabular">{fmt.pct(a.annual_return)}</TableCell>
                   <TableCell className="text-right font-mono tabular">{fmt.pct(a.annual_vol)}</TableCell>
+                  <TableCell className="text-right font-mono tabular text-[hsl(var(--loss))]">
+                    {fmt.signedPct(a.cvar_95)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono tabular text-[hsl(var(--loss))]">
+                    {fmt.signedPct(a.max_drawdown_observed)}
+                  </TableCell>
                   <TableCell className="text-right font-mono tabular">{fmt.num(a.sharpe)}</TableCell>
                 </TableRow>
               );

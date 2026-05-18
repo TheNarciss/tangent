@@ -48,7 +48,11 @@ class ConfigurationError(AppError):
     """A static config file (YAML, env) is missing or malformed."""
     status_code = 500
 
-
 class UnknownBrokerError(AppError):
     """Client requested a broker_id that isn't in the loaded config."""
+    status_code = 422
+
+
+class InfeasibleStrategyError(AppError):
+    """User's strategy (target return + max vol) is mathematically unachievable."""
     status_code = 422

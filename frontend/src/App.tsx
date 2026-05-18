@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   ApiError,
@@ -7,14 +7,21 @@ import {
   usePortfolio,
   useTimeseries,
   type OptimizerObjective,
+  type OptimizerRequest,
 } from "@/api";
+import { ageFromBirthDate, useProfile } from "@/lib/profile";
 import { Assets } from "@/components/Assets";
 import { Correlation } from "@/components/Correlation";
 import { Editor } from "@/components/Editor";
 import { Insights } from "@/components/Insights";
 import { Metrics } from "@/components/Metrics";
+import { StressTests } from "@/components/StressTests";
 import { Optimizer } from "@/components/Optimizer";
+import { Scanner } from "@/components/Scanner";
+import { ProfileButton } from "@/components/Profile";
+import { SettingsButton } from "@/components/Settings";
 import { Projection } from "@/components/Projection";
+import { BengenWidget } from "@/components/BengenWidget";
 import { RiskReturn } from "@/components/RiskReturn";
 import { Timeline } from "@/components/Timeline";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -23,6 +30,7 @@ export default function App() {
   const dashboard = useDashboard();
   const portfolio = usePortfolio();
   const timeseries = useTimeseries();
+  const [profile] = useProfile();
 
   return (
     <div className="min-h-screen bg-background">
@@ -39,7 +47,11 @@ export default function App() {
               )}
             </p>
           </div>
-          {portfolio.data && <Editor portfolio={portfolio.data} />}
+          <div className="flex items-center gap-2">
+            <ProfileButton />
+            <SettingsButton />
+            {portfolio.data && <Editor portfolio={portfolio.data} />}
+          </div>
         </header>
 
         {dashboard.isLoading && <p className="text-sm text-muted-foreground">Chargement…</p>}
@@ -57,6 +69,7 @@ export default function App() {
             <TabsContent value="overview" className="space-y-6">
               <Metrics metrics={dashboard.data.metrics} />
               <Assets assets={dashboard.data.metrics.assets} />
+              <StressTests stressTests={dashboard.data.stress_tests} />
               <Insights insights={dashboard.data.insights} />
             </TabsContent>
 
@@ -67,6 +80,7 @@ export default function App() {
 
             <TabsContent value="projection" className="space-y-6">
               <Projection />
+              {profile && <BengenWidget profile={profile} />}
             </TabsContent>
 
             <TabsContent value="optimization" className="space-y-6">
@@ -80,14 +94,78 @@ export default function App() {
 }
 
 function OptimizationTab({ dashboard }: { dashboard: NonNullable<ReturnType<typeof useDashboard>["data"]> }) {
-  const [objective, setObjective] = useState<OptimizerObjective>("max_sharpe");
-  const optimizer = useOptimizer(objective);
+  const [profile] = useProfile();
+  const age = profile ? ageFromBirthDate(profile.birth_date) : null;
+  const hasProfile = !!profile && age !== null && profile.fiscal_shares > 0;
 
+  // Stratégie : profil = σ max + μ cible explicites (champs concrets, plus le slider abstrait)
+  const profileMaxVol = hasProfile && profile ? profile.max_annual_volatility : 10;
+  const profileTargetReturn = hasProfile && profile ? profile.target_annual_return : 7;
+
+  const [objective, setObjective] = useState<OptimizerObjective>(() => {
+    const saved = typeof window !== "undefined"
+      ? window.localStorage.getItem("tangent.optimizer.objective")
+      : null;
+    return (saved as OptimizerObjective | null) ?? "max_sharpe";
+  });
+  const [includeEnvelopes, setIncludeEnvelopes] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("tangent.optimizer.include_envelopes") === "true";
+  });
+  const [totalCapital, setTotalCapital] = useState<number | "">("");
+  const [maxVolatility, setMaxVolatility] = useState<number | "">(profileMaxVol);
+
+  // Persist toggles dans localStorage pour survivre aux refreshes
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("tangent.optimizer.objective", objective);
+    }
+  }, [objective]);
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("tangent.optimizer.include_envelopes", String(includeEnvelopes));
+    }
+  }, [includeEnvelopes]);
+
+  useEffect(() => {
+    setMaxVolatility(profileMaxVol);
+  }, [profileMaxVol]);
+
+  const req: OptimizerRequest = {
+    objective,
+    ...(objective === "target_volatility" && typeof maxVolatility === "number"
+        ? { max_volatility: maxVolatility / 100 } : {}),
+    ...(objective === "from_strategy" && hasProfile && profile
+        ? {
+            max_volatility: profile.max_annual_volatility / 100,
+            target_return: profile.target_annual_return / 100,
+          }
+        : {}),
+    ...(includeEnvelopes && hasProfile && profile
+        ? {
+            include_envelopes: true,
+            age: age!,
+            rfr: profile.rfr_n_minus_2,
+            fiscal_shares: profile.fiscal_shares,
+            ceilings_used: profile.ceilings_used,
+          }
+        : {}),
+    ...(typeof totalCapital === "number" && totalCapital > 0
+        ? { total_capital: totalCapital } : {}),
+  };
+
+  const optimizer = useOptimizer(req);
+
+  // Frontier curve = frontière ETF-only. On la garde même avec envelopes (les livrets sont à part,
+  // dans le panneau de droite). Ça reste informatif : c'est le plafond Pareto-optimal côté ETF.
   const optimalPoint = optimizer.data
     ? {
         sigma: optimizer.data.optimal.volatility,
         mu: optimizer.data.optimal.expected_return,
-        label: objective === "max_sharpe" ? "Max Sharpe" : "Min variance",
+        label: objective === "max_sharpe" ? "Max Sharpe"
+             : objective === "min_variance" ? "Min variance"
+             : objective === "from_strategy" ? "Selon ta stratégie"
+             : "Cible vol max",
       }
     : undefined;
 
@@ -98,8 +176,18 @@ function OptimizationTab({ dashboard }: { dashboard: NonNullable<ReturnType<type
         frontier={dashboard.frontier}
         smoothFrontier={optimizer.data?.frontier_curve}
         optimal={optimalPoint}
+        envelopePoints={includeEnvelopes ? optimizer.data?.envelope_points : undefined}
       />
-      <Optimizer objective={objective} onObjectiveChange={setObjective} query={optimizer} />
+      <Optimizer
+        objective={objective} onObjectiveChange={setObjective}
+        includeEnvelopes={includeEnvelopes} onIncludeEnvelopesChange={setIncludeEnvelopes}
+        totalCapital={totalCapital} onTotalCapitalChange={setTotalCapital}
+        maxVolatility={maxVolatility} onMaxVolatilityChange={setMaxVolatility}
+        hasProfile={hasProfile} query={optimizer}
+        profileTargetReturn={profileTargetReturn}
+        profileMaxVol={profileMaxVol}
+      />
+      <Scanner />
       <Correlation matrix={dashboard.metrics.correlation} />
     </div>
   );
@@ -135,6 +223,7 @@ function humanType(type: string): string {
     InsufficientHistoryError: "Historique insuffisant",
     ConfigurationError: "Erreur de configuration",
     UnknownBrokerError: "Broker inconnu",
+    InfeasibleStrategyError: "Stratégie infaisable",
   }[type] ?? "Erreur";
 }
 
@@ -146,5 +235,6 @@ function errorAdvice(type: string): string | null {
     InsufficientHistoryError: "Tes tickers n'ont pas assez d'historique commun. Ajoute des ETFs plus anciens (5+ ans) ou retire les plus récents.",
     ConfigurationError: "Vérifie config/brokers.yaml côté serveur.",
     UnknownBrokerError: "Choisis un broker dans la liste du dropdown (cf. /brokers).",
+    InfeasibleStrategyError: "Augmente la volatilité max OU baisse le rendement cible dans ton profil. Active les livrets si pas déjà fait.",
   }[type] ?? null;
 }
