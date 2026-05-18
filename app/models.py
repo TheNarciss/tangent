@@ -87,6 +87,21 @@ class ProjectionResponse(BaseModel):
     goal: float | None
     goal_prob_at_end: float | None          # ∈ [0, 1] if goal provided
     goal_prob_by_month: list[float] | None
+    # Broker fees impact
+    broker_id: str
+    broker: str                             # human-readable name
+    gross_p50: list[float]                  # P50 without fees, for comparison
+    cumulative_fees: list[float]            # cumulative fee impact at each month (€)
+
+
+class BrokerInfo(BaseModel):
+    id: str
+    name: str
+
+
+class BrokersResponse(BaseModel):
+    default: str
+    brokers: list[BrokerInfo]
 
 
 class PortfolioPoint(BaseModel):

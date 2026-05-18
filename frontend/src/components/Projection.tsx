@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 
-import { useProjection, type ProjectionResponse } from "@/api";
+import { ApiError, useBrokers, useProjection, type ProjectionResponse } from "@/api";
 import {
   formatDateTick,
   linePath,
@@ -14,12 +14,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ChartTooltip } from "@/components/ChartTooltip";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const W = 720;
 const H = 360;
 const PAD = { left: 64, right: 24, top: 16, bottom: 36 };
 
-// kept inline because they encode a meaning (UX color semantics)
 const COLOR = {
   band: "hsl(var(--foreground))",
   base: "hsl(var(--foreground))",
@@ -27,6 +27,7 @@ const COLOR = {
   bull: "hsl(var(--gain))",
   invested: "hsl(var(--muted-foreground))",
   goal: "hsl(45 95% 55%)",
+  gross: "hsl(var(--muted-foreground))",
 };
 
 /* ─── Public component ───────────────────────────────────────────────────── */
@@ -35,12 +36,19 @@ export function Projection() {
   const [monthly, setMonthly] = useState(200);
   const [years, setYears] = useState(10);
   const [goal, setGoal] = useState<number | "">(25000);
+  const [broker, setBroker] = useState<string | undefined>(undefined);
 
   const dMonthly = useDebouncedValue(monthly, 350);
   const dYears = useDebouncedValue(years, 350);
   const dGoal = useDebouncedValue(typeof goal === "number" ? goal : 0, 350);
 
-  const q = useProjection(dMonthly, dYears, dGoal || undefined);
+  const brokers = useBrokers();
+  const q = useProjection(dMonthly, dYears, dGoal || undefined, broker);
+
+  // First load: align local state with backend's default broker so the UI matches what's used
+  if (broker === undefined && brokers.data) {
+    setBroker(brokers.data.default);
+  }
 
   return (
     <Card>
@@ -51,10 +59,11 @@ export function Projection() {
         <CardDescription>
           Géométrie calibrée sur les rendements log quotidiens de ton portefeuille actuel : μ et σ extraits, projetés en avant avec
           versement mensuel fixe. Monte Carlo paramétrique (1000 trajectoires gaussiennes).
+          Frais broker appliqués au mois le mois (composés correctement) — change de broker pour comparer.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <NumberField label="Versement mensuel (€)" value={monthly}
                        onChange={(v) => setMonthly(typeof v === "number" ? v : 0)}
                        min={0} step={50} />
@@ -62,15 +71,51 @@ export function Projection() {
                        onChange={(v) => setYears(typeof v === "number" ? Math.max(1, v) : 1)}
                        min={1} max={50} step={1} />
           <NumberField label="Objectif (€, optionnel)" value={goal} onChange={setGoal} min={0} step={5000} allowEmpty />
+          <BrokerField value={broker} onChange={setBroker} brokers={brokers.data} />
         </div>
 
         {q.isLoading && <p className="text-sm text-muted-foreground">Calcul…</p>}
-        {q.isError && <p className="text-sm text-[hsl(var(--loss))]">Erreur : {(q.error as Error).message}</p>}
+        {q.isError && <ErrorBanner error={q.error} />}
         {q.data && <FanChart data={q.data} />}
         {q.data && <Stats data={q.data} />}
       </CardContent>
     </Card>
   );
+}
+
+function BrokerField({
+  value,
+  onChange,
+  brokers,
+}: {
+  value: string | undefined;
+  onChange: (v: string) => void;
+  brokers: { default: string; brokers: { id: string; name: string }[] } | undefined;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs text-muted-foreground">Broker (frais)</Label>
+      <Select value={value} onValueChange={onChange} disabled={!brokers}>
+        <SelectTrigger>
+          <SelectValue placeholder="Chargement…" />
+        </SelectTrigger>
+        <SelectContent>
+          {brokers?.brokers.map((b) => (
+            <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+function ErrorBanner({ error }: { error: unknown }) {
+  const msg = error instanceof ApiError
+    ? `${error.type} — ${error.message}`
+    : error instanceof Error
+      ? error.message
+      : "Erreur inconnue";
+  return <p className="text-sm text-[hsl(var(--loss))]">Erreur : {msg}</p>;
 }
 
 /* ─── Inputs ─────────────────────────────────────────────────────────────── */
@@ -112,21 +157,47 @@ function NumberField({ label, value, onChange, min, max, step, allowEmpty }: Num
 function Stats({ data }: { data: ProjectionResponse }) {
   const invested = data.invested[data.invested.length - 1];
   const median = data.bands.p50[data.bands.p50.length - 1];
+  const grossMedian = data.gross_p50[data.gross_p50.length - 1];
+  const fees = data.cumulative_fees[data.cumulative_fees.length - 1];
   const gain = median - invested;
+  const feesPctOfGross = grossMedian > 0 ? fees / grossMedian : 0;
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-      <Stat label="μ, σ utilisés" value={`${fmt.pct(data.annual_return)} / ${fmt.pct(data.annual_vol)}`}
-            sub="annualisés, extraits de ton historique" />
-      <Stat label="Capital investi" value={fmt.eur(invested)} sub={`${data.months.length - 1} mois`} />
-      <Stat label="Valeur médiane (P50)" value={fmt.eur(median)} sub={`plus-value : ${fmt.signedEur(gain)}`} />
-      {data.goal_prob_at_end !== null && data.goal && (
-        <Stat
-          label={`P(atteindre ${fmt.eur(data.goal)})`}
-          value={fmt.pct(data.goal_prob_at_end)}
-          sub="fraction des 1000 simulations qui dépassent l'objectif"
-        />
-      )}
+    <div className="space-y-5">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+        <Stat label="μ, σ utilisés" value={`${fmt.pct(data.annual_return)} / ${fmt.pct(data.annual_vol)}`}
+              sub="annualisés, extraits de ton historique" />
+        <Stat label="Capital investi" value={fmt.eur(invested)} sub={`${data.months.length - 1} mois`} />
+        <Stat label="Valeur médiane nette (P50)" value={fmt.eur(median)} sub={`plus-value : ${fmt.signedEur(gain)}`} />
+        {data.goal_prob_at_end !== null && data.goal && (
+          <Stat
+            label={`P(atteindre ${fmt.eur(data.goal)})`}
+            value={fmt.pct(data.goal_prob_at_end)}
+            sub="fraction des 1000 simulations qui dépassent l'objectif"
+          />
+        )}
+      </div>
+
+      {/* Fee impact strip — what BNP/Fortuneo/etc. actually coûte sur l'horizon */}
+      <div className="rounded-md border bg-card/40 px-4 py-3">
+        <div className="flex items-center justify-between text-xs uppercase tracking-wider text-muted-foreground mb-2">
+          <span>Impact frais — {data.broker}</span>
+          <span className="font-mono tabular text-[10px] normal-case tracking-normal">
+            modèle : fixe × n_lignes + (custody + rebates) × valeur + courtage × versement
+          </span>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+          <Stat label="Frais cumulés à l'horizon"
+                value={fmt.eur(fees)}
+                sub={`soit ${fmt.pct(feesPctOfGross)} de la médiane brute`} />
+          <Stat label="Médiane brute (sans frais)"
+                value={fmt.eur(grossMedian)}
+                sub={`écart : ${fmt.signedEur(median - grossMedian)} vs brut`} />
+          <Stat label="Frais mensuels moyens"
+                value={fmt.eur(fees / Math.max(1, data.months.length - 1))}
+                sub="amorti sur l'horizon, en €/mois" />
+        </div>
+      </div>
     </div>
   );
 }
@@ -250,6 +321,10 @@ function FanChart({ data }: FanProps) {
         <path d={linePath(data.bands.bull, xAt, yScale)} fill="none" stroke={COLOR.bull} strokeWidth="1.4" strokeOpacity={0.85} />
         <path d={linePath(data.bands.base, xAt, yScale)} fill="none" stroke={COLOR.base} strokeWidth="2" />
 
+        {/* Gross P50 (without fees) — dashed overlay for comparison */}
+        <path d={linePath(data.gross_p50, xAt, yScale)} fill="none" stroke={COLOR.gross}
+              strokeDasharray="4 4" strokeWidth="1.2" strokeOpacity={0.65} />
+
         {/* Invested line */}
         <path d={linePath(data.invested, xAt, yScale)} fill="none" stroke={COLOR.invested}
               strokeDasharray="3 3" strokeWidth="1.2" />
@@ -321,6 +396,8 @@ function FanTooltipContent({ data, idx }: { data: ProjectionResponse; idx: numbe
   const years = months / 12;
   const invested = data.invested[idx];
   const median = data.bands.p50[idx];
+  const grossMedian = data.gross_p50[idx];
+  const cumFees = data.cumulative_fees[idx];
   const prob = data.goal_prob_by_month?.[idx];
 
   return (
@@ -328,16 +405,17 @@ function FanTooltipContent({ data, idx }: { data: ProjectionResponse; idx: numbe
       <div className="font-sans font-medium text-foreground">
         {years < 1 ? `${months} mois` : `Année ${years.toFixed(1)} (${months} mois)`}
       </div>
-      <Row label="Médiane (P50)" value={fmt.eur(median)} bold />
+      <Row label="Médiane nette (P50)" value={fmt.eur(median)} bold />
+      <Row label="Médiane brute (sans frais)" value={fmt.eur(grossMedian)} muted />
+      <Row label="Frais cumulés" value={fmt.eur(cumFees)} />
       <Row label="P10 / P90" value={`${compactEur(data.bands.p10[idx])} / ${compactEur(data.bands.p90[idx])}`} />
-      <Row label="Scénario base" value={fmt.eur(data.bands.base[idx])} />
       <Row label="Investi" value={fmt.eur(invested)} muted />
-      <Row label="Plus-value" value={fmt.signedEur(median - invested)} />
+      <Row label="Plus-value nette" value={fmt.signedEur(median - invested)} />
       {prob !== undefined && (
         <Row label={`P(≥ ${compactEur(data.goal!)})`} value={fmt.pct(prob)} />
       )}
       <div className="font-sans text-[10px] text-muted-foreground pt-1 leading-tight">
-        P10/P90 = bornes du quantile inférieur 10% / supérieur 10% des 1000 simulations
+        Bandes P10–P90 = quantiles des 1000 simulations. Tiret gris = projection sans frais (comparaison).
       </div>
     </div>
   );
@@ -355,10 +433,11 @@ function Row({ label, value, bold, muted }: { label: string; value: string; bold
 function Legend() {
   return (
     <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-muted-foreground">
-      <LegendItem swatch={<Band color={COLOR.band} />} label="P10–P90 / P25–P75 (Monte Carlo)" />
+      <LegendItem swatch={<Band color={COLOR.band} />} label="P10–P90 / P25–P75 (Monte Carlo, net frais)" />
       <LegendItem swatch={<Stroke color={COLOR.base} thick />} label="Scénario base (μ)" />
       <LegendItem swatch={<Stroke color={COLOR.bull} />} label="Bull (μ+σ)" />
       <LegendItem swatch={<Stroke color={COLOR.bear} />} label="Bear (μ−σ)" />
+      <LegendItem swatch={<Stroke color={COLOR.gross} dashed />} label="P50 sans frais (comparaison)" />
       <LegendItem swatch={<Stroke color={COLOR.invested} dashed />} label="Capital investi" />
     </div>
   );
