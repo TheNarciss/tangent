@@ -1,0 +1,31 @@
+# Backend .dockerignore — accélère le build en excluant les trucs inutiles
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual envs (locaux, on en crée un nouveau dans le container)
+.venv/
+venv/
+env/
+
+# Données runtime (mountées via volume au runtime, pas la peine de les copier dans l'image)
+data/
+
+# Secrets et configs locales
+.env
+.env.local
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# Git
+.git/
+.gitignore
