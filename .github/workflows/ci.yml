@@ -106,3 +106,40 @@ jobs:
         env:
           VITE_API_URL: "http://localhost:8000"
         run: npm run build
+
+  security:
+    name: Security (secrets + CVE audits)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # gitleaks needs full history
+
+      - name: Gitleaks (secret scanning)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: pip-audit (Python CVE check)
+        working-directory: backend
+        continue-on-error: true
+        run: |
+          pip install -e . pip-audit
+          pip-audit --skip-editable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: npm audit (JS CVE check)
+        working-directory: frontend
+        continue-on-error: true
+        run: |
+          npm ci
+          npm audit --audit-level=high
