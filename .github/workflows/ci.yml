@@ -73,6 +73,15 @@ jobs:
           path: backend/coverage.xml
           retention-days: 7
 
+      - name: Upload coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: backend/coverage.xml
+          flags: backend
+          fail_ci_if_error: false   # don't break CI on Codecov outage
+
   frontend:
     name: Frontend (lint + typecheck + build)
     runs-on: ubuntu-latest
