@@ -49,3 +49,9 @@ repos:
         language: system
         files: ^frontend/src/.*\.(ts|tsx|css|json)$
         pass_filenames: false
+  # Commit message validation (conventional commits format)
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.0.0
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
