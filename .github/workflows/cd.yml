@@ -26,11 +26,16 @@ jobs:
 
       - name: Pull latest main
         working-directory: /Users/clementgardair/projet_finance
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           PREV_COMMIT=$(git rev-parse HEAD)
           echo "PREV_COMMIT=$PREV_COMMIT" >> $GITHUB_ENV
-          git fetch origin main
+          # Use Actions-injected token for HTTPS auth (avoids keychain issues
+          # on macOS self-hosted runner running as launchd service).
+          AUTH_HEADER="AUTHORIZATION: bearer $GH_TOKEN"
+          git -c http.https://github.com/.extraheader="$AUTH_HEADER" fetch origin main
           git checkout main
           git reset --hard origin/main
           echo "New commit: $(git rev-parse --short HEAD)"
