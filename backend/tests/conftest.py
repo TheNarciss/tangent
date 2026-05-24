@@ -1,8 +1,8 @@
 """Shared test fixtures.
 
 Env vars set BEFORE app import.
-Integration tests use httpx.AsyncClient (ASGI) with session-scoped event loop
-to avoid asyncpg/BaseHTTPMiddleware cleanup issues.
+Integration tests use httpx.AsyncClient (ASGI). ASGITransport doesn't
+trigger startup events, so we explicitly create DB tables in the fixture.
 """
 import os
 
@@ -25,8 +25,16 @@ from httpx import ASGITransport, AsyncClient  # noqa: E402
 
 @pytest_asyncio.fixture(loop_scope="session", scope="session")
 async def client():
-    """Session-scoped async client to share the same event loop across tests."""
+    """Session-scoped async client. Creates DB tables before yielding."""
+    from app.db.engine import engine
+    from app.db.models import Base
     from app.main import app
+
+    # ASGITransport doesn't trigger FastAPI startup events,
+    # so we create tables manually.
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac

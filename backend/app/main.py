@@ -1,4 +1,4 @@
-"""FastAPI entry point — mount routers + middlewares + startup hooks.
+"""FastAPI entry point — mount routers + middlewares + lifespan.
 
 Endpoint business logic lives in app/routers/. main.py is intentionally thin.
 """
@@ -7,6 +7,7 @@ import logging
 import os
 import time
 from collections import defaultdict
+from contextlib import asynccontextmanager
 from time import time as _now
 
 from fastapi import FastAPI, Request
@@ -18,9 +19,6 @@ from .auth import UserCreate, UserRead, UserUpdate, auth_backend, fastapi_users
 from .db import ping as db_ping
 from .db.init_db import init_db
 from .errors import AppError
-from .powens import settings as powens_settings
-from .powens import state as powens_state
-from .powens.sync import sync_portfolio
 from .routers import (
     admin,
     analysis,
@@ -37,7 +35,20 @@ from .routers import (
 logging_config.configure()
 logger = logging.getLogger("app")
 
-app = FastAPI(title="Portfolio Dashboard", version="0.8.0")
+
+# ─── Lifespan (replaces deprecated @app.on_event) ─────────────────────────
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """App lifespan: init DB schema at startup."""
+    try:
+        await init_db()
+    except Exception:
+        logger.exception("Failed to initialize DB schema at startup")
+    yield
+
+
+app = FastAPI(title="Portfolio Dashboard", version="0.8.0", lifespan=lifespan)
+
 
 # ─── Rate limiter (sliding window) ────────────────────────────────────────
 _AUTH_RATE_LIMITS = {
@@ -45,12 +56,9 @@ _AUTH_RATE_LIMITS = {
     "/auth/register": (3, 3600),
     "/auth/forgot-password": (3, 3600),
     "/auth/reset-password": (5, 3600),
-    "/auth/password-reset/request": (3, 3600),  # max 3 emails de reset/h par IP
-    "/auth/password-reset/verify": (
-        10,
-        3600,
-    ),  # max 10 essais de code/h (avant ban auto via attempts<5)
-    "/auth/password-reset/confirm": (5, 3600),  # max 5 tentatives de reset/h
+    "/auth/password-reset/request": (3, 3600),
+    "/auth/password-reset/verify": (10, 3600),
+    "/auth/password-reset/confirm": (5, 3600),
 }
 _attempts: dict[tuple[str, str], list[float]] = defaultdict(list)
 
@@ -191,40 +199,3 @@ async def unhandled_handler(request: Request, exc: Exception) -> JSONResponse:
         status_code=500,
         content={"detail": "Internal server error.", "type": type(exc).__name__},
     )
-
-
-# ─── Startup hooks ────────────────────────────────────────────────────────
-@app.on_event("startup")
-async def startup_init_db():
-    """Create DB tables at startup if they don't exist."""
-    try:
-        await init_db()
-    except Exception:
-        logger.exception("Failed to initialize DB schema at startup")
-
-
-@app.on_event("startup")
-async def startup_powens_autosync():
-    return  # DISABLED: mono-user autosync incompatible with multi-tenant
-    """[DEPRECATED — mono-user] Auto-sync from Powens at startup if configured & stale.
-
-    Will be removed in Phase 5 when Powens becomes per-user.
-    """
-    if not powens_settings.is_configured:
-        logger.info("Powens not configured, skipping autosync at startup")
-        return
-    if powens_state.is_stale():
-        logger.info(
-            "Powens: last sync > %dh ago, autosync at startup",
-            powens_settings.autosync_threshold_hours,
-        )
-        try:
-            result = await sync_portfolio()
-            logger.info(
-                "Powens autosync: success=%s positions=%d", result.success, result.positions_count
-            )
-        except Exception:
-            logger.exception("Powens autosync failed at startup")
-    else:
-        st = powens_state.load()
-        logger.info("Powens: last sync %.1fh ago, skipping autosync", st.age_hours or 0)
