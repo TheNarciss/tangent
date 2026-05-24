@@ -61,14 +61,15 @@ export const SCANNER_MODE_LABELS: Record<ScannerMode, string> = {
 
 /* ─── Migration ────────────────────────────────────────────────────────── */
 
-function migrate(raw: any): AppSettings {
+function migrate(raw: unknown): AppSettings {
   // Tolère anciens schémas, fusionne avec defaults
+  const r = (raw ?? {}) as Partial<AppSettings>;
   return {
-    scanner: { ...DEFAULT_SETTINGS.scanner, ...(raw?.scanner ?? {}) },
+    scanner: { ...DEFAULT_SETTINGS.scanner, ...(r.scanner ?? {}) },
     expert: {
       ...DEFAULT_SETTINGS.expert,
-      ...(raw?.expert ?? {}),
-      cma_overrides: { ...(raw?.expert?.cma_overrides ?? {}) },
+      ...(r.expert ?? {}),
+      cma_overrides: { ...(r.expert?.cma_overrides ?? {}) },
     },
   };
 }

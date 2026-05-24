@@ -66,11 +66,12 @@ export function isProfileComplete(p: UserProfile | null): p is UserProfile {
 }
 
 /** Tolère les payloads localStorage d'anciens schémas (drop des champs obsolètes). */
-function migrate(raw: any): UserProfile {
+function migrate(raw: unknown): UserProfile {
+  const r = (raw ?? {}) as Partial<UserProfile>;
   return {
     ...EMPTY_PROFILE,
-    ...raw,
-    ceilings_used: { ...EMPTY_PROFILE.ceilings_used, ...(raw?.ceilings_used ?? {}) },
+    ...r,
+    ceilings_used: { ...EMPTY_PROFILE.ceilings_used, ...(r.ceilings_used ?? {}) },
   };
 }
 
