@@ -1,9 +1,11 @@
 """Shared test fixtures.
 
-Env vars set BEFORE app import.
-Integration tests use httpx.AsyncClient (ASGI). ASGITransport doesn't
-trigger startup events, so we explicitly create DB tables in the fixture.
+Env vars set BEFORE app import. Integration tests use httpx.AsyncClient
+(ASGI). ASGITransport doesn't trigger startup events, so we explicitly
+apply Alembic migrations in the fixture — same mechanism as production
+(`alembic upgrade head` via init_db).
 """
+
 import os
 
 os.environ.setdefault("JWT_SECRET", "test-jwt-secret-not-for-production-use-only")
@@ -25,15 +27,14 @@ from httpx import ASGITransport, AsyncClient  # noqa: E402
 
 @pytest_asyncio.fixture(loop_scope="session", scope="session")
 async def client():
-    """Session-scoped async client. Creates DB tables before yielding."""
-    from app.db.engine import engine
-    from app.db.models import Base
+    """Session-scoped async client. Runs Alembic migrations before yielding."""
+    from app.db.init_db import init_db
     from app.main import app
 
-    # ASGITransport doesn't trigger FastAPI startup events,
-    # so we create tables manually.
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # Same mechanism as production lifespan: alembic upgrade head.
+    # On a fresh CI DB, this creates the 8 tables + alembic_version.
+    # On a dev DB already stamped at head, this is a no-op.
+    await init_db()
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
