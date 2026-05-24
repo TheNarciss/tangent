@@ -23,6 +23,10 @@ COPY alembic/ ./alembic/
 
 RUN mkdir -p /app/data
 
+# Create non-root user for runtime (security: avoid root in container)
+RUN useradd -u 1000 -m -s /bin/bash app && chown -R app:app /app
+USER app
+
 EXPOSE 8000
 
 HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=3 \

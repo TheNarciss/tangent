@@ -90,10 +90,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             email=user.email,
             ip=request.client.host if request and request.client else None,
         )
-        # ⚠️ En DEV seulement : on log le token pour pouvoir reset sans SMTP.
-        # En prod, à envoyer par email uniquement. APP_ENV doit valoir "dev" dans .env.
-        if os.getenv("APP_ENV", "dev").lower() == "dev":
-            logger.info("[DEV] Password reset token for user=%s: %s", user.id, token)
+        # Token sent via email only (Resend). Never logged — was leaking
+        # via APP_ENV default to "dev" if env var missing. See Semgrep finding.
 
     async def on_after_reset_password(self, user: User, request: Request | None = None) -> None:
         from .audit import log_event
@@ -108,8 +106,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     async def on_after_request_verify(
         self, user: User, token: str, request: Request | None = None
     ) -> None:
-        if os.getenv("APP_ENV", "dev").lower() == "dev":
-            logger.info("[DEV] Verification token for user=%s: %s", user.id, token)
+        # Token sent via email only — never logged.
+        # Hook reserved for future audit logging.
+        pass
 
 
 async def get_user_db(session: AsyncSession = Depends(get_session)):
