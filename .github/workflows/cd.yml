@@ -32,10 +32,11 @@ jobs:
           set -euo pipefail
           PREV_COMMIT=$(git rev-parse HEAD)
           echo "PREV_COMMIT=$PREV_COMMIT" >> $GITHUB_ENV
-          # Use Actions-injected token for HTTPS auth (avoids keychain issues
-          # on macOS self-hosted runner running as launchd service).
-          AUTH_HEADER="AUTHORIZATION: bearer $GH_TOKEN"
-          git -c http.https://github.com/.extraheader="$AUTH_HEADER" fetch origin main
+          # Fetch with token embedded in URL (bypass macOS keychain entirely).
+          # The osxkeychain credential helper fails with error -25308 when
+          # invoked by launchd outside an interactive user session.
+          git fetch "https://x-access-token:${GH_TOKEN}@github.com/TheNarciss/tangent.git" \
+              main:refs/remotes/origin/main
           git checkout main
           git reset --hard origin/main
           echo "New commit: $(git rev-parse --short HEAD)"
