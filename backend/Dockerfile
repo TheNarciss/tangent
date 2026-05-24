@@ -17,6 +17,10 @@ COPY config/ ./config/
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -e .
 
+# Alembic migrations (alembic.ini + alembic/ requis par init_db.py au startup)
+COPY alembic.ini ./
+COPY alembic/ ./alembic/
+
 RUN mkdir -p /app/data
 
 EXPOSE 8000
