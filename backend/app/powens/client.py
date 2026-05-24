@@ -6,6 +6,7 @@ Wrapper minimal autour de httpx avec :
 - Timeout configurable
 - Exceptions explicites (PowensAuthError vs PowensConnectorError vs PowensConflictError)
 """
+
 import asyncio
 import logging
 from typing import Any
@@ -74,13 +75,9 @@ class PowensClient:
                         "Refais le flow OAuth et mets à jour POWENS_USER_TOKEN dans .env."
                     )
                 if response.status_code == 409:
-                    raise PowensConflictError(
-                        f"Powens 409 sur {path} : {response.text[:200]}"
-                    )
+                    raise PowensConflictError(f"Powens 409 sur {path} : {response.text[:200]}")
                 if response.status_code == 404:
-                    raise PowensConnectorError(
-                        f"Powens 404 sur {path} — ressource introuvable."
-                    )
+                    raise PowensConnectorError(f"Powens 404 sur {path} — ressource introuvable.")
                 if response.status_code >= 500:
                     # Retry sur 5xx
                     last_exc = PowensError(f"Powens {response.status_code} sur {path}")
@@ -115,7 +112,8 @@ class PowensClient:
 
     async def get_transactions(self, account_id: int, limit: int = 100) -> list[dict]:
         data = await self._request(
-            "GET", f"/users/me/accounts/{account_id}/transactions",
+            "GET",
+            f"/users/me/accounts/{account_id}/transactions",
             params={"limit": limit},
         )
         return data.get("transactions", [])

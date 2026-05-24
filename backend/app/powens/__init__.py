@@ -7,6 +7,7 @@ Modules :
 - state : tracking du dernier sync (data/powens_state.json)
 - webhooks : handler des events CONNECTION_SYNCED etc.
 """
+
 from pathlib import Path
 
 import yaml
@@ -16,15 +17,18 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class PowensSettings(BaseSettings):
     """Secrets et config Powens chargés depuis backend/.env"""
+
     domain: str = Field(default="", validation_alias="POWENS_DOMAIN")
     client_id: str = Field(default="", validation_alias="POWENS_CLIENT_ID")
     client_secret: str = Field(default="", validation_alias="POWENS_CLIENT_SECRET")
-    user_token: str = Field(default="", validation_alias="POWENS_USER_TOKEN") # DEPRECATED
-    connection_id: int = Field(default=0, validation_alias="POWENS_CONNECTION_ID") # DEPRECATED
+    user_token: str = Field(default="", validation_alias="POWENS_USER_TOKEN")  # DEPRECATED
+    connection_id: int = Field(default=0, validation_alias="POWENS_CONNECTION_ID")  # DEPRECATED
     webhook_secret: str = Field(default="", validation_alias="POWENS_WEBHOOK_SECRET")
     token_encryption_key: str = Field(default="", validation_alias="POWENS_TOKEN_ENCRYPTION_KEY")
-    autosync_threshold_hours: int = Field(default=12, validation_alias="POWENS_AUTOSYNC_THRESHOLD_HOURS")
-    
+    autosync_threshold_hours: int = Field(
+        default=12, validation_alias="POWENS_AUTOSYNC_THRESHOLD_HOURS"
+    )
+
     # URLs pour les redirections
     frontend_url: str = Field(default="http://localhost:5173", validation_alias="FRONTEND_URL")
     backend_url: str = Field(default="http://localhost:8000", validation_alias="BACKEND_URL")
@@ -32,8 +36,9 @@ class PowensSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=Path(__file__).resolve().parent.parent.parent / ".env",
         env_file_encoding="utf-8",
-        extra="ignore" # Ignore les autres variables du .env sans crasher
+        extra="ignore",  # Ignore les autres variables du .env sans crasher
     )
+
     @property
     def is_configured(self) -> bool:
         """True si tous les secrets essentiels de l'application sont remplis."""

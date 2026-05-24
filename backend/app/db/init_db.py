@@ -6,6 +6,7 @@ En dev on utilise create_all pour démarrer vite. En prod : Alembic migrations
 create_all est idempotent — si la table existe déjà, elle n'est pas recréée
 ni modifiée. Pour modifier le schéma il faudra passer à Alembic.
 """
+
 import logging
 
 from sqlalchemy import text
@@ -31,9 +32,9 @@ async def db_ready() -> bool:
     """True si la DB répond ET que la table users existe."""
     try:
         async with engine.connect() as conn:
-            result = await conn.execute(text(
-                "SELECT 1 FROM information_schema.tables WHERE table_name = 'users'"
-            ))
+            result = await conn.execute(
+                text("SELECT 1 FROM information_schema.tables WHERE table_name = 'users'")
+            )
             return result.first() is not None
     except Exception as exc:
         logger.warning("DB readiness check failed: %s", exc)

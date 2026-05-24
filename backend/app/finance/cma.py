@@ -3,6 +3,7 @@
 Source : moyennes long-terme (Dimson-Marsh-Staunton 100y, Vanguard CMAs, JP Morgan LTCMA).
 Moins biaisé que les μ historiques 5y de yfinance qui sont gonflés par le bull-run post-COVID.
 """
+
 import logging
 from functools import lru_cache
 from pathlib import Path

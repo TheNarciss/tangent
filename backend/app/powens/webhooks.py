@@ -10,10 +10,11 @@ Note sécurité : Powens ne signe pas les webhooks (pas de HMAC standard).
 On valide simplement que le payload contient bien le connection_id attendu
 et que la requête vient d'une IP raisonnable (à durcir en prod).
 """
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from . import settings, state
@@ -38,7 +39,7 @@ async def handle_webhook(payload: dict[str, Any]) -> dict:
 
     # Note la réception du webhook même si on ne le traite pas
     st = state.load()
-    st.last_webhook = datetime.now(timezone.utc)
+    st.last_webhook = datetime.now(UTC)
     state.save(st)
 
     # Filtre 1 : event qui nous intéresse ?

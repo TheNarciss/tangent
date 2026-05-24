@@ -2,6 +2,7 @@
 
 Resend docs: https://resend.com/docs/api-reference/emails/send-email
 """
+
 import logging
 import os
 
@@ -17,7 +18,9 @@ FROM_NAME = os.getenv("SMTP_FROM_NAME", "Tangent")
 def send_password_reset_code(to_email: str, code: str, expires_minutes: int = 15) -> None:
     """Send the 6-digit reset code by email. Raises on failure (caller may swallow)."""
     if not resend.api_key:
-        logger.error("RESEND_API_KEY missing — email NOT sent (would be: %s for %s)", code, to_email)
+        logger.error(
+            "RESEND_API_KEY missing — email NOT sent (would be: %s for %s)", code, to_email
+        )
         raise RuntimeError("Email service not configured")
 
     html = f"""
@@ -45,12 +48,14 @@ def send_password_reset_code(to_email: str, code: str, expires_minutes: int = 15
     """
 
     try:
-        resend.Emails.send({
-            "from": f"{FROM_NAME} <{FROM_EMAIL}>",
-            "to": [to_email],
-            "subject": "Code de réinitialisation — Tangent",
-            "html": html,
-        })
+        resend.Emails.send(
+            {
+                "from": f"{FROM_NAME} <{FROM_EMAIL}>",
+                "to": [to_email],
+                "subject": "Code de réinitialisation — Tangent",
+                "html": html,
+            }
+        )
         logger.info("Password reset code sent to %s", to_email)
     except Exception:
         logger.exception("Failed to send reset code email to %s", to_email)

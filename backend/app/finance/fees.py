@@ -9,9 +9,10 @@ Fee model applied per month inside the projection:
 Loaded once at import time; reload by restarting the process (config rarely
 changes). Schema is enforced by Pydantic so malformed YAML fails fast.
 """
+
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import yaml
 from pydantic import BaseModel, Field
@@ -51,8 +52,9 @@ def _load_config() -> BrokerConfig:
         raise ConfigurationError(
             f"default_broker={cfg.default_broker!r} absent de la liste {list(cfg.brokers)}.",
         )
-    logger.info("loaded %d brokers from %s (default: %s)",
-                len(cfg.brokers), _PATH.name, cfg.default_broker)
+    logger.info(
+        "loaded %d brokers from %s (default: %s)", len(cfg.brokers), _PATH.name, cfg.default_broker
+    )
     return cfg
 
 
@@ -82,7 +84,9 @@ def get(broker_id: str | None = None) -> tuple[str, BrokerFees]:
     return bid, c.brokers[bid]
 
 
-def monthly_fee_fn(fees: BrokerFees, n_lines: int, monthly_contribution: float) -> Callable[[float], float]:
+def monthly_fee_fn(
+    fees: BrokerFees, n_lines: int, monthly_contribution: float
+) -> Callable[[float], float]:
     """Build a `value → monthly_fee_eur` function specialised on a config + state.
 
     Used inside the Monte-Carlo / deterministic simulation loops so each path

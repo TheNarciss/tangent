@@ -4,14 +4,15 @@ Applies broker fees (per `config/brokers.yaml`) at each simulated month so they
 compound correctly. Also computes a fees-free baseline (`gross_p50`) and the
 cumulative fee impact at each month for direct visualization.
 """
+
 import logging
 
 import numpy as np
 
-from . import analytics, fees, market
 from .. import portfolio
 from ..errors import PortfolioEmptyError
 from ..models import ProjectionBands, ProjectionResponse
+from . import analytics, fees, market
 
 logger = logging.getLogger(__name__)
 
@@ -49,20 +50,22 @@ def build(
     )
 
     # Net projection (with fees compounding) — primary curves
-    det = analytics.deterministic_projection(initial, monthly_contribution,
-                                             mu_simple, sigma_annual, months,
-                                             monthly_fee=fee_fn)
-    mc = analytics.monte_carlo_projection(log_rets, initial, monthly_contribution,
-                                          months, monthly_fee=fee_fn)
+    det = analytics.deterministic_projection(
+        initial, monthly_contribution, mu_simple, sigma_annual, months, monthly_fee=fee_fn
+    )
+    mc = analytics.monte_carlo_projection(
+        log_rets, initial, monthly_contribution, months, monthly_fee=fee_fn
+    )
     paths = mc.pop("_paths")
 
     # Gross projection (no fees) — only the P50 is exposed, for the comparison overlay
-    mc_gross = analytics.monte_carlo_projection(log_rets, initial, monthly_contribution,
-                                                months, monthly_fee=None)
+    mc_gross = analytics.monte_carlo_projection(
+        log_rets, initial, monthly_contribution, months, monthly_fee=None
+    )
     gross_p50 = mc_gross["p50"]
 
     # Cumulative fee impact at each month = gap between fees-free and net P50
-    cumulative_fees = [max(0.0, g - n) for g, n in zip(gross_p50, mc["p50"])]
+    cumulative_fees = [max(0.0, g - n) for g, n in zip(gross_p50, mc["p50"], strict=True)]
 
     goal_prob_by_month: list[float] | None = None
     goal_prob_at_end: float | None = None
@@ -70,8 +73,14 @@ def build(
         goal_prob_by_month = analytics.goal_probability(paths, goal)
         goal_prob_at_end = goal_prob_by_month[-1]
 
-    logger.info("projection: broker=%s, %d months, initial=%.0f €, contrib=%.0f €/mo, fees@end=%.0f €",
-                bid, months, initial, monthly_contribution, cumulative_fees[-1])
+    logger.info(
+        "projection: broker=%s, %d months, initial=%.0f €, contrib=%.0f €/mo, fees@end=%.0f €",
+        bid,
+        months,
+        initial,
+        monthly_contribution,
+        cumulative_fees[-1],
+    )
 
     return ProjectionResponse(
         months=list(range(months + 1)),

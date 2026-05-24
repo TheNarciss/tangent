@@ -5,15 +5,14 @@ Configure :
 - Validations custom (mot de passe min 8 chars, email pas pris)
 - Hooks après register/login (logs, futures notifs email)
 """
+
 import logging
 import os
 import uuid
-from typing import Optional
 
 from fastapi import Depends, Request
-from fastapi_users import BaseUserManager, FastAPIUsers, UUIDIDMixin, exceptions
+from fastapi_users import BaseUserManager, UUIDIDMixin, exceptions
 from fastapi_users.password import PasswordHelper
-from fastapi_users.db import SQLAlchemyUserDatabase
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from pwdlib import PasswordHash
 from pwdlib.hashers.argon2 import Argon2Hasher
@@ -54,6 +53,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
     async def on_after_register(self, user: User, request: Request | None = None) -> None:
         from .audit import log_event
+
         log_event(
             "AUTH_REGISTER",
             user_id=str(user.id),
@@ -61,8 +61,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             ip=request.client.host if request and request.client else None,
         )
 
-    async def on_after_login(self, user: User, request: Request | None = None, response=None) -> None:
+    async def on_after_login(
+        self, user: User, request: Request | None = None, response=None
+    ) -> None:
         from .audit import log_event
+
         log_event(
             "AUTH_LOGIN_SUCCESS",
             user_id=str(user.id),
@@ -70,8 +73,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             ip=request.client.host if request and request.client else None,
         )
 
-    async def on_after_forgot_password(self, user: User, token: str, request: Request | None = None) -> None:
+    async def on_after_forgot_password(
+        self, user: User, token: str, request: Request | None = None
+    ) -> None:
         from .audit import log_event
+
         log_event(
             "AUTH_PASSWORD_RESET_REQUEST",
             user_id=str(user.id),
@@ -85,6 +91,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
     async def on_after_reset_password(self, user: User, request: Request | None = None) -> None:
         from .audit import log_event
+
         log_event(
             "AUTH_PASSWORD_RESET_CONFIRM",
             user_id=str(user.id),
@@ -92,7 +99,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             ip=request.client.host if request and request.client else None,
         )
 
-    async def on_after_request_verify(self, user: User, token: str, request: Request | None = None) -> None:
+    async def on_after_request_verify(
+        self, user: User, token: str, request: Request | None = None
+    ) -> None:
         if os.getenv("APP_ENV", "dev").lower() == "dev":
             logger.info("[DEV] Verification token for user=%s: %s", user.id, token)
 

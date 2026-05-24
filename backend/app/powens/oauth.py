@@ -1,4 +1,5 @@
 """Powens OAuth — exchange authorization code for an access token."""
+
 import logging
 
 import httpx

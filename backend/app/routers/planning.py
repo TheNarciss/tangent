@@ -1,4 +1,5 @@
 """Planning routes — strategy (glide path) + bengen (4% rule)."""
+
 from fastapi import APIRouter, Depends
 
 from ..auth import User, current_active_user
@@ -21,7 +22,7 @@ async def read_strategy(
     return glide_path.compute(
         age=req.age,
         horizon_years=req.horizon_years,
-        rule=req.rule,                                          # type: ignore[arg-type]
+        rule=req.rule,  # type: ignore[arg-type]
         custom_multiplier=req.custom_multiplier or 0.20,
     )
 

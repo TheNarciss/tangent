@@ -8,10 +8,10 @@ Most endpoints need:
 This module provides the composite dependencies so endpoints stay one-liner
 clean instead of repeating glue code.
 """
+
 from __future__ import annotations
 
 import logging
-import uuid
 
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -52,8 +52,8 @@ async def get_user_portfolio(
 
 # Re-export user/session deps so routers can do `from app.deps import current_active_user`
 __all__ = [
+    "User",
     "current_active_user",
     "get_session",
     "get_user_portfolio",
-    "User",
 ]

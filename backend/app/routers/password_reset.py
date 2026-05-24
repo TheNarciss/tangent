@@ -1,10 +1,12 @@
 """Password reset endpoints — 3-step flow."""
+
 import logging
-from pydantic import BaseModel, EmailStr, Field
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..auth.password_reset import request_reset, verify_code, reset_password
+from ..auth.password_reset import request_reset, reset_password, verify_code
 from ..db.engine import get_session
 
 logger = logging.getLogger(__name__)

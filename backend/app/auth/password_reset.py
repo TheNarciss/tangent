@@ -16,18 +16,19 @@ Security choices:
     - Reset tokens single-use (implicit: after reset, marked used in DB).
     - Constant-time wait on /forgot-password regardless of email validity.
 """
+
 import asyncio
 import logging
 import os
 import secrets
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 
 import jwt
 from pwdlib import PasswordHash
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..db.models import User, PasswordResetToken
+from ..db.models import PasswordResetToken, User
 
 logger = logging.getLogger(__name__)
 
@@ -72,12 +73,13 @@ async def request_reset(session: AsyncSession, email: str) -> tuple[bool, str | 
         token_row = PasswordResetToken(
             user_id=user.id,
             code_hash=_code_hasher.hash(code),
-            expires_at=datetime.now(timezone.utc) + timedelta(seconds=CODE_LIFETIME),
+            expires_at=datetime.now(UTC) + timedelta(seconds=CODE_LIFETIME),
         )
         session.add(token_row)
         await session.commit()
         # Send mail (in a thread to not block on Resend network call)
         from ..email import send_password_reset_code
+
         try:
             await asyncio.to_thread(send_password_reset_code, email, code, CODE_LIFETIME // 60)
         except Exception:
@@ -103,7 +105,7 @@ async def verify_code(session: AsyncSession, email: str, code: str) -> str | Non
         return None  # Don't even tell the caller; just fail
 
     # Active (non-used, non-expired) token for this user
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     res = await session.execute(
         select(PasswordResetToken)
         .where(
@@ -121,7 +123,7 @@ async def verify_code(session: AsyncSession, email: str, code: str) -> str | Non
     if not _code_hasher.verify(code, token_row.code_hash):
         token_row.attempts += 1
         if token_row.attempts >= MAX_ATTEMPTS:
-            token_row.used = True   # burnt
+            token_row.used = True  # burnt
         await session.commit()
         return None
 
@@ -133,8 +135,8 @@ async def verify_code(session: AsyncSession, email: str, code: str) -> str | Non
     payload = {
         "sub": str(user.id),
         "purpose": "password_reset",
-        "exp": datetime.now(timezone.utc) + timedelta(seconds=TOKEN_LIFETIME),
-        "iat": datetime.now(timezone.utc),
+        "exp": datetime.now(UTC) + timedelta(seconds=TOKEN_LIFETIME),
+        "iat": datetime.now(UTC),
         "jti": secrets.token_urlsafe(16),
     }
     return jwt.encode(payload, RESET_TOKEN_SECRET, algorithm="HS256")

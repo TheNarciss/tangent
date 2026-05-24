@@ -1,4 +1,5 @@
 """Analysis routes — optimizer, projection, scanner."""
+
 from fastapi import APIRouter, Depends, Query
 
 from ..deps import get_user_portfolio

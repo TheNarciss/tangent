@@ -7,6 +7,7 @@ devenu la règle de pouce de référence pour les revenus passifs durables.
 
 Notre implémentation simplifiée : capital = revenu_annuel / taux_retrait.
 """
+
 import logging
 import math
 
@@ -17,8 +18,12 @@ logger = logging.getLogger(__name__)
 
 class BengenRequest(BaseModel):
     target_monthly_income: float = Field(ge=0, description="€/mois passifs visés")
-    withdrawal_rate: float = Field(default=0.04, ge=0.001, le=0.10,
-                                   description="Taux de retrait annuel soutenable (Bengen=4 %)")
+    withdrawal_rate: float = Field(
+        default=0.04,
+        ge=0.001,
+        le=0.10,
+        description="Taux de retrait annuel soutenable (Bengen=4 %)",
+    )
     current_capital: float = Field(default=0, ge=0)
     monthly_dca: float = Field(default=0, ge=0)
     expected_return: float = Field(default=0.08, ge=0, le=0.30, description="μ annuel attendu")
@@ -28,7 +33,7 @@ class BengenResponse(BaseModel):
     target_monthly_income: float
     yearly_passive_income: float
     capital_needed: float
-    years_to_reach: float | None       # None si inatteignable
+    years_to_reach: float | None  # None si inatteignable
     months_to_reach: int | None
     rationale: str
 
@@ -53,7 +58,7 @@ def compute(req: BengenRequest) -> BengenResponse:
         )
         months = 0
     else:
-        months = int(round(years * 12))
+        months = round(years * 12)
         rationale = (
             f"Pour {req.target_monthly_income:.0f} €/mois passifs ({yearly_income:.0f} €/an) "
             f"au taux Bengen {req.withdrawal_rate * 100:.1f} %, il te faut {capital_needed:,.0f} €. "
@@ -61,8 +66,12 @@ def compute(req: BengenRequest) -> BengenResponse:
             f"@ μ {req.expected_return * 100:.1f} % : atteint en {years:.1f} ans."
         )
 
-    logger.info("bengen: target=%.0f€/mois → capital=%.0f€, years=%s",
-                req.target_monthly_income, capital_needed, years)
+    logger.info(
+        "bengen: target=%.0f€/mois → capital=%.0f€, years=%s",
+        req.target_monthly_income,
+        capital_needed,
+        years,
+    )
     return BengenResponse(
         target_monthly_income=req.target_monthly_income,
         yearly_passive_income=yearly_income,

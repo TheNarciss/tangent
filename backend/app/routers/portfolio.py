@@ -1,4 +1,5 @@
 """Portfolio routes — multi-tenant CRUD over user's PEA positions."""
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,20 +31,26 @@ async def write_portfolio(
     """
     positions_data = [p.model_dump() for p in new.positions]
     await portfolio_repo.replace_positions(
-        session, user.id,
+        session,
+        user.id,
         new_positions=positions_data,
         cash=new.cash,
     )
     # Reload the canonical state (with watchlist merged) for the response
-    from ..deps import get_user_portfolio as _build
     # We can't call the dependency directly, so rebuild inline:
     positions = await portfolio_repo.get_positions_with_watchlist(session, user.id)
     pf = await portfolio_repo.get_or_create(session, user.id)
     from ..models import Position as DomainPosition
+
     return Portfolio(
         positions=[
-            DomainPosition(ticker=p.ticker, quantity=p.quantity, avg_cost=p.avg_cost,
-                           isin=p.isin, label=p.label)
+            DomainPosition(
+                ticker=p.ticker,
+                quantity=p.quantity,
+                avg_cost=p.avg_cost,
+                isin=p.isin,
+                label=p.label,
+            )
             for p in positions
         ],
         cash=pf.cash,

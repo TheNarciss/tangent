@@ -1,9 +1,9 @@
 """Tracking du dernier sync Powens — persisté dans data/powens_state.json."""
+
 from __future__ import annotations
 
-import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -21,6 +21,7 @@ class SyncState(BaseModel):
     Persisté en JSON dans data/powens_state.json. Lu par le frontend
     via GET /sync/status pour afficher "Dernière sync il y a 2h" etc.
     """
+
     last_sync: datetime | None = None
     last_webhook: datetime | None = None
     last_error: str | None = None
@@ -33,7 +34,11 @@ class SyncState(BaseModel):
     def age_hours(self) -> float | None:
         if self.last_sync is None:
             return None
-        delta = datetime.now(timezone.utc) - self.last_sync.replace(tzinfo=timezone.utc) if self.last_sync.tzinfo is None else datetime.now(timezone.utc) - self.last_sync
+        delta = (
+            datetime.now(UTC) - self.last_sync.replace(tzinfo=UTC)
+            if self.last_sync.tzinfo is None
+            else datetime.now(UTC) - self.last_sync
+        )
         return delta.total_seconds() / 3600.0
 
 
@@ -68,7 +73,7 @@ def is_stale(threshold_hours: int | None = None) -> bool:
 def mark_error(message: str) -> None:
     """Note une erreur sans toucher au last_sync (= la dernière sync réussie reste valide)."""
     state = load()
-    state.last_error = f"{datetime.now(timezone.utc).isoformat()} — {message}"
+    state.last_error = f"{datetime.now(UTC).isoformat()} — {message}"
     save(state)
 
 

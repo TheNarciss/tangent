@@ -1,4 +1,5 @@
 """Profile repository — profil financier d'un user."""
+
 import logging
 import uuid
 
@@ -30,8 +31,12 @@ async def update(session: AsyncSession, user_id: uuid.UUID, updates: dict) -> Pr
     """
     profile = await get_or_create(session, user_id)
     allowed_fields = {
-        "birth_date", "fiscal_shares", "rfr_n_minus_2",
-        "target_annual_return", "max_annual_volatility", "horizon_years",
+        "birth_date",
+        "fiscal_shares",
+        "rfr_n_minus_2",
+        "target_annual_return",
+        "max_annual_volatility",
+        "horizon_years",
         "ceilings_used",
     }
     for key, value in updates.items():

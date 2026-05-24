@@ -14,8 +14,9 @@ fichier rotaté en prod).
 - RATE_LIMIT_HIT : tentative bloquée par rate limit
 - (Phase 5) POWENS_TOKEN_CREATED, POWENS_TOKEN_REVOKED, POWENS_SYNC_TRIGGERED
 """
+
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 # Logger dédié — plus simple à filtrer/router que le logger app racine
 _audit = logging.getLogger("audit")
@@ -30,6 +31,6 @@ def log_event(event: str, **fields) -> None:
     Sortie :
         2026-05-21T12:34:56Z AUDIT AUTH_LOGIN_SUCCESS user_id=abc-123 ip=1.2.3.4
     """
-    ts = datetime.now(timezone.utc).isoformat()
+    ts = datetime.now(UTC).isoformat()
     parts = [f"{k}={v}" for k, v in fields.items() if v is not None]
     _audit.info("AUDIT %s ts=%s %s", event, ts, " ".join(parts))

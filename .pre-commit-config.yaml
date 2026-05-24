@@ -1,0 +1,51 @@
+# Pre-commit hooks: run on staged files before commit.
+# Install: pre-commit install
+# Run on all files: pre-commit run --all-files
+# Skip: git commit --no-verify  (use sparingly!)
+
+repos:
+  # Generic file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ["--maxkb=1000"]
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+
+  # Backend: ruff (lint + format)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.14
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^backend/app/.*\.py$
+      - id: ruff-format
+        files: ^backend/app/.*\.py$
+
+  # Frontend: local hooks (call npm scripts)
+  - repo: local
+    hooks:
+      - id: eslint
+        name: eslint (frontend)
+        entry: bash -c 'cd frontend && npm run lint'
+        language: system
+        files: ^frontend/.*\.(ts|tsx|js|jsx)$
+        pass_filenames: false
+
+      - id: tsc
+        name: typescript typecheck
+        entry: bash -c 'cd frontend && npm run typecheck'
+        language: system
+        files: ^frontend/.*\.(ts|tsx)$
+        pass_filenames: false
+
+      - id: prettier
+        name: prettier (frontend)
+        entry: bash -c 'cd frontend && npm run format:check'
+        language: system
+        files: ^frontend/src/.*\.(ts|tsx|css|json)$
+        pass_filenames: false

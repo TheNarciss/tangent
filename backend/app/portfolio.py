@@ -1,4 +1,5 @@
 """Portfolio persistence. Single JSON file, no DB needed at this scale."""
+
 import logging
 from pathlib import Path
 
@@ -47,7 +48,9 @@ def load() -> Portfolio:
 
 def save(portfolio: Portfolio) -> None:
     if transactions.exists():
-        logger.warning("transactions.json present — direct edits to portfolio.json will be ignored on next load")
+        logger.warning(
+            "transactions.json present — direct edits to portfolio.json will be ignored on next load"
+        )
     _PATH.parent.mkdir(parents=True, exist_ok=True)
     try:
         _PATH.write_text(portfolio.model_dump_json(indent=2))

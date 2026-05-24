@@ -6,18 +6,19 @@ constant throughout the window — a counterfactual ("as-if-held") view, useful
 for trends and risk metrics but not for true PnL since we don't store a
 transaction log.
 """
+
 import math
 
 import numpy as np
 import pandas as pd
 
-from . import analytics, market
 from .. import portfolio
 from ..errors import PortfolioEmptyError
 from ..models import TimeseriesResponse
+from . import analytics, market
 
 BENCHMARK_TICKER = "CW8.PA"  # Amundi MSCI World, 5y+ history, broad-market proxy
-ROLLING_WINDOW = 126         # trading days ≈ 6 months
+ROLLING_WINDOW = 126  # trading days ≈ 6 months
 
 
 def build(portfolio_data=None) -> TimeseriesResponse:
@@ -56,7 +57,7 @@ def _benchmark_aligned(index: pd.DatetimeIndex) -> tuple[pd.Series | None, str |
         if len(series) < 2:
             return None, None
         return analytics.normalize(series), BENCHMARK_TICKER
-    except Exception:  # noqa: BLE001 — benchmark is best-effort
+    except Exception:
         return None, None
 
 

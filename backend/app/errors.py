@@ -21,38 +21,47 @@ class AppError(Exception):
 
 class PortfolioEmptyError(AppError):
     """Stored portfolio has no positions."""
+
     status_code = 404
 
 
 class PortfolioCorruptedError(AppError):
     """portfolio.json failed to parse or violates the schema."""
+
     status_code = 500
 
 
 class TickerNotFoundError(AppError):
     """One or more tickers returned no usable data from the provider."""
+
     status_code = 422
 
 
 class MarketDataError(AppError):
     """Upstream market data provider failure (network, timeout, etc.)."""
+
     status_code = 502
 
 
 class InsufficientHistoryError(AppError):
     """Asset universe lacks enough overlapping history for the requested computation."""
+
     status_code = 422
 
 
 class ConfigurationError(AppError):
     """A static config file (YAML, env) is missing or malformed."""
+
     status_code = 500
+
 
 class UnknownBrokerError(AppError):
     """Client requested a broker_id that isn't in the loaded config."""
+
     status_code = 422
 
 
 class InfeasibleStrategyError(AppError):
     """User's strategy (target return + max vol) is mathematically unachievable."""
+
     status_code = 422

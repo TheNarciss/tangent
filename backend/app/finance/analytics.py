@@ -3,6 +3,8 @@
 No I/O, no domain types. Inputs are pandas/numpy, outputs are primitives.
 Annualization uses 252 trading days. Risk-free rate is the module-level constant.
 """
+
+from collections.abc import Callable
 from typing import TypedDict
 
 import numpy as np
@@ -74,9 +76,9 @@ def portfolio_stats(
     If `mu_override` given, asset μ are overridden before weighting.
     """
     if mu_override:
-        mu_per_asset = np.array([
-            mu_override.get(t, returns[t].mean() * TRADING_DAYS) for t in returns.columns
-        ])
+        mu_per_asset = np.array(
+            [mu_override.get(t, returns[t].mean() * TRADING_DAYS) for t in returns.columns]
+        )
     else:
         mu_per_asset = returns.mean().values * TRADING_DAYS
     cov = returns.cov().values * TRADING_DAYS
@@ -131,7 +133,9 @@ def shrunk_covariance(returns: pd.DataFrame, shrinkage: float = 0.20) -> np.ndar
     return s * target + (1 - s) * cov_sample
 
 
-def kelly_leverage(mu: np.ndarray, cov: np.ndarray, risk_free: float = RISK_FREE) -> dict[str, float]:
+def kelly_leverage(
+    mu: np.ndarray, cov: np.ndarray, risk_free: float = RISK_FREE
+) -> dict[str, float]:
     """Kelly leverage indicator : combien le solveur Kelly théorique investirait
     si la contrainte sum(w)=1 et long-only étaient relâchées.
 
@@ -238,9 +242,11 @@ def deterministic_projection(
     """
     fee = monthly_fee or (lambda _v: 0.0)
     paths: dict[str, list[float]] = {}
-    for label, mu in (("bear", annual_return - annual_vol),
-                       ("base", annual_return),
-                       ("bull", annual_return + annual_vol)):
+    for label, mu in (
+        ("bear", annual_return - annual_vol),
+        ("base", annual_return),
+        ("bull", annual_return + annual_vol),
+    ):
         rm = (1 + mu) ** (1 / 12) - 1 if mu > -1 else -0.99
         v = initial
         series = [v]
@@ -324,41 +330,59 @@ def _solve_slsqp(
     constraints: list[dict] = [{"type": "eq", "fun": lambda w: w.sum() - 1.0}]
 
     if objective == "max_sharpe":
+
         def fn(w: np.ndarray) -> float:
             vol = float(np.sqrt(w @ cov @ w))
             return -(float(w @ mu) - risk_free) / vol if vol > 1e-10 else 1e6
     elif objective == "min_variance":
+
         def fn(w: np.ndarray) -> float:
             return float(w @ cov @ w)
     elif objective == "target_volatility":
         if max_vol is None:
             raise ValueError("target_volatility requires max_vol")
+
         def fn(w: np.ndarray) -> float:
             return -float(w @ mu)
-        constraints.append({
-            "type": "ineq",
-            "fun": lambda w: float(max_vol) - float(np.sqrt(w @ cov @ w)),
-        })
+
+        constraints.append(
+            {
+                "type": "ineq",
+                "fun": lambda w: float(max_vol) - float(np.sqrt(w @ cov @ w)),
+            }
+        )
     elif objective == "from_strategy":
         if max_vol is None or target_return is None:
             raise ValueError("from_strategy requires both max_vol and target_return")
+
         # Maximize Sharpe subject to σ ≤ max_vol AND μ ≥ target_return
         def fn(w: np.ndarray) -> float:
             vol = float(np.sqrt(w @ cov @ w))
             return -(float(w @ mu) - risk_free) / vol if vol > 1e-10 else 1e6
-        constraints.append({
-            "type": "ineq",
-            "fun": lambda w: float(max_vol) - float(np.sqrt(w @ cov @ w)),
-        })
-        constraints.append({
-            "type": "ineq",
-            "fun": lambda w: float(w @ mu) - float(target_return),
-        })
+
+        constraints.append(
+            {
+                "type": "ineq",
+                "fun": lambda w: float(max_vol) - float(np.sqrt(w @ cov @ w)),
+            }
+        )
+        constraints.append(
+            {
+                "type": "ineq",
+                "fun": lambda w: float(w @ mu) - float(target_return),
+            }
+        )
     else:
         raise ValueError(f"Unknown objective: {objective!r}")
 
-    res = minimize(fn, w0, method="SLSQP", bounds=bounds, constraints=constraints,
-                   options={"ftol": 1e-10, "maxiter": 200})
+    res = minimize(
+        fn,
+        w0,
+        method="SLSQP",
+        bounds=bounds,
+        constraints=constraints,
+        options={"ftol": 1e-10, "maxiter": 200},
+    )
     w_opt = res.x
     vol = float(np.sqrt(w_opt @ cov @ w_opt))
     ret = float(w_opt @ mu)
@@ -388,9 +412,9 @@ def build_asset_stats(
     """
     n = returns.shape[1]
     if mu_override:
-        mu = np.array([
-            mu_override.get(t, float(returns[t].mean() * TRADING_DAYS)) for t in returns.columns
-        ])
+        mu = np.array(
+            [mu_override.get(t, float(returns[t].mean() * TRADING_DAYS)) for t in returns.columns]
+        )
     else:
         mu = returns.mean().values * TRADING_DAYS
     if cov_estimator == "shrunk":
@@ -406,7 +430,7 @@ def build_asset_stats(
         cov_aug = np.zeros((n + k, n + k))
         cov_aug[:n, :n] = cov
         for i in range(k):
-            cov_aug[n + i, n + i] = sigma_envelope ** 2
+            cov_aug[n + i, n + i] = sigma_envelope**2
         bounds_aug = bounds + [(0.0, max(0.0, min(1.0, mw))) for mw in envelope_max_weights]
         return mu_aug, cov_aug, bounds_aug
 
@@ -471,7 +495,8 @@ def efficient_frontier_curve(
     res_minvar = minimize(
         lambda w: float(w @ cov @ w),
         np.full(n, 1 / n),
-        method="SLSQP", bounds=bounds,
+        method="SLSQP",
+        bounds=bounds,
         constraints=[{"type": "eq", "fun": lambda w: w.sum() - 1.0}],
         options={"ftol": 1e-10, "maxiter": 300},
     )
@@ -495,9 +520,14 @@ def efficient_frontier_curve(
             {"type": "eq", "fun": lambda w: w.sum() - 1.0},
             {"type": "eq", "fun": lambda w, t=target: float(w @ mu) - t},
         ]
-        res = minimize(lambda w: float(w @ cov @ w), np.full(n, 1 / n),
-                       method="SLSQP", bounds=bounds, constraints=constraints,
-                       options={"ftol": 1e-10, "maxiter": 300})
+        res = minimize(
+            lambda w: float(w @ cov @ w),
+            np.full(n, 1 / n),
+            method="SLSQP",
+            bounds=bounds,
+            constraints=constraints,
+            options={"ftol": 1e-10, "maxiter": 300},
+        )
         if not res.success:
             continue
         w = res.x
@@ -516,6 +546,6 @@ def risk_contributions(returns: pd.DataFrame, weights: np.ndarray) -> dict[str, 
     vol = float(np.sqrt(weights @ cov @ weights))
     if vol <= 0:
         return {"tickers": list(returns.columns), "fraction": [0.0] * len(weights)}
-    marginal = (cov @ weights) / vol             # ∂σ_p/∂w_i
-    rc = weights * marginal                       # contribution; sums to σ_p
+    marginal = (cov @ weights) / vol  # ∂σ_p/∂w_i
+    rc = weights * marginal  # contribution; sums to σ_p
     return {"tickers": list(returns.columns), "fraction": (rc / vol).tolist()}

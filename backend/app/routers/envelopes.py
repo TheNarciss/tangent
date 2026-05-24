@@ -2,6 +2,7 @@
 
 Still gated by auth so anonymous traffic can't probe config.
 """
+
 from fastapi import APIRouter, Depends
 
 from ..auth import User, current_active_user
@@ -37,14 +38,16 @@ async def list_eligible_envelopes(
     results = []
     for eid, env in cfg.envelopes.items():
         eligible, note = envelopes.check_eligibility(env, req.age, req.rfr, req.fiscal_shares)
-        results.append(EnvelopeEligibility(
-            id=eid,
-            name=env.name,
-            rate_pct=env.rate_pct,
-            ceiling_eur=env.ceiling_eur,
-            tax_status=env.tax_status,
-            liquidity_days=env.liquidity_days,
-            eligible=eligible,
-            note=note,
-        ))
+        results.append(
+            EnvelopeEligibility(
+                id=eid,
+                name=env.name,
+                rate_pct=env.rate_pct,
+                ceiling_eur=env.ceiling_eur,
+                tax_status=env.tax_status,
+                liquidity_days=env.liquidity_days,
+                eligible=eligible,
+                note=note,
+            )
+        )
     return EligibleEnvelopesResponse(envelopes=results)

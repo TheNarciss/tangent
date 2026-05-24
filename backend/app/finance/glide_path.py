@@ -7,6 +7,7 @@ Combine deux règles classiques :
 Le μ_target est dérivé du σ_max par une approximation linéaire de la frontière efficiente
 classes d'actifs (r_f → actions monde long-terme).
 """
+
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -20,11 +21,11 @@ WORLD_VOL_REF = 0.20
 
 # Plafonds horizon (CFA Institute) — durée → σ_max acceptable
 _HORIZON_CAPS: list[tuple[int, int, float]] = [
-    (0, 1, 0.02),    # < 1 an : quasi-livret
-    (1, 3, 0.08),    # 1-3 ans : obligations courtes
-    (3, 7, 0.12),    # 3-7 ans : mix équilibré
-    (7, 15, 0.18),   # 7-15 ans : actions dominantes
-    (15, 200, 0.25), # > 15 ans : 100 % actions OK
+    (0, 1, 0.02),  # < 1 an : quasi-livret
+    (1, 3, 0.08),  # 1-3 ans : obligations courtes
+    (3, 7, 0.12),  # 3-7 ans : mix équilibré
+    (7, 15, 0.18),  # 7-15 ans : actions dominantes
+    (15, 200, 0.25),  # > 15 ans : 100 % actions OK
 ]
 
 
@@ -32,7 +33,9 @@ class GlidePathResult(BaseModel):
     risk_level: RiskLevel
     max_volatility: float = Field(description="σ_max recommandée, fraction (e.g. 0.156)")
     target_return: float = Field(description="μ cible dérivé, fraction (e.g. 0.073)")
-    drawdown_estimate: float = Field(description="Drawdown pire année estimé, fraction négative (= −2σ)")
+    drawdown_estimate: float = Field(
+        description="Drawdown pire année estimé, fraction négative (= −2σ)"
+    )
     rationale: str = Field(description="Phrase d'explication pour l'UI")
 
 

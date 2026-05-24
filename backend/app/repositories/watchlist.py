@@ -1,4 +1,5 @@
 """Watchlist repository — CRUD pour les tickers suivis sans transaction."""
+
 import logging
 import uuid
 
@@ -38,7 +39,8 @@ async def remove(session: AsyncSession, user_id: uuid.UUID, ticker: str) -> list
     """Retire un ticker. No-op si pas présent."""
     t = ticker.strip().upper()
     stmt = select(WatchlistItem).where(
-        WatchlistItem.user_id == user_id, WatchlistItem.ticker == t,
+        WatchlistItem.user_id == user_id,
+        WatchlistItem.ticker == t,
     )
     result = await session.execute(stmt)
     item = result.scalar_one_or_none()

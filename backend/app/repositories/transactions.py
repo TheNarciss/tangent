@@ -7,6 +7,7 @@ Plus tard (Phase ultérieure) on pourra reconstruire les positions depuis
 les transactions à la demande, mais pour l'instant on garde les 2 séparés
 pour simplicité.
 """
+
 import logging
 import uuid
 from datetime import date
@@ -60,15 +61,23 @@ async def add(
     session.add(tx)
     await session.commit()
     await session.refresh(tx)
-    logger.info("Transaction added for user=%s: %s %s %s qty=%.2f price=%.2f",
-                user_id, kind, ticker, occurred_on, quantity, price)
+    logger.info(
+        "Transaction added for user=%s: %s %s %s qty=%.2f price=%.2f",
+        user_id,
+        kind,
+        ticker,
+        occurred_on,
+        quantity,
+        price,
+    )
     return tx
 
 
 async def delete(session: AsyncSession, user_id: uuid.UUID, tx_id: uuid.UUID) -> bool:
     """Supprime une transaction. Retourne False si pas trouvée OU pas owned par user."""
     stmt = select(Transaction).where(
-        Transaction.id == tx_id, Transaction.user_id == user_id,
+        Transaction.id == tx_id,
+        Transaction.user_id == user_id,
     )
     result = await session.execute(stmt)
     tx = result.scalar_one_or_none()

@@ -1,14 +1,21 @@
 """Dashboard service: composes portfolio + market + analytics + diagnostic."""
+
 import logging
 from datetime import date
 
 import numpy as np
 import pandas as pd
 
-from . import analytics, cma, diagnostic, market, stress
 from .. import portfolio
 from ..errors import InsufficientHistoryError, PortfolioEmptyError
-from ..models import AssetMetrics, DashboardResponse, FrontierCloud, PortfolioMetrics, StressTestResult
+from ..models import (
+    AssetMetrics,
+    DashboardResponse,
+    FrontierCloud,
+    PortfolioMetrics,
+    StressTestResult,
+)
+from . import analytics, cma, diagnostic, market, stress
 
 logger = logging.getLogger(__name__)
 
@@ -17,11 +24,13 @@ def build(
     cma_shrinkage: float | None = None,
     historical_period: str = "5y",
     risk_free: float | None = None,
-    portfolio_data=None,   # Portfolio | None — optional injection (Phase 3b multi-tenant)
+    portfolio_data=None,  # Portfolio | None — optional injection (Phase 3b multi-tenant)
 ) -> DashboardResponse:
     pf = portfolio_data if portfolio_data is not None else portfolio.load()
     if not pf.positions:
-        raise PortfolioEmptyError("Aucune position enregistrée. Ajoute des positions via PUT /portfolio.")
+        raise PortfolioEmptyError(
+            "Aucune position enregistrée. Ajoute des positions via PUT /portfolio."
+        )
 
     tickers = [p.ticker for p in pf.positions]
     prices = market.fetch_prices(tickers, period=historical_period)
@@ -60,10 +69,16 @@ def build(
 
     total_cost = sum(p.quantity * p.avg_cost for p in pf.positions)
     assets = [
-        _asset_metric(p, w, v, latest[p.ticker], asset_stats[p.ticker],
-                      analytics.cvar_95(returns[p.ticker]),
-                      analytics.max_drawdown(prices[p.ticker]))
-        for p, w, v in zip(pf.positions, weights.tolist(), values.tolist())
+        _asset_metric(
+            p,
+            w,
+            v,
+            latest[p.ticker],
+            asset_stats[p.ticker],
+            analytics.cvar_95(returns[p.ticker]),
+            analytics.max_drawdown(prices[p.ticker]),
+        )
+        for p, w, v in zip(pf.positions, weights.tolist(), values.tolist(), strict=True)
     ]
 
     metrics = PortfolioMetrics(
@@ -80,8 +95,14 @@ def build(
         assets=assets,
         correlation=analytics.correlation_matrix(returns),
     )
-    logger.info("dashboard built: %d assets, %.2f €, shrinkage=%s, period=%s, %d stress tests",
-                len(assets), total_value, cma_shrinkage, historical_period, len(stress_results))
+    logger.info(
+        "dashboard built: %d assets, %.2f €, shrinkage=%s, period=%s, %d stress tests",
+        len(assets),
+        total_value,
+        cma_shrinkage,
+        historical_period,
+        len(stress_results),
+    )
     return DashboardResponse(
         as_of=date.today(),
         metrics=metrics,
@@ -91,8 +112,9 @@ def build(
     )
 
 
-def _asset_metric(position, weight: float, value: float, price: float, stat,
-                  cvar: float, max_dd: float) -> AssetMetrics:
+def _asset_metric(
+    position, weight: float, value: float, price: float, stat, cvar: float, max_dd: float
+) -> AssetMetrics:
     cost = position.quantity * position.avg_cost
     pnl = value - cost
     return AssetMetrics(

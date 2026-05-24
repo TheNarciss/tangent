@@ -4,6 +4,7 @@ Failures are reported via the application's exception hierarchy:
 - network/upstream issues → `MarketDataError`
 - valid request but unknown/empty tickers → `TickerNotFoundError`
 """
+
 import logging
 from datetime import datetime, timedelta
 
@@ -36,7 +37,7 @@ def fetch_prices(tickers: list[str], period: str = "5y") -> pd.DataFrame:
 
     try:
         data = yf.download(tickers, period=period, auto_adjust=True, progress=False)
-    except Exception as exc:  # noqa: BLE001 — yfinance throws many types
+    except Exception as exc:
         logger.exception("yfinance failure for %s", tickers)
         raise MarketDataError(f"Échec de la récupération Yahoo Finance: {exc}") from exc
 

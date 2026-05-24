@@ -4,6 +4,7 @@ Stockés dans data/watchlist.json (simple list[str]). Mergés au portfolio déri
 des transactions avec quantity=0 → apparaissent dans le dashboard et sont
 considérés par l'optimiseur sans impacter la valorisation actuelle.
 """
+
 import json
 import logging
 from pathlib import Path

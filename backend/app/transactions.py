@@ -7,6 +7,7 @@ Reads `data/transactions.json` (list of dated cashflows + trades) and derives:
 Preferred over the legacy `portfolio.json` because trades carry fees and dates,
 enabling true cost basis, fee attribution, and future TRI/IRR computation.
 """
+
 import json
 import logging
 from collections import defaultdict
@@ -70,9 +71,9 @@ def derive_portfolio(txns: list[Transaction]) -> Portfolio:
             cash += t.qty * t.unit_price - t.fees
 
     positions = [
-        Position(ticker=tk, quantity=q, avg_cost=cost[tk] / q)
-        for tk, q in qty.items() if q > 0
+        Position(ticker=tk, quantity=q, avg_cost=cost[tk] / q) for tk, q in qty.items() if q > 0
     ]
-    logger.info("derived %d positions + %.2f € cash from %d transactions",
-                len(positions), cash, len(txns))
+    logger.info(
+        "derived %d positions + %.2f € cash from %d transactions", len(positions), cash, len(txns)
+    )
     return Portfolio(positions=positions, cash=cash)

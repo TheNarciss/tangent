@@ -4,6 +4,7 @@ Each authenticated user manages their own Powens token. The token is
 identified via the tangent_auth cookie (SameSite=lax → sent on Powens
 redirect to /auth/powens/callback).
 """
+
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -16,11 +17,11 @@ from ..db.engine import get_session
 from ..db.models import PowensCredential
 from ..powens import settings as powens_settings
 from ..powens import state as powens_state
-from ..powens.crypto import encrypt_token, decrypt_token
+from ..powens.crypto import decrypt_token, encrypt_token
 from ..powens.oauth import exchange_code_for_token
 from ..powens.sync import sync_portfolio
-from ..repositories import portfolio as portfolio_repo
 from ..powens.webhooks import handle_webhook as powens_handle_webhook
+from ..repositories import portfolio as portfolio_repo
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["powens"])
@@ -43,7 +44,7 @@ async def get_powens_webview(user: User = Depends(current_active_user)):
 async def powens_auth_callback(
     code: str,
     user: User = Depends(current_active_user),  # ← identifies user via tangent_auth cookie
-    connection_id: str = None,
+    connection_id: str | None = None,
     session: AsyncSession = Depends(get_session),
 ):
     """OAuth callback — exchange code for token and store it for THIS user.
@@ -110,7 +111,8 @@ async def post_sync_powens(
     if result.success and result.positions:
         positions_data = [p.model_dump() for p in result.positions]
         await portfolio_repo.replace_positions(
-            session, user.id,
+            session,
+            user.id,
             new_positions=positions_data,
             cash=result.cash_balance,
         )

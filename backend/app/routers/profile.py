@@ -3,6 +3,7 @@
 This complements (and will eventually replace) the frontend's localStorage-based
 profile. The frontend syncs both ways: pull from DB at login, push on every edit.
 """
+
 from datetime import date
 from typing import Any
 

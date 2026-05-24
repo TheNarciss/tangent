@@ -2,6 +2,7 @@
 
 Endpoint business logic lives in app/routers/. main.py is intentionally thin.
 """
+
 import logging
 import os
 import time
@@ -20,7 +21,19 @@ from .errors import AppError
 from .powens import settings as powens_settings
 from .powens import state as powens_state
 from .powens.sync import sync_portfolio
-from .routers import admin, analysis, dashboard, envelopes, password_reset, planning, portfolio, powens, watchlist, profile
+from .routers import (
+    admin,
+    analysis,
+    dashboard,
+    envelopes,
+    password_reset,
+    planning,
+    portfolio,
+    powens,
+    profile,
+    watchlist,
+)
+
 logging_config.configure()
 logger = logging.getLogger("app")
 
@@ -28,13 +41,16 @@ app = FastAPI(title="Portfolio Dashboard", version="0.8.0")
 
 # ─── Rate limiter (sliding window) ────────────────────────────────────────
 _AUTH_RATE_LIMITS = {
-    "/auth/login":                    (5, 60),
-    "/auth/register":                 (3, 3600),
-    "/auth/forgot-password":          (3, 3600),
-    "/auth/reset-password":           (5, 3600),
-    "/auth/password-reset/request":   (3, 3600),    # max 3 emails de reset/h par IP
-    "/auth/password-reset/verify":    (10, 3600),   # max 10 essais de code/h (avant ban auto via attempts<5)
-    "/auth/password-reset/confirm":   (5, 3600),    # max 5 tentatives de reset/h
+    "/auth/login": (5, 60),
+    "/auth/register": (3, 3600),
+    "/auth/forgot-password": (3, 3600),
+    "/auth/reset-password": (5, 3600),
+    "/auth/password-reset/request": (3, 3600),  # max 3 emails de reset/h par IP
+    "/auth/password-reset/verify": (
+        10,
+        3600,
+    ),  # max 10 essais de code/h (avant ban auto via attempts<5)
+    "/auth/password-reset/confirm": (5, 3600),  # max 5 tentatives de reset/h
 }
 _attempts: dict[tuple[str, str], list[float]] = defaultdict(list)
 
@@ -50,8 +66,13 @@ async def apply_auth_rate_limits(request: Request, call_next):
         _attempts[key] = [t for t in _attempts[key] if now - t < window_seconds]
         if len(_attempts[key]) >= max_count:
             retry_after = int(window_seconds - (now - _attempts[key][0]))
-            logger.warning("Rate limit hit: ip=%s path=%s (%d attempts in %ds)",
-                           client_ip, request.url.path, len(_attempts[key]), window_seconds)
+            logger.warning(
+                "Rate limit hit: ip=%s path=%s (%d attempts in %ds)",
+                client_ip,
+                request.url.path,
+                len(_attempts[key]),
+                window_seconds,
+            )
             return JSONResponse(
                 status_code=429,
                 content={
@@ -67,13 +88,15 @@ async def apply_auth_rate_limits(request: Request, call_next):
 # ─── CORS ─────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",") if o.strip()],
+    allow_origins=[
+        o.strip()
+        for o in os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",")
+        if o.strip()
+    ],
     allow_methods=["GET", "PUT", "POST", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
     allow_credentials=True,
 )
-
-
 
 
 @app.middleware("http")
@@ -83,9 +106,13 @@ async def security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=(), interest-cohort=()"
+    response.headers["Permissions-Policy"] = (
+        "geolocation=(), microphone=(), camera=(), interest-cohort=()"
+    )
     if os.getenv("ENV", "dev") == "prod":
-        response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=63072000; includeSubDomains; preload"
+        )
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
             "script-src 'self' 'unsafe-inline'; "
@@ -98,6 +125,7 @@ async def security_headers(request: Request, call_next):
         )
     return response
 
+
 # ─── Request tracing middleware ───────────────────────────────────────────
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
@@ -108,8 +136,9 @@ async def log_requests(request: Request, call_next):
         logger.exception("unhandled exception in %s %s", request.method, request.url.path)
         raise
     duration_ms = (time.perf_counter() - start) * 1000
-    logger.info("%s %s → %d (%.0f ms)",
-                request.method, request.url.path, response.status_code, duration_ms)
+    logger.info(
+        "%s %s → %d (%.0f ms)", request.method, request.url.path, response.status_code, duration_ms
+    )
     return response
 
 
@@ -123,9 +152,13 @@ async def health():
 
 # ─── Auth routes (FastAPI-Users) ──────────────────────────────────────────
 app.include_router(fastapi_users.get_auth_router(auth_backend), prefix="/auth", tags=["auth"])
-app.include_router(fastapi_users.get_register_router(UserRead, UserCreate), prefix="/auth", tags=["auth"])
+app.include_router(
+    fastapi_users.get_register_router(UserRead, UserCreate), prefix="/auth", tags=["auth"]
+)
 app.include_router(fastapi_users.get_reset_password_router(), prefix="/auth", tags=["auth"])
-app.include_router(fastapi_users.get_users_router(UserRead, UserUpdate), prefix="/users", tags=["users"])
+app.include_router(
+    fastapi_users.get_users_router(UserRead, UserUpdate), prefix="/users", tags=["users"]
+)
 
 
 # ─── Business routers (all require auth via current_active_user) ──────────
@@ -181,10 +214,15 @@ async def startup_powens_autosync():
         logger.info("Powens not configured, skipping autosync at startup")
         return
     if powens_state.is_stale():
-        logger.info("Powens: last sync > %dh ago, autosync at startup", powens_settings.autosync_threshold_hours)
+        logger.info(
+            "Powens: last sync > %dh ago, autosync at startup",
+            powens_settings.autosync_threshold_hours,
+        )
         try:
             result = await sync_portfolio()
-            logger.info("Powens autosync: success=%s positions=%d", result.success, result.positions_count)
+            logger.info(
+                "Powens autosync: success=%s positions=%d", result.success, result.positions_count
+            )
         except Exception:
             logger.exception("Powens autosync failed at startup")
     else:

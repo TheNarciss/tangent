@@ -3,8 +3,8 @@
 Chaque scénario est une fenêtre temporelle bien définie ; on calcule la performance
 cumulée du portefeuille reconstruit (qty actuelles × prix historiques) sur la fenêtre.
 """
+
 import logging
-from datetime import date
 
 import pandas as pd
 
@@ -77,14 +77,16 @@ def compute(prices: pd.DataFrame, quantities: dict[str, float]) -> list[dict]:
             continue
         pnl_pct = (value_end - value_start) / value_start if value_start else 0.0
         drawdown = (min_value - value_start) / value_start if value_start else 0.0
-        results.append({
-            "id": p["id"],
-            "label": p["label"],
-            "description": p["description"],
-            "start": p["start"],
-            "end": p["end"],
-            "pnl_pct": pnl_pct,
-            "drawdown_pct": drawdown,
-        })
+        results.append(
+            {
+                "id": p["id"],
+                "label": p["label"],
+                "description": p["description"],
+                "start": p["start"],
+                "end": p["end"],
+                "pnl_pct": pnl_pct,
+                "drawdown_pct": drawdown,
+            }
+        )
     logger.info("stress tests computed: %d scenarios", len(results))
     return results

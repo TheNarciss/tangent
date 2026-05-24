@@ -37,3 +37,36 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["app", "app.powens", "app.db", "app.auth", "app.finance", "app.repositories", "app.routers"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "RUF"]
+ignore = [
+    "E501",  # line too long
+    "B008",  # Depends() in FastAPI defaults
+    "RUF001",  # ambiguous unicode in strings (we use σ, μ, ρ in finance code)
+    "RUF002",  # ambiguous unicode in docstrings
+    "RUF003",  # ambiguous unicode in comments
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.12"
+strict = false
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
+exclude = ["alembic/", "tests/"]

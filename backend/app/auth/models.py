@@ -13,7 +13,8 @@ On ajoute juste :
 - created_at, updated_at (audit)
 - display_name (optionnel, affiché dans l'UI)
 """
-from datetime import datetime, timezone
+
+from datetime import UTC, datetime
 
 from fastapi_users.db import SQLAlchemyBaseUserTableUUID
 from sqlalchemy import DateTime, String
@@ -26,14 +27,16 @@ class Base(DeclarativeBase):
 
 class User(SQLAlchemyBaseUserTableUUID, Base):
     """Table users. SQLAlchemyBaseUserTableUUID fournit id/email/hashed_password/flags."""
+
     __tablename__ = "users"
 
     display_name: Mapped[str | None] = mapped_column(String(64), default=None)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )

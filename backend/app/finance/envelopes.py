@@ -7,6 +7,7 @@ statut + la raison (éligible ou non, et pourquoi).
 L'utilisateur garde une vue claire : on lui montre TOUTES les enveloppes,
 avec celles non-éligibles grisées et la raison affichée — pédagogique.
 """
+
 import logging
 from pathlib import Path
 
@@ -23,8 +24,8 @@ _PATH = Path(__file__).resolve().parent.parent.parent / "config" / "envelopes.ya
 class EligibilityRules(BaseModel):
     age_min: int = 0
     age_max: int | None = None
-    rfr_max_base: float | None = None              # plafond RFR pour 1 part
-    rfr_max_per_half_share: float | None = None    # incrément par demi-part suppl.
+    rfr_max_base: float | None = None  # plafond RFR pour 1 part
+    rfr_max_per_half_share: float | None = None  # incrément par demi-part suppl.
 
 
 class Envelope(BaseModel):
@@ -94,7 +95,10 @@ def check_eligibility(
     ceiling = _rfr_ceiling(rules, fiscal_shares)
     if ceiling is not None:
         if rfr > ceiling:
-            return False, f"RFR {rfr:,.0f} € > plafond {ceiling:,.0f} € pour {fiscal_shares} part(s)."
+            return (
+                False,
+                f"RFR {rfr:,.0f} € > plafond {ceiling:,.0f} € pour {fiscal_shares} part(s).",
+            )
         return True, f"RFR {rfr:,.0f} € ≤ plafond {ceiling:,.0f} € pour {fiscal_shares} part(s)."
 
     return True, "Conditions d'éligibilité satisfaites."

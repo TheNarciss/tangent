@@ -10,11 +10,12 @@ Workflow:
 Powens = SOURCE OF TRUTH for current positions (user choice).
 The transactions.json history is preserved as a backup for future reference.
 """
+
 from __future__ import annotations
 
 import logging
 import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -33,6 +34,7 @@ _BACKUP_DIR = _DATA_DIR / "backups"
 
 class SyncResult(BaseModel):
     """Return value of sync_portfolio() — exposed via POST /sync/powens."""
+
     success: bool
     positions_count: int = 0
     cash_balance: float = 0.0
@@ -41,7 +43,7 @@ class SyncResult(BaseModel):
     skipped_accounts: list[str] = []
     error: str | None = None
     synced_at: datetime
-    positions: list[Position] = []   # for multi-tenant DB persistence
+    positions: list[Position] = []  # for multi-tenant DB persistence
 
 
 # ── Matching helpers ────────────────────────────────────────────────────────
@@ -90,7 +92,7 @@ def _backup_portfolio() -> Path | None:
     if not _PORTFOLIO_PATH.exists():
         return None
     _BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     dest = _BACKUP_DIR / f"portfolio_{ts}.json"
     shutil.copy(_PORTFOLIO_PATH, dest)
     logger.info("Backed up portfolio.json → %s", dest.name)
@@ -107,7 +109,7 @@ def _move_transactions_to_legacy() -> None:
     if not _TRANSACTIONS_PATH.exists():
         return
     _BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     dest = _BACKUP_DIR / f"transactions_legacy_{ts}.json"
     shutil.move(str(_TRANSACTIONS_PATH), dest)
     logger.info(
@@ -126,7 +128,7 @@ async def sync_portfolio() -> SyncResult:
     On error, the existing portfolio.json is NOT modified and the error
     is recorded in state.last_error.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     try:
         async with PowensClient() as client:
             accounts = await client.get_accounts()
@@ -152,13 +154,15 @@ async def sync_portfolio() -> SyncResult:
             for inv in investments:
                 if (inv.get("quantity") or 0) <= 0:
                     continue
-                positions.append(Position(
-                    ticker=_ticker_from_powens(inv),
-                    quantity=float(inv["quantity"]),
-                    avg_cost=float(inv.get("unitprice", 0)),
-                    isin=inv.get("code"),
-                    label=inv.get("label"),
-                ))
+                positions.append(
+                    Position(
+                        ticker=_ticker_from_powens(inv),
+                        quantity=float(inv["quantity"]),
+                        avg_cost=float(inv.get("unitprice", 0)),
+                        isin=inv.get("code"),
+                        label=inv.get("label"),
+                    )
+                )
 
             # 4. Cash from the PEA Espèces account
             cash = float(pea_cash.get("balance", 0)) if pea_cash else 0.0
@@ -171,18 +175,18 @@ async def sync_portfolio() -> SyncResult:
             _PORTFOLIO_PATH.write_text(portfolio.model_dump_json(indent=2), encoding="utf-8")
 
             # 6. Persist state
-            state.save(state.SyncState(
-                last_sync=now,
-                last_error=None,
-                connection_id=pea_titres.get("id_connection"),
-                accounts_seen=[a["id"] for a in accounts],
-                positions_count=len(positions),
-                cash_balance=cash,
-            ))
+            state.save(
+                state.SyncState(
+                    last_sync=now,
+                    last_error=None,
+                    connection_id=pea_titres.get("id_connection"),
+                    accounts_seen=[a["id"] for a in accounts],
+                    positions_count=len(positions),
+                    cash_balance=cash,
+                )
+            )
 
-            total_valuation = sum(
-                float(inv.get("valuation", 0)) for inv in investments
-            ) + cash
+            total_valuation = sum(float(inv.get("valuation", 0)) for inv in investments) + cash
 
             return SyncResult(
                 success=True,

@@ -5,11 +5,11 @@ optionally augments the asset universe with the user's eligible regulated
 envelopes (Livret A, LEP, etc.) modeled as synthetic 0-σ assets with
 ceiling-derived weight bounds.
 """
+
 import logging
 
 import numpy as np
 
-from . import analytics, cma, envelopes, market
 from .. import portfolio
 from ..errors import ConfigurationError, InfeasibleStrategyError, PortfolioEmptyError
 from ..models import (
@@ -23,6 +23,7 @@ from ..models import (
     RebalanceAction,
     RiskContribution,
 )
+from . import analytics, cma, envelopes, market
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,11 @@ def build(req: OptimizerRequest, portfolio_data=None) -> OptimizerResponse:
     # Expert settings: all optional with smart defaults
     expert = req.expert
     period = expert.historical_period if expert and expert.historical_period else "5y"
-    rf = expert.risk_free_rate if expert and expert.risk_free_rate is not None else analytics.RISK_FREE
+    rf = (
+        expert.risk_free_rate
+        if expert and expert.risk_free_rate is not None
+        else analytics.RISK_FREE
+    )
     cma_shrink = expert.cma_shrinkage if expert and expert.cma_shrinkage is not None else None
     cma_overrides = expert.cma_overrides if expert else {}
     cov_estimator = expert.cov_estimator if expert else "sample"
@@ -50,7 +55,9 @@ def build(req: OptimizerRequest, portfolio_data=None) -> OptimizerResponse:
     portfolio_value = float(etf_values.sum())
 
     # Capital pool over which weights/euros are resolved
-    total_capital = req.total_capital if req.total_capital and req.total_capital > 0 else portfolio_value
+    total_capital = (
+        req.total_capital if req.total_capital and req.total_capital > 0 else portfolio_value
+    )
 
     # Resolve envelopes (only if all profile fields provided)
     envelope_assets = _resolve_envelopes(req, total_capital) if req.include_envelopes else []
@@ -65,11 +72,15 @@ def build(req: OptimizerRequest, portfolio_data=None) -> OptimizerResponse:
 
     # Blend historical μ with forward-looking CMAs (with expert overrides if provided).
     hist_mu = (returns.mean() * analytics.TRADING_DAYS).values
-    blended = cma.blended_mu(tickers, hist_mu, shrinkage=cma_shrink, overrides=cma_overrides or None)
+    blended = cma.blended_mu(
+        tickers, hist_mu, shrinkage=cma_shrink, overrides=cma_overrides or None
+    )
     mu_override = {t: float(blended[i]) for i, t in enumerate(tickers)}
 
     mu, cov, bounds = analytics.build_asset_stats(
-        returns, envelope_rates, envelope_max_weights,
+        returns,
+        envelope_rates,
+        envelope_max_weights,
         mu_override=mu_override,
         cov_estimator=cov_estimator,
         cov_shrinkage=cov_shrinkage,
@@ -77,11 +88,17 @@ def build(req: OptimizerRequest, portfolio_data=None) -> OptimizerResponse:
 
     if req.objective == "target_volatility" and (req.max_volatility is None):
         raise ConfigurationError("Objective 'target_volatility' requires max_volatility.")
-    if req.objective == "from_strategy" and (req.max_volatility is None or req.target_return is None):
-        raise ConfigurationError("Objective 'from_strategy' requires max_volatility AND target_return.")
+    if req.objective == "from_strategy" and (
+        req.max_volatility is None or req.target_return is None
+    ):
+        raise ConfigurationError(
+            "Objective 'from_strategy' requires max_volatility AND target_return."
+        )
 
     optimal = analytics._solve_slsqp(
-        mu, cov, bounds,
+        mu,
+        cov,
+        bounds,
         req.objective,
         rf,
         req.max_volatility,
@@ -93,8 +110,13 @@ def build(req: OptimizerRequest, portfolio_data=None) -> OptimizerResponse:
     if req.objective == "from_strategy" and not optimal.get("success", True):
         try:
             best_at_vol = analytics._solve_slsqp(
-                mu, cov, bounds, "target_volatility", rf,
-                req.max_volatility, None,
+                mu,
+                cov,
+                bounds,
+                "target_volatility",
+                rf,
+                req.max_volatility,
+                None,
             )
             achievable = float(best_at_vol["expected_return"])
             raise InfeasibleStrategyError(
@@ -105,17 +127,19 @@ def build(req: OptimizerRequest, portfolio_data=None) -> OptimizerResponse:
             )
         except InfeasibleStrategyError:
             raise
-        except Exception:
+        except Exception as err:
             raise InfeasibleStrategyError(
                 f"Infeasible strategy: σ ≤ {req.max_volatility * 100:.1f}% and μ ≥ {req.target_return * 100:.2f}% "
                 f"cannot be satisfied simultaneously with your current assets."
-            )
+            ) from err
 
     optimal_w = np.array(optimal["weights"])
 
     # Current weights: ETFs at their current proportion of total_capital; envelopes at 0
     current_w = np.concatenate([etf_values / total_capital, np.zeros(len(envelope_assets))])
-    current_stats_etf = analytics.portfolio_stats(returns, etf_values / portfolio_value, risk_free=rf, mu_override=mu_override)
+    current_stats_etf = analytics.portfolio_stats(
+        returns, etf_values / portfolio_value, risk_free=rf, mu_override=mu_override
+    )
 
     # Actions
     actions = [
@@ -141,7 +165,10 @@ def build(req: OptimizerRequest, portfolio_data=None) -> OptimizerResponse:
     # - With envelopes: augmented frontier (ETF + 0-σ assets), gives the CAL kink
     if envelope_assets:
         frontier = analytics.efficient_frontier_curve(
-            returns, mu=mu, cov=cov, bounds_override=bounds,
+            returns,
+            mu=mu,
+            cov=cov,
+            bounds_override=bounds,
         )
     else:
         n_etf = len(tickers)
@@ -164,9 +191,7 @@ def build(req: OptimizerRequest, portfolio_data=None) -> OptimizerResponse:
             f"the return/risk ratio doesn't justify going all-in. Keep {(1 - half_l) * 100:.0f}% in cash/savings."
         )
     else:
-        kelly_msg = (
-            f"Half-Kelly recommends {half_l * 100:.0f}% — perfect for a full investment without leverage."
-        )
+        kelly_msg = f"Half-Kelly recommends {half_l * 100:.0f}% — perfect for a full investment without leverage."
     kelly_indicator = KellyLeverage(
         full_kelly_leverage=kelly["full_kelly_leverage"],
         half_kelly_leverage=half_l,
@@ -175,8 +200,12 @@ def build(req: OptimizerRequest, portfolio_data=None) -> OptimizerResponse:
 
     logger.info(
         "optimizer: objective=%s, %d etf + %d envelope, total_capital=%.0f €, optimal σ=%.2f%% μ=%.2f%%",
-        req.objective, len(tickers), len(envelope_assets), total_capital,
-        optimal["volatility"] * 100, optimal["expected_return"] * 100,
+        req.objective,
+        len(tickers),
+        len(envelope_assets),
+        total_capital,
+        optimal["volatility"] * 100,
+        optimal["expected_return"] * 100,
     )
 
     return OptimizerResponse(
@@ -228,11 +257,13 @@ def _resolve_envelopes(req: OptimizerRequest, total_capital: float) -> list[dict
             available = max(0.0, env.ceiling_eur - used_dict.get(eid, 0))
         if available <= 0:
             continue
-        out.append({
-            "id": eid,
-            "name": env.name,
-            "rate": env.rate_pct,
-            "available_eur": available,
-            "max_weight": min(1.0, available / total_capital) if total_capital > 0 else 0.0,
-        })
+        out.append(
+            {
+                "id": eid,
+                "name": env.name,
+                "rate": env.rate_pct,
+                "available_eur": available,
+                "max_weight": min(1.0, available / total_capital) if total_capital > 0 else 0.0,
+            }
+        )
     return out

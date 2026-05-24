@@ -4,6 +4,7 @@ Crée automatiquement un portfolio vide à la première lecture si l'user n'en a
 pas encore. Comme ça, après inscription, /portfolio retourne directement un
 portfolio vide cohérent.
 """
+
 import logging
 import uuid
 
@@ -47,12 +48,14 @@ async def get_positions_with_watchlist(session: AsyncSession, user_id: uuid.UUID
     for w in watchlist_items:
         if w.ticker not in held_tickers:
             # Position éphémère (pas persistée) — juste pour exposer le ticker dans le dashboard
-            positions.append(Position(
-                portfolio_id=portfolio.id,
-                ticker=w.ticker,
-                quantity=0.0,
-                avg_cost=0.0,
-            ))
+            positions.append(
+                Position(
+                    portfolio_id=portfolio.id,
+                    ticker=w.ticker,
+                    quantity=0.0,
+                    avg_cost=0.0,
+                )
+            )
     return positions
 
 
@@ -77,14 +80,16 @@ async def replace_positions(
     for p in new_positions:
         if p.get("quantity", 0) <= 0:
             continue  # skip qty=0 — les watchlist sont une table séparée
-        portfolio.positions.append(Position(
-            portfolio_id=portfolio.id,
-            ticker=p["ticker"],
-            quantity=float(p["quantity"]),
-            avg_cost=float(p.get("avg_cost", 0)),
-            isin=p.get("isin"),
-            label=p.get("label"),
-        ))
+        portfolio.positions.append(
+            Position(
+                portfolio_id=portfolio.id,
+                ticker=p["ticker"],
+                quantity=float(p["quantity"]),
+                avg_cost=float(p.get("avg_cost", 0)),
+                isin=p.get("isin"),
+                label=p.get("label"),
+            )
+        )
 
     if cash is not None:
         portfolio.cash = float(cash)
