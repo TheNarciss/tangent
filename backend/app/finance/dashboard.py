@@ -17,8 +17,9 @@ def build(
     cma_shrinkage: float | None = None,
     historical_period: str = "5y",
     risk_free: float | None = None,
+    portfolio_data=None,   # Portfolio | None — optional injection (Phase 3b multi-tenant)
 ) -> DashboardResponse:
-    pf = portfolio.load()
+    pf = portfolio_data if portfolio_data is not None else portfolio.load()
     if not pf.positions:
         raise PortfolioEmptyError("Aucune position enregistrée. Ajoute des positions via PUT /portfolio.")
 

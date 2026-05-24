@@ -21,8 +21,9 @@ def build(
     years: int,
     goal: float | None,
     broker_id: str | None = None,
+    portfolio_data=None,
 ) -> ProjectionResponse:
-    pf = portfolio.load()
+    pf = portfolio_data if portfolio_data is not None else portfolio.load()
     if not pf.positions:
         raise PortfolioEmptyError("Aucune position enregistrée.")
 

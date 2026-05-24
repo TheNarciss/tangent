@@ -17,7 +17,7 @@ COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"        # f
 
 cookie_transport = CookieTransport(
     cookie_name=COOKIE_NAME,
-    cookie_max_age=COOKIE_LIFETIME,
+    cookie_max_age=None,  # session cookie: cleared when browser closes (JWT lifetime is the hard ceiling)
     cookie_secure=COOKIE_SECURE,   # HTTPS only quand true
     cookie_httponly=True,          # PAS accessible via JS → XSS-proof
     cookie_samesite="lax",         # CSRF protection (lax permet les liens cross-site simples, suffisant)

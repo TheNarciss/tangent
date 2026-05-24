@@ -1,0 +1,38 @@
+services:
+  backend:
+    restart: unless-stopped
+    env_file: ./backend/.env
+    environment:
+      ENV: prod
+      COOKIE_SECURE: "true"
+      CORS_ORIGINS: "https://riskybusinesses.uk,https://www.riskybusinesses.uk"
+      BACKEND_URL: "https://riskybusinesses.uk"
+      FRONTEND_URL: "https://riskybusinesses.uk"
+
+  frontend:
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: "https://riskybusinesses.uk"
+
+  postgres:
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"   # Bind localhost ONLY — cloudflared y accède en local
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+      - frontend
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:

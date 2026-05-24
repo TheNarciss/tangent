@@ -20,7 +20,7 @@ from ..errors import ConfigurationError, UnknownBrokerError
 
 logger = logging.getLogger(__name__)
 
-_PATH = Path(__file__).resolve().parent.parent / "config" / "brokers.yaml"
+_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "brokers.yaml"
 
 
 class BrokerFees(BaseModel):

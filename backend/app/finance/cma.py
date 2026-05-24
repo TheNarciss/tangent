@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from ..errors import ConfigurationError
 
 logger = logging.getLogger(__name__)
-_PATH = Path(__file__).resolve().parent.parent / "config" / "cma.yaml"
+_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "cma.yaml"
 
 # Par défaut, on tire μ à 70 % vers les CMAs long-terme.
 # 0 = pure historique 5y (gonflé) ; 1 = pure CMA (prudent forward-looking).

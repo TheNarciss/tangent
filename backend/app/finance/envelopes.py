@@ -17,7 +17,7 @@ from ..errors import ConfigurationError
 
 logger = logging.getLogger(__name__)
 
-_PATH = Path(__file__).resolve().parent.parent / "config" / "envelopes.yaml"
+_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "envelopes.yaml"
 
 
 class EligibilityRules(BaseModel):

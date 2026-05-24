@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import {
   ApiError,
+  useCurrentUser,
   useDashboard,
   useOptimizer,
   usePortfolio,
@@ -11,6 +12,10 @@ import {
 } from "@/api";
 import { ageFromBirthDate, useProfile } from "@/lib/profile";
 import { Assets } from "@/components/Assets";
+import { PowensCallbackHandler } from "@/components/PowensCallback";
+import { AuthScreen } from "@/components/auth/AuthScreen";
+import { useProfileSync } from "@/lib/profile-sync";
+import { UserMenu } from "@/components/auth/UserMenu";
 import { Correlation } from "@/components/Correlation";
 import { Editor } from "@/components/Editor";
 import { Insights } from "@/components/Insights";
@@ -20,6 +25,7 @@ import { Optimizer } from "@/components/Optimizer";
 import { Scanner } from "@/components/Scanner";
 import { ProfileButton } from "@/components/Profile";
 import { SettingsButton } from "@/components/Settings";
+import { SyncButton } from "@/components/SyncButton";
 import { Projection } from "@/components/Projection";
 import { BengenWidget } from "@/components/BengenWidget";
 import { RiskReturn } from "@/components/RiskReturn";
@@ -27,6 +33,29 @@ import { Timeline } from "@/components/Timeline";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function App() {
+  const auth = useCurrentUser();
+  useProfileSync(!!auth.data);
+
+  // Auth still loading — show empty shell to avoid login flash
+  if (auth.isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <p className="text-sm text-muted-foreground">Chargement…</p>
+      </div>
+    );
+  }
+
+  // Not logged in → AuthScreen
+  if (!auth.data) {
+    return <AuthScreen />;
+  }
+
+  // Logged in → main dashboard
+  return <Dashboard />;
+}
+
+function Dashboard() {
+  const { data: user } = useCurrentUser();
   const dashboard = useDashboard();
   const portfolio = usePortfolio();
   const timeseries = useTimeseries();
@@ -34,23 +63,28 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-background">
+      <PowensCallbackHandler />
       <div className="container max-w-7xl py-10 space-y-8">
         <header className="flex items-baseline justify-between border-b pb-6">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Portfolio</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              {dashboard.data && (
+              {dashboard.data ? (
                 <>
                   Au {new Date(dashboard.data.as_of).toLocaleDateString("fr-FR")} ·{" "}
                   {dashboard.data.metrics.assets.length} positions
                 </>
+              ) : (
+                <>Bienvenue {user?.display_name || user?.email}</>
               )}
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <SyncButton />
             <ProfileButton />
             <SettingsButton />
             {portfolio.data && <Editor portfolio={portfolio.data} />}
+            <UserMenu />
           </div>
         </header>
 
@@ -98,7 +132,7 @@ function OptimizationTab({ dashboard }: { dashboard: NonNullable<ReturnType<type
   const age = profile ? ageFromBirthDate(profile.birth_date) : null;
   const hasProfile = !!profile && age !== null && profile.fiscal_shares > 0;
 
-  // Stratégie : profil = σ max + μ cible explicites (champs concrets, plus le slider abstrait)
+  // Strategy: profile = explicit σ max + μ target (concrete fields, instead of an abstract slider)
   const profileMaxVol = hasProfile && profile ? profile.max_annual_volatility : 10;
   const profileTargetReturn = hasProfile && profile ? profile.target_annual_return : 7;
 
@@ -115,7 +149,7 @@ function OptimizationTab({ dashboard }: { dashboard: NonNullable<ReturnType<type
   const [totalCapital, setTotalCapital] = useState<number | "">("");
   const [maxVolatility, setMaxVolatility] = useState<number | "">(profileMaxVol);
 
-  // Persist toggles dans localStorage pour survivre aux refreshes
+  // Persist toggles in localStorage so they survive refresh
   useEffect(() => {
     if (typeof window !== "undefined") {
       window.localStorage.setItem("tangent.optimizer.objective", objective);
@@ -156,8 +190,8 @@ function OptimizationTab({ dashboard }: { dashboard: NonNullable<ReturnType<type
 
   const optimizer = useOptimizer(req);
 
-  // Frontier curve = frontière ETF-only. On la garde même avec envelopes (les livrets sont à part,
-  // dans le panneau de droite). Ça reste informatif : c'est le plafond Pareto-optimal côté ETF.
+  // Frontier curve = ETF-only frontier. Kept even with envelopes (savings shown on the
+  // right panel). Still informative: it's the Pareto-optimal ceiling on the ETF side.
   const optimalPoint = optimizer.data
     ? {
         sigma: optimizer.data.optimal.volatility,

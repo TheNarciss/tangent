@@ -1,8 +1,4 @@
 {
-  "positions": [
-    {"ticker": "DCAM.PA", "quantity": 41, "avg_cost": 5.53756},
-    {"ticker": "PUST.PA", "quantity": 2, "avg_cost": 88.83},
-    {"ticker": "ETZ.PA", "quantity": 7, "avg_cost": 20.23}
-  ],
-  "cash": 0.0
+  "positions": [],
+  "cash": 3.69
 }

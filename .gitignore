@@ -67,4 +67,27 @@ data/**/*.csv
 data/**/*.json
 !data/portfolio.example.json
 
-# Mais on garde le template d'exemple
+# Mais on garde le template d'exemple# Docker
+.env
+backend/.env
+backend/data/backups/
+backend/data/powens_state.json
+
+# Postgres data
+postgres_data/
+# Docker
+.env
+backend/.env
+backend/data/backups/
+backend/data/powens_state.json
+
+# Postgres data
+postgres_data/
+# Docker
+.env
+backend/.env
+backend/data/backups/
+backend/data/powens_state.json
+
+# Postgres data
+postgres_data/

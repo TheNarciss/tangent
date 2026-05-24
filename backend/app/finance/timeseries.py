@@ -20,8 +20,8 @@ BENCHMARK_TICKER = "CW8.PA"  # Amundi MSCI World, 5y+ history, broad-market prox
 ROLLING_WINDOW = 126         # trading days ≈ 6 months
 
 
-def build() -> TimeseriesResponse:
-    pf = portfolio.load()
+def build(portfolio_data=None) -> TimeseriesResponse:
+    pf = portfolio_data if portfolio_data is not None else portfolio.load()
     if not pf.positions:
         raise PortfolioEmptyError("Aucune position enregistrée.")
 

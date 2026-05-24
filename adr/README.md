@@ -1,0 +1,49 @@
+# Architecture Decision Records (ADRs)
+
+Ce dossier contient les décisions techniques structurantes du projet Tangent.
+
+## Pourquoi des ADRs ?
+
+Un ADR (Architecture Decision Record) trace **une décision** technique : son contexte, le choix retenu, ses conséquences, et les alternatives écartées. C'est un format léger qui permet :
+
+- de comprendre **pourquoi** le code est comme il est (pas juste comment)
+- d'éviter de re-débattre des décisions déjà prises
+- d'onboarder rapidement de nouveaux contributeurs (et soi-même dans 6 mois)
+- de faire évoluer les décisions explicitement, pas par accident
+
+## Format
+
+Format MADR (Markdown ADR), [adr.github.io/madr](https://adr.github.io/madr/).
+Template : [`TEMPLATE.md`](./TEMPLATE.md).
+
+## Index
+
+| # | Titre | Status |
+|---|-------|--------|
+| [001](./001-stack-technique.md) | Stack technique | accepted |
+| [002](./002-multi-tenancy.md) | Stratégie multi-tenant | accepted |
+| [003](./003-authentication.md) | Authentification utilisateur | accepted |
+| [004](./004-secrets-management.md) | Gestion des secrets | accepted |
+| [005](./005-deployment-topology.md) | Topologie de déploiement | accepted |
+| [006](./006-persistent-storage.md) | Persistence & backups | accepted |
+| [007](./007-frontend-state.md) | State management frontend | accepted |
+| [008](./008-powens-aggregator.md) | Powens comme aggregateur bancaire | accepted |
+| [009](./009-repository-structure.md) | Structure du repository | accepted |
+| [010](./010-logging-observability.md) | Logging et observabilité | accepted |
+| [011](./011-password-reset.md) | Flow de reset de mot de passe | accepted |
+| [012](./012-token-encryption.md) | Chiffrement des tokens au repos | accepted |
+
+## Workflow
+
+1. Identifier une décision technique structurante
+2. Copier `TEMPLATE.md` → `NNN-titre-court.md` (NNN = numéro suivant)
+3. Remplir le contenu
+4. Status `proposed` au début, `accepted` après validation
+5. Pour modifier une décision : créer un nouvel ADR `accepted` qui **supersède** l'ancien (mettre l'ancien en `superseded`)
+
+## Règles
+
+- 1 ADR = 1 décision
+- Court (1 page max), pas un dossier d'architecture complet
+- Présent simple, voix active, ton décisif
+- Pas de "il faudrait" / "on pourrait" → décide ou ne décide pas

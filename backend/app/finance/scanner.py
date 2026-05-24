@@ -1,4 +1,3 @@
-
 """Asset scanner — découverte autonome via yfinance.screen() dynamique.
 
 Architecture :
@@ -155,10 +154,10 @@ def _rationale(delta: float, rho: float, mu_c: float) -> str:
     return f"Modeste amélioration (ρ={rho:.2f}, μ={mu_c*100:.1f} %)"
 
 
-def scan(req: ScanRequest) -> ScanResponse:
+def scan(req: ScanRequest, portfolio_data=None) -> ScanResponse:
     start = time.time()
 
-    pf = portfolio.load()
+    pf = portfolio_data if portfolio_data is not None else portfolio.load()
     if not pf.positions:
         raise AppError("Aucune position en portefeuille — impossible de scanner.")
 

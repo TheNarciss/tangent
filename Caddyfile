@@ -1,0 +1,19 @@
+:80 {
+    @api {
+        path /auth/* /users/*
+        path /portfolio* /dashboard* /timeseries* /transactions*
+        path /optimizer* /projection* /strategy* /bengen* /scan*
+        path /brokers* /envelopes/* /profile*
+        path /watchlist* /powens* /sync/* /webhooks/*
+        path /admin* /health
+    }
+    reverse_proxy @api backend:8000
+
+    reverse_proxy frontend:5173
+
+    encode gzip zstd
+
+    log {
+        output stdout
+    }
+}

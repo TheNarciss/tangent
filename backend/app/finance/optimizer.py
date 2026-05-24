@@ -27,12 +27,12 @@ from ..models import (
 logger = logging.getLogger(__name__)
 
 
-def build(req: OptimizerRequest) -> OptimizerResponse:
-    pf = portfolio.load()
+def build(req: OptimizerRequest, portfolio_data=None) -> OptimizerResponse:
+    pf = portfolio_data if portfolio_data is not None else portfolio.load()
     if not pf.positions:
-        raise PortfolioEmptyError("Aucune position enregistrée.")
+        raise PortfolioEmptyError("No position recorded.")
 
-    # Expert settings : tous optionnels avec défauts intelligents
+    # Expert settings: all optional with smart defaults
     expert = req.expert
     period = expert.historical_period if expert and expert.historical_period else "5y"
     rf = expert.risk_free_rate if expert and expert.risk_free_rate is not None else analytics.RISK_FREE
@@ -63,7 +63,7 @@ def build(req: OptimizerRequest) -> OptimizerResponse:
     envelope_rates = [e["rate"] for e in envelope_assets]
     envelope_max_weights = [e["max_weight"] for e in envelope_assets]
 
-    # Blend μ historiques avec CMAs forward-looking (avec overrides expert si fournis).
+    # Blend historical μ with forward-looking CMAs (with expert overrides if provided).
     hist_mu = (returns.mean() * analytics.TRADING_DAYS).values
     blended = cma.blended_mu(tickers, hist_mu, shrinkage=cma_shrink, overrides=cma_overrides or None)
     mu_override = {t: float(blended[i]) for i, t in enumerate(tickers)}
@@ -76,9 +76,9 @@ def build(req: OptimizerRequest) -> OptimizerResponse:
     )
 
     if req.objective == "target_volatility" and (req.max_volatility is None):
-        raise ConfigurationError("L'objectif 'target_volatility' requiert max_volatility.")
+        raise ConfigurationError("Objective 'target_volatility' requires max_volatility.")
     if req.objective == "from_strategy" and (req.max_volatility is None or req.target_return is None):
-        raise ConfigurationError("L'objectif 'from_strategy' requiert max_volatility ET target_return.")
+        raise ConfigurationError("Objective 'from_strategy' requires max_volatility AND target_return.")
 
     optimal = analytics._solve_slsqp(
         mu, cov, bounds,
@@ -98,17 +98,17 @@ def build(req: OptimizerRequest) -> OptimizerResponse:
             )
             achievable = float(best_at_vol["expected_return"])
             raise InfeasibleStrategyError(
-                f"Stratégie infaisable : avec σ ≤ {req.max_volatility * 100:.1f}%, le meilleur rendement "
-                f"atteignable est {achievable * 100:.2f}% /an. Tu vises {req.target_return * 100:.2f}%. "
-                f"Solutions : relâche la vol max, baisse l'objectif de rendement, ou ajoute des actifs plus "
-                f"rentables (active les livrets si pas déjà fait)."
+                f"Infeasible strategy: with σ ≤ {req.max_volatility * 100:.1f}%, the best achievable "
+                f"return is {achievable * 100:.2f}%/year. You target {req.target_return * 100:.2f}%. "
+                f"Options: relax the vol cap, lower the target return, or add higher-return assets "
+                f"(enable savings envelopes if not already)."
             )
         except InfeasibleStrategyError:
             raise
         except Exception:
             raise InfeasibleStrategyError(
-                f"Stratégie infaisable : σ ≤ {req.max_volatility * 100:.1f}% et μ ≥ {req.target_return * 100:.2f}% "
-                f"ne peuvent pas être satisfaits simultanément avec tes actifs actuels."
+                f"Infeasible strategy: σ ≤ {req.max_volatility * 100:.1f}% and μ ≥ {req.target_return * 100:.2f}% "
+                f"cannot be satisfied simultaneously with your current assets."
             )
 
     optimal_w = np.array(optimal["weights"])
@@ -133,31 +133,39 @@ def build(req: OptimizerRequest) -> OptimizerResponse:
     rc_optimal = analytics.euler_risk_contributions(optimal_w, cov)
     rc_current = analytics.euler_risk_contributions(current_w, cov)
 
-    # Frontier curve : ETF-only, mais avec les μ BLENDÉS (CMA + historique) — sinon
-    # la courbe utilise μ historique brut et peut sortir des valeurs incohérentes
-    # avec les assets affichés (genre 30% alors que max asset μ est 16%).
-    n_etf = len(tickers)
-    mu_etf = mu[:n_etf]
-    cov_etf = cov[:n_etf, :n_etf]
-    frontier = analytics.efficient_frontier_curve(returns, mu=mu_etf, cov=cov_etf)
+    # Frontier curve: ETF-only, but with BLENDED μ (CMA + historical) — otherwise
+    # the curve uses raw historical μ and may yield values inconsistent with the
+    # displayed assets (e.g. 30% when the max asset μ is 16%).
+    # Frontier curve: matches the optimization universe.
+    # - Without envelopes: ETF-only frontier (classic Markowitz curve)
+    # - With envelopes: augmented frontier (ETF + 0-σ assets), gives the CAL kink
+    if envelope_assets:
+        frontier = analytics.efficient_frontier_curve(
+            returns, mu=mu, cov=cov, bounds_override=bounds,
+        )
+    else:
+        n_etf = len(tickers)
+        mu_etf = mu[:n_etf]
+        cov_etf = cov[:n_etf, :n_etf]
+        frontier = analytics.efficient_frontier_curve(returns, mu=mu_etf, cov=cov_etf)
 
-    # Kelly leverage indicator (sur les ETFs uniquement — exclut les livrets car σ≈0 explose la formule)
+    # Kelly leverage indicator (on ETFs only — exclude envelopes since σ≈0 explodes the formula)
     n_etf = len(tickers)
     kelly = analytics.kelly_leverage(mu[:n_etf], cov[:n_etf, :n_etf], risk_free=rf)
     half_l = kelly["half_kelly_leverage"]
     if half_l > 1.05:
         kelly_msg = (
-            f"Half-Kelly recommande un levier de {half_l:.2f}× — tes actifs risqués sont très attractifs. "
-            f"Sans accès au levier, investir 100 % sans réserve cash est cohérent."
+            f"Half-Kelly recommends leverage {half_l:.2f}× — your risky assets are very attractive. "
+            f"Without access to leverage, investing 100% with no cash reserve is consistent."
         )
     elif half_l < 0.95:
         kelly_msg = (
-            f"Half-Kelly recommande {half_l * 100:.0f} % du capital en risqué — "
-            f"le rapport rendement/risque ne justifie pas un investissement plein. Garde {(1 - half_l) * 100:.0f} % en cash/livret."
+            f"Half-Kelly recommends {half_l * 100:.0f}% of capital in risky assets — "
+            f"the return/risk ratio doesn't justify going all-in. Keep {(1 - half_l) * 100:.0f}% in cash/savings."
         )
     else:
         kelly_msg = (
-            f"Half-Kelly recommande {half_l * 100:.0f} % — parfait pour un investissement plein sans levier."
+            f"Half-Kelly recommends {half_l * 100:.0f}% — perfect for a full investment without leverage."
         )
     kelly_indicator = KellyLeverage(
         full_kelly_leverage=kelly["full_kelly_leverage"],

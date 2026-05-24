@@ -224,7 +224,10 @@ function CompareRow({ label, current, optimal, delta, sign, bold }: {
 /* ─── Actions ────────────────────────────────────────────────────────────── */
 
 function ActionsList({ data }: { data: OptimizerResponse }) {
-  const significantActions = data.actions.filter((a) => Math.abs(a.delta_value) > 0.5 || a.optimal_weight > 0.005);
+  // Tag each action with its ORIGINAL index so asset_kinds/labels stay aligned after filter
+  const significantActions = data.actions
+    .map((a, originalIdx) => ({ ...a, _idx: originalIdx }))
+    .filter((a) => Math.abs(a.delta_value) > 0.5 || a.optimal_weight > 0.005);
 
   return (
     <div>
@@ -234,8 +237,8 @@ function ActionsList({ data }: { data: OptimizerResponse }) {
       <ul className="space-y-2">
         {significantActions.map((a) => {
           const idx = data.actions.indexOf(a);
-          const kind = data.asset_kinds[idx];
-          const label = data.asset_labels[idx];
+          const kind = data.asset_kinds[a._idx];
+          const label = data.asset_labels[a._idx];
           const isEnvelope = kind === "envelope";
           const sign = a.delta_value > 0.5 ? "buy" : a.delta_value < -0.5 ? "sell" : "hold";
           const Icon = isEnvelope ? Wallet : sign === "buy" ? TrendingUp : sign === "sell" ? TrendingDown : null;
@@ -282,17 +285,31 @@ function ActionsList({ data }: { data: OptimizerResponse }) {
 /* ─── Risk contributions ─────────────────────────────────────────────────── */
 
 function RiskContributions({ data }: { data: OptimizerResponse }) {
+  // Build weight-based pseudo-RiskContribution so we can reuse <RiskBar /> for composition.
+  const weightsCurrent = { fraction: data.actions.map((a) => a.current_weight), tickers: data.asset_labels };
+  const weightsOptimal = { fraction: data.actions.map((a) => a.optimal_weight), tickers: data.asset_labels };
+
   return (
-    <div className="space-y-3">
-      <h4 className="text-xs uppercase tracking-wider text-muted-foreground">Contribution à la volatilité σ</h4>
-      <div className="space-y-2">
-        <RiskBar label="Actuel" rc={data.risk_contributions_current} kinds={data.asset_kinds} labels={data.asset_labels} />
-        <RiskBar label="Optimal" rc={data.risk_contributions_optimal} kinds={data.asset_kinds} labels={data.asset_labels} />
+    <div className="space-y-5">
+      <div className="space-y-3">
+        <h4 className="text-xs uppercase tracking-wider text-muted-foreground">Composition (poids w)</h4>
+        <div className="space-y-2">
+          <RiskBar label="Actuel" rc={weightsCurrent} kinds={data.asset_kinds} labels={data.asset_labels} />
+          <RiskBar label="Optimal" rc={weightsOptimal} kinds={data.asset_kinds} labels={data.asset_labels} />
+        </div>
       </div>
-      <p className="text-xs text-muted-foreground">
-        Décomposition d'Euler : σ<sub>p</sub> = Σ w<sub>i</sub> · (Σw)<sub>i</sub> / σ<sub>p</sub>.
-        Les livrets contribuent ≈ 0% au risque (σ ≈ 0).
-      </p>
+
+      <div className="space-y-3">
+        <h4 className="text-xs uppercase tracking-wider text-muted-foreground">Contribution à la volatilité σ</h4>
+        <div className="space-y-2">
+          <RiskBar label="Actuel" rc={data.risk_contributions_current} kinds={data.asset_kinds} labels={data.asset_labels} />
+          <RiskBar label="Optimal" rc={data.risk_contributions_optimal} kinds={data.asset_kinds} labels={data.asset_labels} />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Décomposition d'Euler : σ<sub>p</sub> = Σ w<sub>i</sub> · (Σw)<sub>i</sub> / σ<sub>p</sub>.
+          Les livrets contribuent ≈ 0% au risque (σ ≈ 0), même s'ils représentent une part du capital.
+        </p>
+      </div>
     </div>
   );
 }

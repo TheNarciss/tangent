@@ -15,29 +15,29 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class PowensSettings(BaseSettings):
-    """Secrets et config Powens chargés depuis backend/.env
-
-    Si .env absent, on lance les défauts non-fonctionnels — les endpoints
-    Powens retourneront 503 avec un message explicite.
-    """
+    """Secrets et config Powens chargés depuis backend/.env"""
     domain: str = Field(default="", validation_alias="POWENS_DOMAIN")
     client_id: str = Field(default="", validation_alias="POWENS_CLIENT_ID")
     client_secret: str = Field(default="", validation_alias="POWENS_CLIENT_SECRET")
-    user_token: str = Field(default="", validation_alias="POWENS_USER_TOKEN")
-    connection_id: int = Field(default=0, validation_alias="POWENS_CONNECTION_ID")
+    user_token: str = Field(default="", validation_alias="POWENS_USER_TOKEN") # DEPRECATED
+    connection_id: int = Field(default=0, validation_alias="POWENS_CONNECTION_ID") # DEPRECATED
     webhook_secret: str = Field(default="", validation_alias="POWENS_WEBHOOK_SECRET")
+    token_encryption_key: str = Field(default="", validation_alias="POWENS_TOKEN_ENCRYPTION_KEY")
     autosync_threshold_hours: int = Field(default=12, validation_alias="POWENS_AUTOSYNC_THRESHOLD_HOURS")
+    
+    # URLs pour les redirections
+    frontend_url: str = Field(default="http://localhost:5173", validation_alias="FRONTEND_URL")
+    backend_url: str = Field(default="http://localhost:8000", validation_alias="BACKEND_URL")
 
     model_config = SettingsConfigDict(
         env_file=Path(__file__).resolve().parent.parent.parent / ".env",
         env_file_encoding="utf-8",
-        extra="ignore",
+        extra="ignore" # Ignore les autres variables du .env sans crasher
     )
-
     @property
     def is_configured(self) -> bool:
-        """True si tous les secrets essentiels sont remplis."""
-        return bool(self.domain and self.user_token and self.connection_id)
+        """True si tous les secrets essentiels de l'application sont remplis."""
+        return bool(self.domain and self.client_id and self.client_secret)
 
     @property
     def base_url(self) -> str:

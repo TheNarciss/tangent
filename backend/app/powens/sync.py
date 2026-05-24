@@ -41,6 +41,7 @@ class SyncResult(BaseModel):
     skipped_accounts: list[str] = []
     error: str | None = None
     synced_at: datetime
+    positions: list[Position] = []   # for multi-tenant DB persistence
 
 
 # ── Matching helpers ────────────────────────────────────────────────────────
@@ -190,6 +191,7 @@ async def sync_portfolio() -> SyncResult:
                 total_valuation=total_valuation,
                 accounts_synced=[pea_titres["name"]] + ([pea_cash["name"]] if pea_cash else []),
                 synced_at=now,
+                positions=positions,
             )
 
     except PowensError as exc:
