@@ -41,11 +41,7 @@ export function pickIndices(n: number, count: number): number[] {
  * @param x function index → x pixel
  * @param y function value → y pixel
  */
-export function linePath(
-  values: (number | null)[],
-  x: (i: number) => number,
-  y: Scale,
-): string {
+export function linePath(values: (number | null)[], x: (i: number) => number, y: Scale): string {
   let out = "";
   let pen: "M" | "L" = "M";
   for (let i = 0; i < values.length; i++) {

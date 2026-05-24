@@ -27,9 +27,9 @@ export interface AssetMetrics {
   annual_return: number;
   annual_vol: number;
   sharpe: number;
-  drawdown_estimate: number;        // theoretical −2σ (normal law)
-  cvar_95: number;                  // mean loss on the worst 5% days (annualized)
-  max_drawdown_observed: number;    // worst peak-to-trough drop observed
+  drawdown_estimate: number; // theoretical −2σ (normal law)
+  cvar_95: number; // mean loss on the worst 5% days (annualized)
+  max_drawdown_observed: number; // worst peak-to-trough drop observed
 }
 
 export interface PortfolioMetrics {
@@ -112,16 +112,16 @@ export interface ProjectionResponse {
   // Broker fee impact
   broker_id: string;
   broker: string;
-  gross_p50: number[];                       // P50 without fees, for comparison
-  cumulative_fees: number[];                 // €, per-month cumulative
+  gross_p50: number[]; // P50 without fees, for comparison
+  cumulative_fees: number[]; // €, per-month cumulative
 }
 
 export interface BengenRequest {
   target_monthly_income: number;
-  withdrawal_rate?: number;     // default 0.04
-  current_capital?: number;     // default 0
-  monthly_dca?: number;         // default 0
-  expected_return?: number;     // default 0.08
+  withdrawal_rate?: number; // default 0.04
+  current_capital?: number; // default 0
+  monthly_dca?: number; // default 0
+  expected_return?: number; // default 0.08
 }
 
 export interface BengenResponse {
@@ -166,13 +166,21 @@ export interface EligibilityRequest {
 
 /** Structured error from the backend's AppError handler. */
 export class ApiError extends Error {
-  constructor(public status: number, public type: string, message: string) {
+  constructor(
+    public status: number,
+    public type: string,
+    message: string,
+  ) {
     super(message);
     this.name = "ApiError";
   }
 }
 
-export type OptimizerObjective = "max_sharpe" | "min_variance" | "target_volatility" | "from_strategy";
+export type OptimizerObjective =
+  | "max_sharpe"
+  | "min_variance"
+  | "target_volatility"
+  | "from_strategy";
 
 export interface PortfolioPoint {
   weights: number[];
@@ -274,7 +282,7 @@ export interface LoginRequest {
 
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
-    credentials: "include",   // CRITICAL: send/receive auth cookies cross-origin
+    credentials: "include", // CRITICAL: send/receive auth cookies cross-origin
     headers: { "Content-Type": "application/json" },
     ...init,
   });
@@ -315,8 +323,8 @@ export function useCurrentUser() {
         throw err;
       }
     },
-    staleTime: 5 * 60 * 1000,   // 5 min — refetch on focus by default
-    retry: false,                // never retry auth check
+    staleTime: 5 * 60 * 1000, // 5 min — refetch on focus by default
+    retry: false, // never retry auth check
   });
 }
 
@@ -340,7 +348,9 @@ export function useLogin() {
         try {
           const j = await res.json();
           if (typeof j?.detail === "string") detail = j.detail;
-        } catch { /* keep default */ }
+        } catch {
+          /* keep default */
+        }
         throw new ApiError(res.status, "LoginFailed", detail);
       }
       // 204 No Content — cookie set by backend
@@ -373,8 +383,7 @@ export function useRegister() {
 export function useLogout() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () =>
-      http<void>("/auth/logout", { method: "POST" }),
+    mutationFn: () => http<void>("/auth/logout", { method: "POST" }),
     onSuccess: () => {
       // Immediate UI update: signal the user is no longer authenticated.
       // App.tsx watches ["user", "me"] === null and switches to AuthScreen.
@@ -418,28 +427,32 @@ export function useBrokers() {
   return useQuery({
     queryKey: ["brokers"],
     queryFn: () => http<BrokersResponse>("/brokers"),
-    staleTime: Infinity,  // config rarely changes during a session
+    staleTime: Infinity, // config rarely changes during a session
   });
 }
 
 export function useOptimizer(req: OptimizerRequest) {
   return useQuery({
     queryKey: ["optimizer", req],
-    queryFn: () => http<OptimizerResponse>("/optimizer", {
-      method: "POST",
-      body: JSON.stringify(req),
-    }),
-    enabled: req.objective !== "target_volatility" || (req.max_volatility !== undefined && req.max_volatility >= 0),
+    queryFn: () =>
+      http<OptimizerResponse>("/optimizer", {
+        method: "POST",
+        body: JSON.stringify(req),
+      }),
+    enabled:
+      req.objective !== "target_volatility" ||
+      (req.max_volatility !== undefined && req.max_volatility >= 0),
   });
 }
 
 export function useBengen(req: BengenRequest) {
   return useQuery({
     queryKey: ["bengen", req],
-    queryFn: () => http<BengenResponse>("/bengen", {
-      method: "POST",
-      body: JSON.stringify(req),
-    }),
+    queryFn: () =>
+      http<BengenResponse>("/bengen", {
+        method: "POST",
+        body: JSON.stringify(req),
+      }),
     enabled: req.target_monthly_income > 0,
   });
 }
@@ -465,7 +478,7 @@ export interface ScanRequest {
 export interface ScanCandidate {
   ticker: string;
   name: string;
-  sector: string;                       // category via origin mode
+  sector: string; // category via origin mode
   market_cap: number;
   own_mu: number;
   own_sigma: number;
@@ -554,10 +567,11 @@ export function useUpdatePortfolio() {
 export function useEligibleEnvelopes(req: EligibilityRequest | null) {
   return useQuery({
     queryKey: ["envelopes", "eligible", req],
-    queryFn: () => http<EligibleEnvelopesResponse>("/envelopes/eligible", {
-      method: "POST",
-      body: JSON.stringify(req),
-    }),
+    queryFn: () =>
+      http<EligibleEnvelopesResponse>("/envelopes/eligible", {
+        method: "POST",
+        body: JSON.stringify(req),
+      }),
     enabled: req !== null,
     staleTime: 5 * 60 * 1000,
   });
@@ -595,7 +609,7 @@ export function useSyncStatus() {
     queryKey: ["sync", "status"],
     queryFn: () => http<SyncStatus>("/sync/status"),
     refetchInterval: 30 * 1000,
-    retry: false,    // 403 for non-superusers — don't spam retries
+    retry: false, // 403 for non-superusers — don't spam retries
   });
 }
 
@@ -652,4 +666,3 @@ export function useConfirmReset() {
       }),
   });
 }
-

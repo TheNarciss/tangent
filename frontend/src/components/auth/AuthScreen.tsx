@@ -16,9 +16,7 @@ export function AuthScreen() {
         {/* Branding */}
         <div className="text-center space-y-2">
           <h1 className="text-4xl font-semibold tracking-tight">Risky businesses</h1>
-          <p className="text-sm text-muted-foreground">
-            Ton portefeuille, optimisé.
-          </p>
+          <p className="text-sm text-muted-foreground">Ton portefeuille, optimisé.</p>
         </div>
 
         {/* Card with the form */}
@@ -37,12 +35,8 @@ export function AuthScreen() {
                 onForgotPassword={() => setMode("forgot")}
               />
             )}
-            {mode === "register" && (
-              <RegisterForm onSwitchToLogin={() => setMode("login")} />
-            )}
-            {mode === "forgot" && (
-              <ForgotPasswordFlow onBack={() => setMode("login")} />
-            )}
+            {mode === "register" && <RegisterForm onSwitchToLogin={() => setMode("login")} />}
+            {mode === "forgot" && <ForgotPasswordFlow onBack={() => setMode("login")} />}
           </CardContent>
         </Card>
 

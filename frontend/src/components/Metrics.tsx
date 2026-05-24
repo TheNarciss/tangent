@@ -13,14 +13,22 @@ export function Metrics({ metrics }: Props) {
   return (
     <div className="space-y-3">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <MetricCard label="Valorisation" value={fmt.eur(metrics.total_value)} sub={`Coût ${fmt.eur(metrics.total_cost)}`} />
+        <MetricCard
+          label="Valorisation"
+          value={fmt.eur(metrics.total_value)}
+          sub={`Coût ${fmt.eur(metrics.total_cost)}`}
+        />
         <MetricCard
           label="Plus-value"
           value={fmt.signedEur(metrics.total_pnl)}
           sub={fmt.signedPct(metrics.total_pnl_pct)}
           tone={pnlPositive ? "gain" : "loss"}
         />
-        <MetricCard label="E(R) annuel" value={fmt.pct(metrics.expected_return)} sub="Espérance (μ blendé)" />
+        <MetricCard
+          label="E(R) annuel"
+          value={fmt.pct(metrics.expected_return)}
+          sub="Espérance (μ blendé)"
+        />
         <MetricCard label="Volatilité σ" value={fmt.pct(metrics.volatility)} sub="Annualisée" />
         <MetricCard label="Sharpe" value={fmt.num(metrics.sharpe)} sub="vs. r_f = 2,5 %" />
       </div>

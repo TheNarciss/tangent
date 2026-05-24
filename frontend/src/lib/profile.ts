@@ -25,16 +25,16 @@ export interface CeilingsUsed {
 
 export interface UserProfile {
   first_name: string;
-  birth_date: string;              // ISO yyyy-mm-dd
-  fiscal_shares: number;           // 1, 1.5, 2, 2.5…
-  rfr_n_minus_2: number;           // €
-  tmi_pct: number;                 // 0, 0.11, 0.30, 0.41, 0.45  (fraction)
+  birth_date: string; // ISO yyyy-mm-dd
+  fiscal_shares: number; // 1, 1.5, 2, 2.5…
+  rfr_n_minus_2: number; // €
+  tmi_pct: number; // 0, 0.11, 0.30, 0.41, 0.45  (fraction)
   ceilings_used: CeilingsUsed;
   // Stratégie patrimoniale — 4 paramètres concrets qui dessinent la stratégie.
-  horizon_years: number;           // 1–50
-  monthly_dca: number;             // €/mois
-  target_annual_return: number;    // raw %, e.g. 7 = 7 %
-  max_annual_volatility: number;   // raw %, e.g. 12 = 12 %
+  horizon_years: number; // 1–50
+  monthly_dca: number; // €/mois
+  target_annual_return: number; // raw %, e.g. 7 = 7 %
+  max_annual_volatility: number; // raw %, e.g. 12 = 12 %
 }
 
 export const EMPTY_PROFILE: UserProfile = {
@@ -108,7 +108,7 @@ function _getSnapshot(): UserProfile | null {
 }
 
 function _getServerSnapshot(): UserProfile | null {
-  return null;  // SSR : pas de localStorage
+  return null; // SSR : pas de localStorage
 }
 
 function setSharedProfile(next: UserProfile | null): void {

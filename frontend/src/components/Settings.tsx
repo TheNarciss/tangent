@@ -54,8 +54,8 @@ export function SettingsButton() {
         <DialogHeader>
           <DialogTitle>Réglages</DialogTitle>
           <DialogDescription>
-            Paramètres techniques de l'app. Stockés localement (localStorage),
-            jamais envoyés au backend sauf au moment du calcul.
+            Paramètres techniques de l'app. Stockés localement (localStorage), jamais envoyés au
+            backend sauf au moment du calcul.
           </DialogDescription>
         </DialogHeader>
 
@@ -72,7 +72,12 @@ export function SettingsButton() {
           <Button variant="outline" onClick={() => setOpen(false)}>
             Annuler
           </Button>
-          <Button onClick={() => { setSettings(draft); setOpen(false); }}>
+          <Button
+            onClick={() => {
+              setSettings(draft);
+              setOpen(false);
+            }}
+          >
             Enregistrer
           </Button>
         </DialogFooter>
@@ -92,14 +97,15 @@ function ScannerSection({
 }) {
   const toggleMode = (m: ScannerMode) => {
     const has = draft.scanner.modes.includes(m);
-    const next = has
-      ? draft.scanner.modes.filter((x) => x !== m)
-      : [...draft.scanner.modes, m];
+    const next = has ? draft.scanner.modes.filter((x) => x !== m) : [...draft.scanner.modes, m];
     setDraft({ ...draft, scanner: { ...draft.scanner, modes: next } });
   };
 
   return (
-    <Section title="Scanner d'actifs" description="Découverte automatique d'actifs qui amélioreraient ton portefeuille.">
+    <Section
+      title="Scanner d'actifs"
+      description="Découverte automatique d'actifs qui amélioreraient ton portefeuille."
+    >
       <div className="space-y-3">
         <Label className="text-xs text-muted-foreground">
           Modes activés (au moins 1 doit l'être)
@@ -149,9 +155,7 @@ function ScannerSection({
           step={1}
           min={3}
           max={50}
-          onChange={(v) =>
-            setDraft({ ...draft, scanner: { ...draft.scanner, n_results: v } })
-          }
+          onChange={(v) => setDraft({ ...draft, scanner: { ...draft.scanner, n_results: v } })}
         />
       </div>
     </Section>
@@ -193,7 +197,10 @@ function ExpertSection({
   };
 
   return (
-    <Section title="Expert — Capital Market Assumptions" description="Si tu sais ce que tu fais. Tire la frontière efficiente vers tes hypothèses forward-looking au lieu du pur historique 5y.">
+    <Section
+      title="Expert — Capital Market Assumptions"
+      description="Si tu sais ce que tu fais. Tire la frontière efficiente vers tes hypothèses forward-looking au lieu du pur historique 5y."
+    >
       <div className="grid grid-cols-2 gap-4">
         <NumField
           label="Shrinkage CMA (%)"
@@ -220,7 +227,9 @@ function ExpertSection({
             </SelectTrigger>
             <SelectContent>
               {PERIOD_OPTIONS.map((p) => (
-                <SelectItem key={p} value={p}>{p}</SelectItem>
+                <SelectItem key={p} value={p}>
+                  {p}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -353,9 +362,7 @@ function Section({
     <div className="space-y-3">
       <div>
         <h3 className="text-sm font-semibold">{title}</h3>
-        {description && (
-          <p className="text-xs text-muted-foreground">{description}</p>
-        )}
+        {description && <p className="text-xs text-muted-foreground">{description}</p>}
       </div>
       <div className="space-y-3 pl-1">{children}</div>
     </div>

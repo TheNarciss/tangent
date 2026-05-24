@@ -30,7 +30,10 @@ export function SyncButton() {
 
   if (!status.data) {
     return (
-      <button className="h-9 px-3 rounded-md border border-border text-xs text-muted-foreground" disabled>
+      <button
+        className="h-9 px-3 rounded-md border border-border text-xs text-muted-foreground"
+        disabled
+      >
         Chargement…
       </button>
     );
@@ -72,13 +75,18 @@ export function SyncButton() {
         "h-9 px-3 rounded-md border text-xs font-medium flex items-center gap-2 transition-colors",
         sync.isPending && "bg-muted/40 border-border",
         hasError && "border-[hsl(var(--loss))] text-[hsl(var(--loss))]",
-        isStale && !hasError && !sync.isPending && "border-yellow-500/60 text-yellow-700 dark:text-yellow-400",
+        isStale &&
+          !hasError &&
+          !sync.isPending &&
+          "border-yellow-500/60 text-yellow-700 dark:text-yellow-400",
         !isStale && !hasError && !sync.isPending && "border-border hover:bg-muted/40",
       )}
       title={
-        hasError ? `Erreur: ${status.data.last_error}` :
-        sync.isPending ? "Synchronisation en cours…" :
-        `Cliquer pour synchroniser maintenant. Dernière sync : ${ageLabel}`
+        hasError
+          ? `Erreur: ${status.data.last_error}`
+          : sync.isPending
+            ? "Synchronisation en cours…"
+            : `Cliquer pour synchroniser maintenant. Dernière sync : ${ageLabel}`
       }
     >
       {sync.isPending ? (
@@ -88,9 +96,7 @@ export function SyncButton() {
       ) : (
         <CheckCircle2 className="h-3.5 w-3.5" />
       )}
-      <span className="font-mono">
-        {sync.isPending ? "Sync…" : `BNP · ${ageLabel}`}
-      </span>
+      <span className="font-mono">{sync.isPending ? "Sync…" : `BNP · ${ageLabel}`}</span>
     </button>
   );
 }

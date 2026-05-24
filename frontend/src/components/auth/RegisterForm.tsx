@@ -36,14 +36,14 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
       ? register.error.status === 400 && register.error.message.includes("USER_ALREADY_EXISTS")
         ? "Un compte existe déjà avec cet email."
         : register.error.status === 422
-        ? "Email invalide ou mot de passe trop court (min 8 caractères)."
-        : register.error.status === 429
-        ? "Trop d'inscriptions. Réessaie dans une heure."
-        : register.error.message
+          ? "Email invalide ou mot de passe trop court (min 8 caractères)."
+          : register.error.status === 429
+            ? "Trop d'inscriptions. Réessaie dans une heure."
+            : register.error.message
       : "Erreur inconnue."
     : login.error
-    ? "Compte créé mais connexion impossible. Essaie de te connecter manuellement."
-    : null;
+      ? "Compte créé mais connexion impossible. Essaie de te connecter manuellement."
+      : null;
 
   const isPending = register.isPending || login.isPending;
 

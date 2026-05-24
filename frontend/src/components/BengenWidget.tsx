@@ -18,13 +18,16 @@ export function BengenWidget({ profile }: Props) {
   const [targetIncome, setTargetIncome] = useState<number>(100);
   const [withdrawalRate, setWithdrawalRate] = useState<number>(4); // raw %
 
-  const baseReq = useMemo(() => ({
-    target_monthly_income: targetIncome,
-    withdrawal_rate: withdrawalRate / 100,
-    current_capital: currentCapital,
-    monthly_dca: profile.monthly_dca,
-    expected_return: expectedReturn,
-  }), [targetIncome, withdrawalRate, currentCapital, profile.monthly_dca, expectedReturn]);
+  const baseReq = useMemo(
+    () => ({
+      target_monthly_income: targetIncome,
+      withdrawal_rate: withdrawalRate / 100,
+      current_capital: currentCapital,
+      monthly_dca: profile.monthly_dca,
+      expected_return: expectedReturn,
+    }),
+    [targetIncome, withdrawalRate, currentCapital, profile.monthly_dca, expectedReturn],
+  );
 
   const { data: base } = useBengen(baseReq);
 
@@ -47,7 +50,8 @@ export function BengenWidget({ profile }: Props) {
       <CardHeader>
         <CardTitle>Objectif revenu mensuel</CardTitle>
         <CardDescription>
-          Combien de capital faut-il pour générer un revenu passif soutenable selon la règle Bengen ?
+          Combien de capital faut-il pour générer un revenu passif soutenable selon la règle Bengen
+          ?
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -121,23 +125,27 @@ export function BengenWidget({ profile }: Props) {
             </Label>
             <div className="grid grid-cols-2 gap-2 text-sm">
               <div className="rounded border p-3 space-y-1">
-                <div className="text-xs text-muted-foreground">
-                  DCA {altDca1} €/mois (×1,5)
-                </div>
+                <div className="text-xs text-muted-foreground">DCA {altDca1} €/mois (×1,5)</div>
                 <div className="font-mono tabular">
-                  {alt1?.years_to_reach !== null && alt1?.years_to_reach !== undefined
-                    ? <>{alt1.years_to_reach.toFixed(1)} ans · {dateLabel(alt1.years_to_reach)}</>
-                    : "—"}
+                  {alt1?.years_to_reach !== null && alt1?.years_to_reach !== undefined ? (
+                    <>
+                      {alt1.years_to_reach.toFixed(1)} ans · {dateLabel(alt1.years_to_reach)}
+                    </>
+                  ) : (
+                    "—"
+                  )}
                 </div>
               </div>
               <div className="rounded border p-3 space-y-1">
-                <div className="text-xs text-muted-foreground">
-                  DCA {altDca2} €/mois (×2)
-                </div>
+                <div className="text-xs text-muted-foreground">DCA {altDca2} €/mois (×2)</div>
                 <div className="font-mono tabular">
-                  {alt2?.years_to_reach !== null && alt2?.years_to_reach !== undefined
-                    ? <>{alt2.years_to_reach.toFixed(1)} ans · {dateLabel(alt2.years_to_reach)}</>
-                    : "—"}
+                  {alt2?.years_to_reach !== null && alt2?.years_to_reach !== undefined ? (
+                    <>
+                      {alt2.years_to_reach.toFixed(1)} ans · {dateLabel(alt2.years_to_reach)}
+                    </>
+                  ) : (
+                    "—"
+                  )}
                 </div>
               </div>
             </div>
@@ -146,8 +154,14 @@ export function BengenWidget({ profile }: Props) {
 
         {/* Hypothèses utilisées (transparence) */}
         <div className="text-xs text-muted-foreground border-t pt-3 space-y-0.5">
-          <div>Hypothèses : capital actuel {fmt.eur(currentCapital)} · DCA {profile.monthly_dca} €/mois · μ blendé {fmt.pct(expectedReturn)}</div>
-          <div>Règle Bengen (1994) : sur 30 ans glissants depuis 1926, retirer 4 % du capital initial ajusté inflation n'a jamais épuisé un portefeuille 60/40.</div>
+          <div>
+            Hypothèses : capital actuel {fmt.eur(currentCapital)} · DCA {profile.monthly_dca} €/mois
+            · μ blendé {fmt.pct(expectedReturn)}
+          </div>
+          <div>
+            Règle Bengen (1994) : sur 30 ans glissants depuis 1926, retirer 4 % du capital initial
+            ajusté inflation n'a jamais épuisé un portefeuille 60/40.
+          </div>
         </div>
       </CardContent>
     </Card>

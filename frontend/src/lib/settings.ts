@@ -18,17 +18,17 @@ export type HistoricalPeriod = "1y" | "2y" | "3y" | "5y" | "10y" | "max";
 export type CovEstimator = "sample" | "shrunk";
 
 export interface ScannerSettings {
-  modes: ScannerMode[];               // par défaut les 3
-  hypothesis_fraction: number;        // 0-1, défaut 0.10 (hypothèse d'ajout 10 % pour ΔSharpe)
-  n_results: number;                  // nombre de candidats top à afficher, défaut 10
+  modes: ScannerMode[]; // par défaut les 3
+  hypothesis_fraction: number; // 0-1, défaut 0.10 (hypothèse d'ajout 10 % pour ΔSharpe)
+  n_results: number; // nombre de candidats top à afficher, défaut 10
 }
 
 export interface ExpertSettings {
-  cma_shrinkage: number;              // 0-1, défaut 0.70 (70 % CMA, 30 % historique)
+  cma_shrinkage: number; // 0-1, défaut 0.70 (70 % CMA, 30 % historique)
   historical_period: HistoricalPeriod;
-  risk_free_rate: number;             // fraction, défaut 0.025
-  cov_estimator: CovEstimator;        // défaut "sample"
-  cov_shrinkage: number;              // si "shrunk", fraction de shrinkage vers identité
+  risk_free_rate: number; // fraction, défaut 0.025
+  cov_estimator: CovEstimator; // défaut "sample"
+  cov_shrinkage: number; // si "shrunk", fraction de shrinkage vers identité
   cma_overrides: Record<string, number>; // ticker → μ forcé (fraction)
 }
 
@@ -40,15 +40,15 @@ export interface AppSettings {
 export const DEFAULT_SETTINGS: AppSettings = {
   scanner: {
     modes: ["broad_eu", "tech_growth", "defensive"],
-    hypothesis_fraction: 0.10,
+    hypothesis_fraction: 0.1,
     n_results: 10,
   },
   expert: {
-    cma_shrinkage: 0.70,
+    cma_shrinkage: 0.7,
     historical_period: "5y",
     risk_free_rate: 0.025,
     cov_estimator: "sample",
-    cov_shrinkage: 0.20,
+    cov_shrinkage: 0.2,
     cma_overrides: {},
   },
 };

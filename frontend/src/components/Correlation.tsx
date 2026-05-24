@@ -17,7 +17,7 @@ function cellStyle(rho: number): React.CSSProperties {
   const r = Math.max(-1, Math.min(1, rho));
   const intensity = Math.abs(r);
   const hue = r >= 0 ? 8 : 220;
-  const alpha = 0.10 + intensity * 0.80;
+  const alpha = 0.1 + intensity * 0.8;
   return {
     backgroundColor: `hsla(${hue} 75% 45% / ${alpha})`,
     color: intensity > 0.35 ? "white" : "hsl(var(--foreground))",
@@ -79,7 +79,7 @@ export function Correlation({ matrix }: Props) {
             {Array.from({ length: 41 }, (_, i) => {
               const rho = (i - 20) / 20;
               const hue = rho >= 0 ? 8 : 220;
-              const alpha = 0.10 + Math.abs(rho) * 0.80;
+              const alpha = 0.1 + Math.abs(rho) * 0.8;
               return (
                 <div
                   key={i}
@@ -90,7 +90,9 @@ export function Correlation({ matrix }: Props) {
             })}
           </div>
           <span className="font-mono">+1</span>
-          <span className="ml-2 italic">bleu = hedge · pâle = indépendants · rouge = redondants</span>
+          <span className="ml-2 italic">
+            bleu = hedge · pâle = indépendants · rouge = redondants
+          </span>
         </div>
       </CardContent>
     </Card>

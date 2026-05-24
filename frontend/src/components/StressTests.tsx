@@ -17,7 +17,8 @@ export function StressTests({ stressTests }: Props) {
       <CardHeader>
         <CardTitle>Stress tests historiques</CardTitle>
         <CardDescription>
-          Combien ton panier actuel aurait perdu pendant chaque crise — calculé en multipliant tes quantités actuelles par les prix réels de l'époque.
+          Combien ton panier actuel aurait perdu pendant chaque crise — calculé en multipliant tes
+          quantités actuelles par les prix réels de l'époque.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -25,9 +26,9 @@ export function StressTests({ stressTests }: Props) {
           {stressTests.map((s) => {
             const severity = Math.abs(s.drawdown_pct);
             const toneClass =
-              severity >= 0.20
+              severity >= 0.2
                 ? "border-red-500/40 bg-red-500/5"
-                : severity >= 0.10
+                : severity >= 0.1
                   ? "border-amber-500/40 bg-amber-500/5"
                   : "border-zinc-500/40 bg-zinc-500/5";
 
@@ -57,7 +58,8 @@ export function StressTests({ stressTests }: Props) {
           })}
         </div>
         <p className="text-xs text-muted-foreground italic mt-4 border-t pt-3">
-          Calcul : Σ(quantité actuelle × prix historique) sur chaque fenêtre. Ce sont des chiffres réels, pas une simulation Monte-Carlo.
+          Calcul : Σ(quantité actuelle × prix historique) sur chaque fenêtre. Ce sont des chiffres
+          réels, pas une simulation Monte-Carlo.
         </p>
       </CardContent>
     </Card>

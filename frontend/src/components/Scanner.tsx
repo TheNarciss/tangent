@@ -1,17 +1,19 @@
 import { Search, Plus, Sparkles } from "lucide-react";
 import { useMemo } from "react";
 
-import {
-  useScan,
-  useWatchlistAdd,
-  type ScanCandidate,
-  type ScanRequest,
-} from "@/api";
+import { useScan, useWatchlistAdd, type ScanCandidate, type ScanRequest } from "@/api";
 import { useSettings, SCANNER_MODE_LABELS, type ScannerMode } from "@/lib/settings";
 import { fmt } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 /** Composant Scanner — découverte d'actifs PEA-éligibles qui amélioreraient
     le Sharpe du portefeuille via marginal contribution. Lit toutes les
@@ -59,8 +61,8 @@ export function Scanner() {
           Découvrir des actifs
         </CardTitle>
         <CardDescription>
-          Scanne le marché Euronext (PEA-éligibles) et trouve les actifs qui amélioreraient
-          le Sharpe de ton portefeuille actuel via leur contribution marginale.
+          Scanne le marché Euronext (PEA-éligibles) et trouve les actifs qui amélioreraient le
+          Sharpe de ton portefeuille actuel via leur contribution marginale.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -70,9 +72,9 @@ export function Scanner() {
             <span className="font-medium text-foreground">Modes activés :</span> {modesLabel}
           </div>
           <div className="mt-1">
-            <span className="font-medium text-foreground">Hypothèse :</span>{" "}
-            ajout simulé de {(settings.scanner.hypothesis_fraction * 100).toFixed(0)} %
-            · top {settings.scanner.n_results} candidats
+            <span className="font-medium text-foreground">Hypothèse :</span> ajout simulé de{" "}
+            {(settings.scanner.hypothesis_fraction * 100).toFixed(0)} % · top{" "}
+            {settings.scanner.n_results} candidats
           </div>
           <div className="mt-1 italic">Configurable dans ⚙️ Réglages</div>
         </div>
@@ -103,10 +105,15 @@ export function Scanner() {
         )}
 
         {/* Résultats */}
-        {scan.data && <ScanResults data={scan.data.candidates} elapsed={scan.data.elapsed_seconds}
-                                    universe={scan.data.universe_size}
-                                    onAdd={addToWatchlist}
-                                    isAdding={watchAdd.isPending} />}
+        {scan.data && (
+          <ScanResults
+            data={scan.data.candidates}
+            elapsed={scan.data.elapsed_seconds}
+            universe={scan.data.universe_size}
+            onAdd={addToWatchlist}
+            isAdding={watchAdd.isPending}
+          />
+        )}
       </CardContent>
     </Card>
   );
@@ -162,15 +169,20 @@ function ScanResults({ data, elapsed, universe, onAdd, isAdding }: ResultsProps)
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground">{c.sector}</TableCell>
                 <TableCell className="text-right font-mono tabular text-[hsl(var(--gain))]">
-                  {c.delta_sharpe > 0 ? "+" : ""}{c.delta_sharpe.toFixed(3)}
+                  {c.delta_sharpe > 0 ? "+" : ""}
+                  {c.delta_sharpe.toFixed(3)}
                 </TableCell>
                 <TableCell className="text-right font-mono tabular">
                   {c.correlation_with_portfolio > 0 ? "+" : ""}
                   {c.correlation_with_portfolio.toFixed(2)}
                 </TableCell>
                 <TableCell className="text-right font-mono tabular">{fmt.pct(c.own_mu)}</TableCell>
-                <TableCell className="text-right font-mono tabular">{fmt.pct(c.own_sigma)}</TableCell>
-                <TableCell className="text-right font-mono tabular">{c.own_sharpe.toFixed(2)}</TableCell>
+                <TableCell className="text-right font-mono tabular">
+                  {fmt.pct(c.own_sigma)}
+                </TableCell>
+                <TableCell className="text-right font-mono tabular">
+                  {c.own_sharpe.toFixed(2)}
+                </TableCell>
                 <TableCell>
                   <Button
                     variant="outline"
@@ -190,10 +202,10 @@ function ScanResults({ data, elapsed, universe, onAdd, isAdding }: ResultsProps)
       </div>
 
       <p className="text-xs text-muted-foreground italic mt-3 border-t pt-2">
-        ΔSharpe : amélioration du Sharpe global si tu remplaces une fraction de ton portefeuille
-        par ce candidat. ρ : corrélation aux returns de ton portfolio (négative = diversifier).
-        Cliquer "Suivre" ajoute le ticker en quantité 0 — il apparaîtra dans le dashboard et sera
-        considéré par l'optimiseur sans modifier ta valorisation actuelle.
+        ΔSharpe : amélioration du Sharpe global si tu remplaces une fraction de ton portefeuille par
+        ce candidat. ρ : corrélation aux returns de ton portfolio (négative = diversifier). Cliquer
+        "Suivre" ajoute le ticker en quantité 0 — il apparaîtra dans le dashboard et sera considéré
+        par l'optimiseur sans modifier ta valorisation actuelle.
       </p>
     </div>
   );

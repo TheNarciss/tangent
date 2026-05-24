@@ -131,7 +131,11 @@ export function ForgotPasswordFlow({ onBack }: Props) {
             />
           </div>
           <div className="flex flex-col gap-2">
-            <Button type="submit" className="w-full" disabled={verifyCode.isPending || code.length !== 6}>
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={verifyCode.isPending || code.length !== 6}
+            >
               {verifyCode.isPending ? "Vérification…" : "Vérifier le code"}
             </Button>
             <Button
