@@ -1,0 +1,37 @@
+name: Semgrep
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"  # Lundi 6h UTC
+
+jobs:
+  semgrep:
+    name: Static analysis (Semgrep)
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
+    if: (github.actor != 'dependabot[bot]')
+    steps:
+      - uses: actions/checkout@v4
+
+      # Règles "auto" : détecte langages + applique rulesets adaptés
+      # (p/python, p/typescript, p/react, p/javascript, OWASP Top 10, etc.)
+      - name: Semgrep scan
+        # Exclusions justifiées:
+        # - python-logger-credential-disclosure : faux positifs sur "token"/"password"
+        #   dans des messages de log qui ne loggent QUE des user_id ou emails (pas
+        #   les secrets eux-mêmes). Aucune occurrence ne leak un secret réel.
+        run: |
+          semgrep ci --config=auto \
+            --exclude-rule=python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure
+        env:
+          SEMGREP_RULES: >-
+            p/python
+            p/typescript
+            p/react
+            p/owasp-top-ten
+            p/security-audit

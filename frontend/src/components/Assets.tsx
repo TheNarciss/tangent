@@ -2,7 +2,14 @@ import type { AssetMetrics } from "@/api";
 import { fmt } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 interface Props {
   assets: AssetMetrics[];
@@ -27,6 +34,8 @@ export function Assets({ assets }: Props) {
               <TableHead className="text-right">P/L</TableHead>
               <TableHead className="text-right">μ</TableHead>
               <TableHead className="text-right">σ</TableHead>
+              <TableHead className="text-right">CVaR 95 %</TableHead>
+              <TableHead className="text-right">Max DD</TableHead>
               <TableHead className="text-right">Sharpe</TableHead>
             </TableRow>
           </TableHeader>
@@ -37,7 +46,9 @@ export function Assets({ assets }: Props) {
                 <TableRow key={a.ticker}>
                   <TableCell className="font-mono font-medium">{a.ticker}</TableCell>
                   <TableCell className="text-right font-mono tabular">{fmt.eur(a.price)}</TableCell>
-                  <TableCell className="text-right font-mono tabular">{fmt.pct(a.weight)}</TableCell>
+                  <TableCell className="text-right font-mono tabular">
+                    {fmt.pct(a.weight)}
+                  </TableCell>
                   <TableCell className="text-right font-mono tabular">{fmt.eur(a.value)}</TableCell>
                   <TableCell
                     className={cn(
@@ -46,11 +57,25 @@ export function Assets({ assets }: Props) {
                     )}
                   >
                     {fmt.signedEur(a.pnl)}
-                    <span className="ml-2 text-xs text-muted-foreground">{fmt.signedPct(a.pnl_pct)}</span>
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      {fmt.signedPct(a.pnl_pct)}
+                    </span>
                   </TableCell>
-                  <TableCell className="text-right font-mono tabular">{fmt.pct(a.annual_return)}</TableCell>
-                  <TableCell className="text-right font-mono tabular">{fmt.pct(a.annual_vol)}</TableCell>
-                  <TableCell className="text-right font-mono tabular">{fmt.num(a.sharpe)}</TableCell>
+                  <TableCell className="text-right font-mono tabular">
+                    {fmt.pct(a.annual_return)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono tabular">
+                    {fmt.pct(a.annual_vol)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono tabular text-[hsl(var(--loss))]">
+                    {fmt.signedPct(a.cvar_95)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono tabular text-[hsl(var(--loss))]">
+                    {fmt.signedPct(a.max_drawdown_observed)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono tabular">
+                    {fmt.num(a.sharpe)}
+                  </TableCell>
                 </TableRow>
               );
             })}

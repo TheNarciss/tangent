@@ -1,0 +1,72 @@
+name: CD - Deploy to Production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:  # permet de re-déployer manuellement depuis l'UI GitHub
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false   # ne pas annuler un déploiement en cours
+
+jobs:
+  deploy:
+    name: Deploy main to riskybusinesses.uk
+    runs-on: [self-hosted, macOS, tangent-prod]
+    timeout-minutes: 15
+
+    steps:
+      - name: Show current state
+        run: |
+          echo "Runner: $(hostname)"
+          echo "Project: /Users/clementgardair/projet_finance"
+          cd "/Users/clementgardair/projet_finance"
+          echo "Current commit: $(git rev-parse --short HEAD)"
+          echo "Current branch: $(git rev-parse --abbrev-ref HEAD)"
+
+      - name: Pull latest main
+        working-directory: /Users/clementgardair/projet_finance
+        run: |
+          set -euo pipefail
+          PREV_COMMIT=$(git rev-parse HEAD)
+          echo "PREV_COMMIT=$PREV_COMMIT" >> $GITHUB_ENV
+          git fetch origin main
+          git checkout main
+          git reset --hard origin/main
+          echo "New commit: $(git rev-parse --short HEAD)"
+
+      - name: Rebuild + restart containers
+        working-directory: /Users/clementgardair/projet_finance
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+          sleep 5
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
+
+      - name: Health check (60s timeout)
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            if curl -fs https://riskybusinesses.uk/health > /dev/null; then
+              echo "✅ Healthy after $i attempts ($((i * 2))s)"
+              curl -s https://riskybusinesses.uk/health
+              exit 0
+            fi
+            echo "Attempt $i/30 — waiting 2s..."
+            sleep 2
+          done
+          echo "❌ Health check failed after 60s"
+          cd "/Users/clementgardair/projet_finance"
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml logs --tail 50 backend
+          exit 1
+
+      - name: Rollback on failure
+        if: failure()
+        working-directory: /Users/clementgardair/projet_finance
+        run: |
+          set -euo pipefail
+          echo "::warning::Deployment failed, rolling back to $PREV_COMMIT"
+          git reset --hard $PREV_COMMIT
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+          sleep 5
+          curl -fs https://riskybusinesses.uk/health && echo "✅ Rollback succeeded" || echo "❌ Rollback also failed — manual intervention needed"

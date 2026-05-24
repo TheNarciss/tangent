@@ -71,8 +71,9 @@ export function Timeline({ ts }: Props) {
           Évolution historique
         </CardTitle>
         <CardDescription>
-          Positions actuelles maintenues sur la fenêtre (vue "as-if-held", utile pour les tendances et le risque, pas pour le PnL réel).
-          Survole un point pour voir tous les chiffres au jour donné.
+          Positions actuelles maintenues sur la fenêtre (vue "as-if-held", utile pour les tendances
+          et le risque, pas pour le PnL réel). Survole un point pour voir tous les chiffres au jour
+          donné.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -109,7 +110,7 @@ export function Timeline({ ts }: Props) {
           {hoverIdx !== null && (
             <ChartTooltip
               x={(xScale(hoverIdx) / W) * wrapW}
-              y={(PANELS.perf.y / TOTAL_H) * (wrapW * TOTAL_H / W)}
+              y={(PANELS.perf.y / TOTAL_H) * ((wrapW * TOTAL_H) / W)}
               containerWidth={wrapW}
             >
               <TimelineTooltipContent ts={ts} idx={hoverIdx} />
@@ -132,12 +133,22 @@ function TimelineTooltipContent({ ts, idx }: { ts: TimeseriesResponse; idx: numb
   return (
     <div className="space-y-1.5">
       <div className="font-sans font-medium text-foreground">{formatDateTick(ts.dates[idx])}</div>
-      <TimelineRow label="Portefeuille" value={`${portValue.toFixed(1)} (${((portValue - 100) / 100 >= 0 ? "+" : "")}${(portValue - 100).toFixed(1)}%)`} />
+      <TimelineRow
+        label="Portefeuille"
+        value={`${portValue.toFixed(1)} (${(portValue - 100) / 100 >= 0 ? "+" : ""}${(portValue - 100).toFixed(1)}%)`}
+      />
       {benchValue !== undefined && ts.benchmark_ticker && (
-        <TimelineRow label={ts.benchmark_ticker} value={`${benchValue.toFixed(1)} (${((benchValue - 100) >= 0 ? "+" : "")}${(benchValue - 100).toFixed(1)}%)`} muted />
+        <TimelineRow
+          label={ts.benchmark_ticker}
+          value={`${benchValue.toFixed(1)} (${benchValue - 100 >= 0 ? "+" : ""}${(benchValue - 100).toFixed(1)}%)`}
+          muted
+        />
       )}
       <TimelineRow label="Drawdown" value={fmt.pct(dd)} />
-      <TimelineRow label={`Sharpe ${ts.rolling_window_days}j`} value={rs === null ? "—" : rs.toFixed(2)} />
+      <TimelineRow
+        label={`Sharpe ${ts.rolling_window_days}j`}
+        value={rs === null ? "—" : rs.toFixed(2)}
+      />
       <div className="font-sans text-[10px] text-muted-foreground pt-1 leading-tight">
         Base 100 au {formatDateTick(ts.dates[0])}. Drawdown = baisse depuis le dernier plus-haut.
         Sharpe glissant calculé sur {ts.rolling_window_days} jours de bourse (≈ 6 mois).
@@ -214,7 +225,12 @@ function DrawdownPanel({ ts, xScale }: PanelProps) {
       <YAxis ticks={ticks} yScale={yScale} format={(v) => fmt.pct(v)} />
 
       <path d={areaPath(ts.drawdown, xAt, yScale, 0)} fill="hsl(var(--loss))" fillOpacity={0.18} />
-      <path d={linePath(ts.drawdown, xAt, yScale)} fill="none" stroke="hsl(var(--loss))" strokeWidth="1.4" />
+      <path
+        d={linePath(ts.drawdown, xAt, yScale)}
+        fill="none"
+        stroke="hsl(var(--loss))"
+        strokeWidth="1.4"
+      />
 
       {/* Max DD annotation */}
       <text
@@ -286,7 +302,11 @@ function RollingSharpePanel({ ts, xScale }: PanelProps) {
 
 function PanelTitle({ y, text }: { y: number; text: string }) {
   return (
-    <text x={PAD.left} y={y} className="font-sans text-xs font-medium fill-current text-muted-foreground uppercase tracking-wider">
+    <text
+      x={PAD.left}
+      y={y}
+      className="font-sans text-xs font-medium fill-current text-muted-foreground uppercase tracking-wider"
+    >
       {text}
     </text>
   );
@@ -306,12 +326,26 @@ function PanelFrame({ y, h }: { y: number; h: number }) {
   );
 }
 
-function YAxis({ ticks, yScale, format }: { ticks: number[]; yScale: Scale; format: (v: number) => string }) {
+function YAxis({
+  ticks,
+  yScale,
+  format,
+}: {
+  ticks: number[];
+  yScale: Scale;
+  format: (v: number) => string;
+}) {
   return (
     <g className="font-mono text-[10px] fill-current text-muted-foreground">
       {ticks.map((t) => (
         <g key={t}>
-          <line x1={PAD.left - 4} x2={PAD.left} y1={yScale(t)} y2={yScale(t)} stroke="currentColor" />
+          <line
+            x1={PAD.left - 4}
+            x2={PAD.left}
+            y1={yScale(t)}
+            y2={yScale(t)}
+            stroke="currentColor"
+          />
           <text x={PAD.left - 8} y={yScale(t) + 3} textAnchor="end">
             {format(t)}
           </text>
@@ -321,7 +355,15 @@ function YAxis({ ticks, yScale, format }: { ticks: number[]; yScale: Scale; form
   );
 }
 
-function DateAxis({ ts, xScale, indices }: { ts: TimeseriesResponse; xScale: Scale; indices: number[] }) {
+function DateAxis({
+  ts,
+  xScale,
+  indices,
+}: {
+  ts: TimeseriesResponse;
+  xScale: Scale;
+  indices: number[];
+}) {
   return (
     <g className="font-mono text-[10px] fill-current text-muted-foreground">
       <line x1={PAD.left} x2={W - PAD.right} y1={AXIS_Y} y2={AXIS_Y} stroke="hsl(var(--border))" />
@@ -348,7 +390,11 @@ function PerformanceLegend({ ts }: { ts: TimeseriesResponse }) {
         <span className="flex items-center gap-2">
           <span
             className="inline-block h-0.5 w-6"
-            style={{ backgroundImage: "repeating-linear-gradient(90deg, hsl(var(--muted-foreground)) 0 3px, transparent 3px 6px)", height: 2 }}
+            style={{
+              backgroundImage:
+                "repeating-linear-gradient(90deg, hsl(var(--muted-foreground)) 0 3px, transparent 3px 6px)",
+              height: 2,
+            }}
           />
           {ts.benchmark_ticker} ({ts.benchmark[ts.benchmark.length - 1].toFixed(1)})
         </span>

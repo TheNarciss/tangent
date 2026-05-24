@@ -11,17 +11,46 @@ export function Metrics({ metrics }: Props) {
   const pnlPositive = metrics.total_pnl >= 0;
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-      <MetricCard label="Valorisation" value={fmt.eur(metrics.total_value)} sub={`Coût ${fmt.eur(metrics.total_cost)}`} />
-      <MetricCard
-        label="Plus-value"
-        value={fmt.signedEur(metrics.total_pnl)}
-        sub={fmt.signedPct(metrics.total_pnl_pct)}
-        tone={pnlPositive ? "gain" : "loss"}
-      />
-      <MetricCard label="E(R) annuel" value={fmt.pct(metrics.expected_return)} sub="Espérance" />
-      <MetricCard label="Volatilité σ" value={fmt.pct(metrics.volatility)} sub="Annualisée" />
-      <MetricCard label="Sharpe" value={fmt.num(metrics.sharpe)} sub="vs. r_f = 2,5 %" />
+    <div className="space-y-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <MetricCard
+          label="Valorisation"
+          value={fmt.eur(metrics.total_value)}
+          sub={`Coût ${fmt.eur(metrics.total_cost)}`}
+        />
+        <MetricCard
+          label="Plus-value"
+          value={fmt.signedEur(metrics.total_pnl)}
+          sub={fmt.signedPct(metrics.total_pnl_pct)}
+          tone={pnlPositive ? "gain" : "loss"}
+        />
+        <MetricCard
+          label="E(R) annuel"
+          value={fmt.pct(metrics.expected_return)}
+          sub="Espérance (μ blendé)"
+        />
+        <MetricCard label="Volatilité σ" value={fmt.pct(metrics.volatility)} sub="Annualisée" />
+        <MetricCard label="Sharpe" value={fmt.num(metrics.sharpe)} sub="vs. r_f = 2,5 %" />
+      </div>
+
+      {/* Métriques de risque de queue : drawdown théorique, CVaR, max DD observé */}
+      <div className="grid gap-3 sm:grid-cols-3 rounded-lg border bg-muted/20 p-3">
+        <RiskCard
+          label="Drawdown théorique"
+          value={fmt.signedPct(metrics.drawdown_estimate)}
+          hint="−2σ · perte possible 1 année sur 40 selon loi normale"
+        />
+        <RiskCard
+          label="CVaR 95 %"
+          value={fmt.signedPct(metrics.cvar_95)}
+          hint="Perte moyenne des 5 % pires jours, annualisée"
+        />
+        <RiskCard
+          label="Max DD observé"
+          value={fmt.signedPct(metrics.max_drawdown_observed)}
+          hint="Pire chute peak-to-trough vécue par ton panier sur l'historique"
+        />
+      </div>
     </div>
   );
 }
@@ -54,5 +83,15 @@ function MetricCard({ label, value, sub, tone }: CardProps) {
         <div className="font-mono text-xs text-muted-foreground tabular">{sub}</div>
       </CardContent>
     </Card>
+  );
+}
+
+function RiskCard({ label, value, hint }: { label: string; value: string; hint: string }) {
+  return (
+    <div className="space-y-0.5">
+      <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="font-mono text-lg font-semibold tabular text-[hsl(var(--loss))]">{value}</div>
+      <div className="text-xs text-muted-foreground italic">{hint}</div>
+    </div>
   );
 }

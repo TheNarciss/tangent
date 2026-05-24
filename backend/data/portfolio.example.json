@@ -1,0 +1,7 @@
+{
+  "positions": [
+    {"ticker": "CW8.PA", "quantity": 10, "avg_cost": 500.0},
+    {"ticker": "PUST.PA", "quantity": 5, "avg_cost": 80.0}
+  ],
+  "cash": 0.0
+}

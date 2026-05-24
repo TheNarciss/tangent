@@ -1,0 +1,81 @@
+# docker-compose.yml — stack complète tangent en dev
+# Usage :
+#   docker compose up                  → lance tout (postgres + back + front)
+#   docker compose up -d               → en background
+#   docker compose logs -f backend     → suivre les logs du back
+#   docker compose down                → arrête tout
+#   docker compose down -v             → arrête + supprime la DB (RESET COMPLET)
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: tangent-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tangent
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tangent_dev}
+      POSTGRES_DB: tangent
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tangent -d tangent"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: tangent-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://tangent:${POSTGRES_PASSWORD:-tangent_dev}@postgres:5432/tangent
+      # Force polling pour détecter les changements de fichiers depuis Mac/Windows.
+      # uvicorn --reload utilise watchfiles ; sans polling, fsevents Mac ne traverse pas Docker.
+      WATCHFILES_FORCE_POLLING: "true"
+    env_file:
+      - ./backend/.env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/config:/app/config
+      - ./backend/data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: uvicorn app.main:app --reload --reload-dir /app/app --host 0.0.0.0 --port 8000
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: tangent-frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: http://localhost:8000
+      # Force polling pour Vite/chokidar — même raison que pour le back.
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "300"            # ms entre 2 polls (default 100 = OK mais 300 = moins CPU)
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/index.html:/app/index.html
+      - ./frontend/vite.config.ts:/app/vite.config.ts
+      - ./frontend/tailwind.config.js:/app/tailwind.config.js
+      - ./frontend/postcss.config.js:/app/postcss.config.js
+      - ./frontend/tsconfig.json:/app/tsconfig.json
+      # node_modules : on garde celui du container (volume anonyme = overlay)
+      - /app/node_modules
+    command: npm run dev -- --host 0.0.0.0 --port 5173
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:

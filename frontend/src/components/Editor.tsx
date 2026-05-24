@@ -74,25 +74,36 @@ export function Editor({ portfolio }: Props) {
             <div key={idx} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2">
               <Input
                 value={p.ticker}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setField(idx, "ticker", e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setField(idx, "ticker", e.target.value)
+                }
                 placeholder="CW8.PA"
                 className="font-mono"
               />
               <Input
                 type="number"
                 value={p.quantity || ""}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setField(idx, "quantity", Number(e.target.value))}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setField(idx, "quantity", Number(e.target.value))
+                }
                 step="any"
                 min={0}
               />
               <Input
                 type="number"
                 value={p.avg_cost || ""}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setField(idx, "avg_cost", Number(e.target.value))}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setField(idx, "avg_cost", Number(e.target.value))
+                }
                 step="any"
                 min={0}
               />
-              <Button variant="ghost" size="icon" onClick={() => removeRow(idx)} aria-label="Supprimer">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => removeRow(idx)}
+                aria-label="Supprimer"
+              >
                 <Trash2 className="h-4 w-4" />
               </Button>
             </div>

@@ -1,0 +1,22 @@
+# Frontend .dockerignore
+node_modules/
+dist/
+build/
+.vite/
+
+# Cache
+.cache/
+*.log
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
+
+# Env
+.env
+.env.local
+
+# Git
+.git/
+.gitignore

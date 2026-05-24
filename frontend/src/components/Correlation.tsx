@@ -6,21 +6,23 @@ interface Props {
 }
 
 /**
- * ρ ∈ [-1, 1] mapped to a HSL color via two ramps:
- *   ρ > 0 → red ramp (hue 0)
- *   ρ < 0 → blue ramp (hue 220)
- * Lightness proportional to (1 - |ρ|) so neutral correlations stay near white/dark-gray.
+ * Colormap diverging style RdBu avec saturation pilotée par |ρ|.
+ * - ρ → +1 : rouge saturé (lien fort)
+ * - ρ → 0 : neutre transparent (s'intègre au fond)
+ * - ρ → −1 : bleu saturé (hedge)
+ *
+ * Saturation au lieu de lightness pour rester lisible sur dark ET light theme.
  */
 function cellStyle(rho: number): React.CSSProperties {
-  const intensity = Math.min(Math.abs(rho), 1); // 0..1
-  const hue = rho >= 0 ? 0 : 220;
-  const lightness = 95 - intensity * 50; // 95 → 45
-  const dark = `hsl(${hue} 70% ${100 - lightness}%)`;
+  const r = Math.max(-1, Math.min(1, rho));
+  const intensity = Math.abs(r);
+  const hue = r >= 0 ? 8 : 220;
+  const alpha = 0.1 + intensity * 0.8;
   return {
-    backgroundColor: `hsl(${hue} 65% ${lightness}%)`,
-    color: intensity > 0.5 ? "white" : undefined,
-    "--cell-bg-dark": dark,
-  } as React.CSSProperties;
+    backgroundColor: `hsla(${hue} 75% 45% / ${alpha})`,
+    color: intensity > 0.35 ? "white" : "hsl(var(--foreground))",
+    fontWeight: intensity > 0.7 ? 600 : 500,
+  };
 }
 
 export function Correlation({ matrix }: Props) {
@@ -33,14 +35,14 @@ export function Correlation({ matrix }: Props) {
           Corrélations
         </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-3">
         <div className="overflow-x-auto">
           <table className="w-full border-separate border-spacing-1">
             <thead>
               <tr>
                 <th />
                 {tickers.map((t) => (
-                  <th key={t} className="font-mono text-xs text-muted-foreground px-2">
+                  <th key={t} className="font-mono text-xs text-muted-foreground px-2 pb-1">
                     {t}
                   </th>
                 ))}
@@ -52,18 +54,7 @@ export function Correlation({ matrix }: Props) {
                   <th className="font-mono text-xs text-muted-foreground pr-2 text-right">{row}</th>
                   {tickers.map((col) => {
                     const rho = matrix[row][col];
-                    const interp =
-                      rho > 0.85
-                        ? "très forte : bougent presque ensemble"
-                        : rho > 0.5
-                          ? "forte : tendance commune"
-                          : rho > 0.2
-                            ? "modérée"
-                            : rho > -0.2
-                              ? "faible : quasi-indépendants"
-                              : rho > -0.5
-                                ? "négative modérée"
-                                : "négative forte : se compensent";
+                    const interp = interpRho(rho);
                     return (
                       <td
                         key={col}
@@ -80,7 +71,39 @@ export function Correlation({ matrix }: Props) {
             </tbody>
           </table>
         </div>
+
+        {/* Légende graduée */}
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span className="font-mono">−1</span>
+          <div className="flex-1 h-2 rounded overflow-hidden flex">
+            {Array.from({ length: 41 }, (_, i) => {
+              const rho = (i - 20) / 20;
+              const hue = rho >= 0 ? 8 : 220;
+              const alpha = 0.1 + Math.abs(rho) * 0.8;
+              return (
+                <div
+                  key={i}
+                  className="flex-1"
+                  style={{ background: `hsla(${hue} 75% 45% / ${alpha})` }}
+                />
+              );
+            })}
+          </div>
+          <span className="font-mono">+1</span>
+          <span className="ml-2 italic">
+            bleu = hedge · pâle = indépendants · rouge = redondants
+          </span>
+        </div>
       </CardContent>
     </Card>
   );
+}
+
+function interpRho(rho: number): string {
+  if (rho > 0.85) return "très forte : bougent presque ensemble";
+  if (rho > 0.5) return "forte : tendance commune";
+  if (rho > 0.2) return "modérée";
+  if (rho > -0.2) return "faible : quasi-indépendants";
+  if (rho > -0.5) return "négative modérée";
+  return "négative forte : se compensent";
 }

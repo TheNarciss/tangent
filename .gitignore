@@ -1,4 +1,4 @@
-# ─── Python ─────────────────────────────────────────────────────────────
+# ─── Python ─────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
@@ -10,33 +10,26 @@ __pycache__/
 .ruff_cache/
 .coverage
 htmlcov/
-
-# Virtual environments
 .venv/
 venv/
 env/
 ENV/
-
-# Packaging
 build/
 dist/
-sdist/
 *.manifest
 *.spec
 
-# ─── Node / Vite / React ────────────────────────────────────────────────
+# ─── Node / Vite / React ────────────────────────────────
 node_modules/
 frontend/dist/
 .vite/
-
-# Logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 *.log
 
-# ─── IDE / Editor ───────────────────────────────────────────────────────
+# ─── IDE / Editor ───────────────────────────────────────
 .vscode/
 .idea/
 *.swp
@@ -44,27 +37,32 @@ pnpm-debug.log*
 *~
 .history/
 
-# ─── OS ─────────────────────────────────────────────────────────────────
+# ─── OS ─────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# ─── Environment variables ──────────────────────────────────────────────
+# ─── Environment & secrets ──────────────────────────────
 .env
 .env.local
 .env.*.local
+backend/.env
 
-# ─── Données financières personnelles ───────────────────────────────────
-# Le portefeuille n'est PAS commit par défaut (données perso).
-# Si tu veux le versionner explicitement : `git add -f data/portfolio.json`
-data/portfolio.json
-
-# Exports BNP, relevés, contrats — jamais sur Git
+# ─── Données financières perso ──────────────────────────
+backend/data/portfolio.json
+backend/data/transactions.json
+backend/data/powens_state.json
+backend/data/backups/
+backend/data/watchlist.json
 *.xlsx
 *.xls
 *.pdf
 data/**/*.csv
 data/**/*.json
-!data/portfolio.example.json
+!backend/data/portfolio_example.json
 
-# Mais on garde le template d'exemple
+# ─── Docker / Postgres ──────────────────────────────────
+postgres_data/
+
+# ─── Repo nettoyage ─────────────────────────────────────
+.cache/

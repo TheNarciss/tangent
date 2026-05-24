@@ -1,5 +1,13 @@
 # Portfolio Dashboard — Backend
 
+[![CI](https://github.com/TheNarciss/tangent/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/TheNarciss/tangent/actions/workflows/ci.yml)
+[![Semgrep](https://github.com/TheNarciss/tangent/actions/workflows/semgrep.yml/badge.svg?branch=dev)](https://github.com/TheNarciss/tangent/actions/workflows/semgrep.yml)
+[![Python](https://img.shields.io/badge/python-3.12-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![TypeScript](https://img.shields.io/badge/typescript-5-blue?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.110-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+
+
 Backend FastAPI pour analyser un portefeuille d'ETF/actions : valorisation live,
 métriques de Markowitz (μ, σ, Sharpe, corrélations) et insights automatiques.
 

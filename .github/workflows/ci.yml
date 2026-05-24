@@ -1,0 +1,188 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend (lint + format + tests)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: tangent
+          POSTGRES_PASSWORD: tangent_dev
+          POSTGRES_DB: tangent
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tangent"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install "ruff>=0.5,<1"
+
+      - name: Ruff lint
+        working-directory: backend
+        run: ruff check app/
+
+      - name: Ruff format check
+        working-directory: backend
+        run: ruff format app/ --check
+
+      - name: Install backend deps + test deps
+        working-directory: backend
+        run: |
+          pip install -e .
+          pip install pytest pytest-asyncio httpx pytest-cov mypy
+
+      - name: Mypy typecheck
+        working-directory: backend
+        run: mypy app/
+
+      - name: Run tests with coverage
+        working-directory: backend
+        env:
+          DATABASE_URL: "postgresql+asyncpg://tangent:tangent_dev@localhost:5432/tangent"
+          JWT_SECRET: "ci-test-secret-not-for-production-32-bytes-min"
+          RESET_TOKEN_SECRET: "ci-test-reset-secret-not-for-production"
+          POWENS_TOKEN_ENCRYPTION_KEY: "JzPK9Z-AjUYY4i_aQB9OBSqz_LIBOX6r4l5MmYFlBog="
+          COOKIE_SECURE: "false"
+          CORS_ORIGINS: "http://localhost:3000"
+        run: |
+          pytest --cov=app --cov-report=term --cov-report=xml --cov-fail-under=30
+
+      - name: Upload coverage as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: backend/coverage.xml
+          retention-days: 7
+
+      - name: Upload coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: backend/coverage.xml
+          flags: backend
+          fail_ci_if_error: false   # don't break CI on Codecov outage
+
+  frontend:
+    name: Frontend (lint + typecheck + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: ESLint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: TypeScript typecheck
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Prettier format check
+        working-directory: frontend
+        run: npm run format:check
+
+      - name: Vitest
+        working-directory: frontend
+        run: npm test
+
+      - name: Build
+        working-directory: frontend
+        env:
+          VITE_API_URL: "http://localhost:8000"
+        run: npm run build
+
+  security:
+    name: Security (secrets + CVE audits)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # gitleaks needs full history
+
+      - name: Gitleaks (secret scanning)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: pip-audit (Python CVE check)
+        working-directory: backend
+        continue-on-error: true
+        run: |
+          pip install -e . pip-audit
+          pip-audit --skip-editable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: npm audit (JS CVE check)
+        working-directory: frontend
+        continue-on-error: true
+        run: |
+          npm ci
+          npm audit --audit-level=high
+
+  docker-build:
+    name: Docker images build check
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: false
+          load: false
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+          tags: tangent-backend:ci
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: false
+          load: false
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+          tags: tangent-frontend:ci
