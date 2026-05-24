@@ -59,7 +59,9 @@ async def request_reset(session: AsyncSession, email: str) -> tuple[bool, str | 
     must NOT differentiate between user existing or not in the HTTP response.
     """
     start = asyncio.get_event_loop().time()
-    res = await session.execute(select(User).where(User.email == email.lower()))
+    res = await session.execute(
+        select(User).where(User.email == email.lower())  # type: ignore[arg-type]
+    )
     user = res.scalars().first()
 
     code = None
@@ -100,14 +102,16 @@ async def verify_code(session: AsyncSession, email: str, code: str) -> str | Non
 
     Increments attempts counter on failure. Burns the token if exhausted.
     """
-    res = await session.execute(select(User).where(User.email == email.lower()))
+    res = await session.execute(
+        select(User).where(User.email == email.lower())  # type: ignore[arg-type]
+    )
     user = res.scalars().first()
     if user is None:
         return None  # Don't even tell the caller; just fail
 
     # Active (non-used, non-expired) token for this user
     now = datetime.now(UTC)
-    res = await session.execute(
+    res_token = await session.execute(
         select(PasswordResetToken)
         .where(
             PasswordResetToken.user_id == user.id,
@@ -117,7 +121,7 @@ async def verify_code(session: AsyncSession, email: str, code: str) -> str | Non
         )
         .order_by(PasswordResetToken.created_at.desc())
     )
-    token_row = res.scalars().first()
+    token_row = res_token.scalars().first()
     if token_row is None:
         return None
 

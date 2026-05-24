@@ -56,7 +56,7 @@ def build(
     mc = analytics.monte_carlo_projection(
         log_rets, initial, monthly_contribution, months, monthly_fee=fee_fn
     )
-    paths = mc.pop("_paths")
+    paths = np.asarray(mc.pop("_paths"))
 
     # Gross projection (no fees) — only the P50 is exposed, for the comparison overlay
     mc_gross = analytics.monte_carlo_projection(

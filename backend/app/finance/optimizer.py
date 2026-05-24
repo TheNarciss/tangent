@@ -7,6 +7,7 @@ ceiling-derived weight bounds.
 """
 
 import logging
+from typing import TypedDict, cast
 
 import numpy as np
 
@@ -26,6 +27,16 @@ from ..models import (
 from . import analytics, cma, envelopes, market
 
 logger = logging.getLogger(__name__)
+
+
+class _SLSQPResult(TypedDict):
+    """Contract of analytics._solve_slsqp() return value."""
+
+    weights: list[float]
+    expected_return: float
+    volatility: float
+    sharpe: float
+    success: bool
 
 
 def build(req: OptimizerRequest, portfolio_data=None) -> OptimizerResponse:
@@ -95,30 +106,39 @@ def build(req: OptimizerRequest, portfolio_data=None) -> OptimizerResponse:
             "Objective 'from_strategy' requires max_volatility AND target_return."
         )
 
-    optimal = analytics._solve_slsqp(
-        mu,
-        cov,
-        bounds,
-        req.objective,
-        rf,
-        req.max_volatility,
-        req.target_return,
+    optimal: _SLSQPResult = cast(
+        _SLSQPResult,
+        analytics._solve_slsqp(
+            mu,
+            cov,
+            bounds,
+            req.objective,
+            rf,
+            req.max_volatility,
+            req.target_return,
+        ),
     )
 
     # Feasibility check for from_strategy: if SLSQP failed, compute the achievable
     # benchmark (max μ at σ_max) to tell the user exactly what's blocking.
     if req.objective == "from_strategy" and not optimal.get("success", True):
+        # Guarded by ConfigurationError raised above for from_strategy.
+        assert req.max_volatility is not None
+        assert req.target_return is not None
         try:
-            best_at_vol = analytics._solve_slsqp(
-                mu,
-                cov,
-                bounds,
-                "target_volatility",
-                rf,
-                req.max_volatility,
-                None,
+            best_at_vol = cast(
+                _SLSQPResult,
+                analytics._solve_slsqp(
+                    mu,
+                    cov,
+                    bounds,
+                    "target_volatility",
+                    rf,
+                    req.max_volatility,
+                    None,
+                ),
             )
-            achievable = float(best_at_vol["expected_return"])
+            achievable = best_at_vol["expected_return"]
             raise InfeasibleStrategyError(
                 f"Infeasible strategy: with σ ≤ {req.max_volatility * 100:.1f}%, the best achievable "
                 f"return is {achievable * 100:.2f}%/year. You target {req.target_return * 100:.2f}%. "

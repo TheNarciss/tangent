@@ -40,8 +40,14 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
     # ── Validations custom au moment du register ──
 
-    async def validate_password(self, password: str, user: UserCreate | User) -> None:
-        """Règles de mot de passe (silently log, raise InvalidPasswordException si KO)."""
+    async def validate_password(  # type: ignore[override]
+        self, password: str, user: UserCreate | User
+    ) -> None:
+        """Règles de mot de passe (silently log, raise InvalidPasswordException si KO).
+
+        type: ignore[override] : UserCreate is our concrete UC TypeVar, narrower than
+        the parent's `UC | User`. Liskov is technically violated but runtime is safe.
+        """
         if len(password) < 8:
             raise exceptions.InvalidPasswordException(
                 reason="Le mot de passe doit faire au moins 8 caractères."

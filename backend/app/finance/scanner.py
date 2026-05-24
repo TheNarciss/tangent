@@ -13,6 +13,7 @@ Cache : univers par mode 24 h (limite quota yfinance).
 
 import logging
 import time
+from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
@@ -31,7 +32,7 @@ _UNIVERSE_CACHE: dict[str, tuple[float, list[dict]]] = {}
 _CACHE_TTL_SECONDS = 24 * 3600
 
 # Constructeurs de query par mode. Toutes restreintes à Euronext Paris.
-_MODE_BUILDERS: dict[str, callable] = {
+_MODE_BUILDERS: dict[str, Callable[[], EquityQuery]] = {
     "broad_eu": lambda: EquityQuery(
         "and",
         [
