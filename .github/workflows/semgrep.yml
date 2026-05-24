@@ -16,7 +16,7 @@ jobs:
       image: semgrep/semgrep
     if: (github.actor != 'dependabot[bot]')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # Règles "auto" : détecte langages + applique rulesets adaptés
       # (p/python, p/typescript, p/react, p/javascript, OWASP Top 10, etc.)
