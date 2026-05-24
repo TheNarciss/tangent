@@ -28,7 +28,8 @@ from pwdlib import PasswordHash
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..db.models import PasswordResetToken, User
+from ..db.models import PasswordResetToken
+from .models import User
 
 logger = logging.getLogger(__name__)
 

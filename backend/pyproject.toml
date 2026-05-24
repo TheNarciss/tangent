@@ -70,3 +70,16 @@ warn_unreachable = true
 ignore_missing_imports = true
 plugins = ["pydantic.mypy"]
 exclude = ["alembic/", "tests/"]
+
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+testpaths = ["tests"]
+addopts = "-v --tb=short --strict-markers"
+markers = [
+    "integration: requires a running Postgres DB (slower)",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
