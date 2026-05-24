@@ -47,9 +47,13 @@ jobs:
         working-directory: backend
         run: |
           pip install -e .
-          pip install pytest pytest-asyncio httpx pytest-cov
+          pip install pytest pytest-asyncio httpx pytest-cov mypy
 
-      - name: Run tests
+      - name: Mypy typecheck
+        working-directory: backend
+        run: mypy app/
+
+      - name: Run tests with coverage
         working-directory: backend
         env:
           DATABASE_URL: "postgresql+asyncpg://tangent:tangent_dev@localhost:5432/tangent"
@@ -58,7 +62,16 @@ jobs:
           POWENS_TOKEN_ENCRYPTION_KEY: "JzPK9Z-AjUYY4i_aQB9OBSqz_LIBOX6r4l5MmYFlBog="
           COOKIE_SECURE: "false"
           CORS_ORIGINS: "http://localhost:3000"
-        run: pytest
+        run: |
+          pytest --cov=app --cov-report=term --cov-report=xml --cov-fail-under=30
+
+      - name: Upload coverage as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: backend/coverage.xml
+          retention-days: 7
 
   frontend:
     name: Frontend (lint + typecheck + build)
