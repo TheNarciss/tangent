@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend (lint + format + tests)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: tangent
+          POSTGRES_PASSWORD: tangent_dev
+          POSTGRES_DB: tangent
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tangent"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install "ruff>=0.5,<1"
+
+      - name: Ruff lint
+        working-directory: backend
+        run: ruff check app/
+
+      - name: Ruff format check
+        working-directory: backend
+        run: ruff format app/ --check
+
+      - name: Install backend deps + test deps
+        working-directory: backend
+        run: |
+          pip install -e .
+          pip install pytest pytest-asyncio httpx pytest-cov
+
+      - name: Run tests
+        working-directory: backend
+        env:
+          DATABASE_URL: "postgresql+asyncpg://tangent:tangent_dev@localhost:5432/tangent"
+          JWT_SECRET: "ci-test-secret-not-for-production-32-bytes-min"
+          RESET_TOKEN_SECRET: "ci-test-reset-secret-not-for-production"
+          POWENS_TOKEN_ENCRYPTION_KEY: "JzPK9Z-AjUYY4i_aQB9OBSqz_LIBOX6r4l5MmYFlBog="
+          COOKIE_SECURE: "false"
+          CORS_ORIGINS: "http://localhost:3000"
+        run: pytest
+
+  frontend:
+    name: Frontend (lint + typecheck + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: ESLint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: TypeScript typecheck
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Prettier format check
+        working-directory: frontend
+        run: npm run format:check
+
+      - name: Build
+        working-directory: frontend
+        env:
+          VITE_API_URL: "http://localhost:8000"
+        run: npm run build
