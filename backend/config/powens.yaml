@@ -35,3 +35,17 @@ account_type_mapping:
   checking: "checking"
   loan: "loan"
   market: "cto"
+
+# Mapping Powens type → AccountType enum (neutral taxonomy, cf app/aggregator/types.py)
+# Used by PowensAggregator to translate Powens-native types to provider-agnostic DTOs.
+account_type_to_neutral:
+  checking: "checking"
+  savings: "savings"
+  pea: "pea"
+  cto: "cto"
+  market: "cto"           # Powens uses "market" for classic CTO
+  lifeinsurance: "life_insurance"
+  loan: "loan"
+  card: "card"
+  crypto: "crypto"
+  deposit: "savings"      # term deposit → savings
