@@ -4,7 +4,7 @@
         path /portfolio* /dashboard* /timeseries* /transactions*
         path /optimizer* /projection* /strategy* /bengen* /scan*
         path /brokers* /envelopes/* /profile*
-        path /watchlist* /powens* /sync/* /webhooks/*
+        path /watchlist* /powens* /sync/* /webhooks/* /accounts*
         path /admin* /health
     }
     reverse_proxy @api backend:8000
