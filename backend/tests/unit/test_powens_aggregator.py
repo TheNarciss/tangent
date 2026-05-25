@@ -49,12 +49,13 @@ async def test_get_accounts_maps_pea_correctly(aggregator, monkeypatch):
         }
     ]
 
-    # Patch PowensClient.get_accounts to return fake_data
     async def fake_get_accounts(self):
         return fake_data
 
-    monkeypatch.setattr("app.powens.aggregator.PowensClient.get_accounts", fake_get_accounts)
-    # Also patch __aenter__/__aexit__ to be no-ops
+    async def fake_get_connections(self):
+        return []
+
+    monkeypatch.setattr("app.powens.aggregator.PowensClient.__init__", lambda self, token: None)
     monkeypatch.setattr(
         "app.powens.aggregator.PowensClient.__aenter__",
         lambda self: AsyncMock(return_value=self)(),
@@ -63,7 +64,10 @@ async def test_get_accounts_maps_pea_correctly(aggregator, monkeypatch):
         "app.powens.aggregator.PowensClient.__aexit__",
         lambda self, *_: AsyncMock()(),
     )
-    monkeypatch.setattr("app.powens.aggregator.PowensClient.__init__", lambda self, token: None)
+    monkeypatch.setattr(
+        "app.powens.aggregator.PowensClient.get_connections", fake_get_connections
+    )
+    monkeypatch.setattr("app.powens.aggregator.PowensClient.get_accounts", fake_get_accounts)
 
     accounts = await aggregator.get_accounts()
     assert len(accounts) == 1
@@ -82,6 +86,13 @@ async def test_get_accounts_unknown_type_falls_back_to_other(aggregator, monkeyp
     fake_data = [
         {"id": 99, "name": "Exotic", "type": "rocket_fund", "currency": "EUR", "balance": 1}
     ]
+
+    async def fake_get_accounts(self):
+        return fake_data
+
+    async def fake_get_connections(self):
+        return []
+
     monkeypatch.setattr("app.powens.aggregator.PowensClient.__init__", lambda self, token: None)
     monkeypatch.setattr(
         "app.powens.aggregator.PowensClient.__aenter__",
@@ -91,11 +102,10 @@ async def test_get_accounts_unknown_type_falls_back_to_other(aggregator, monkeyp
         "app.powens.aggregator.PowensClient.__aexit__",
         lambda self, *_: AsyncMock()(),
     )
-
-    async def fake(self):
-        return fake_data
-
-    monkeypatch.setattr("app.powens.aggregator.PowensClient.get_accounts", fake)
+    monkeypatch.setattr(
+        "app.powens.aggregator.PowensClient.get_connections", fake_get_connections
+    )
+    monkeypatch.setattr("app.powens.aggregator.PowensClient.get_accounts", fake_get_accounts)
 
     accounts = await aggregator.get_accounts()
     assert accounts[0].type == AccountType.OTHER
@@ -202,3 +212,107 @@ async def test_get_transactions_maps_amount_and_category(aggregator, monkeypatch
     assert tx.transaction_date == date(2026, 5, 20)
     assert tx.description == "Carrefour"
     assert tx.category == "Groceries"
+
+
+# ── institution_name mapping via /connections ──────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_get_accounts_maps_institution_name_from_connections(aggregator, monkeypatch):
+    """Each account is enriched with institution_name via id_connection → connector.name."""
+    fake_connections = [
+        {"id": 10, "connector": {"id": 59, "name": "BNP Paribas"}},
+        {"id": 20, "connector": {"id": 99, "name": "Banque Populaire"}},
+    ]
+    fake_accounts = [
+        {
+            "id": 1234,
+            "id_connection": 10,
+            "name": "PEA Titres",
+            "type": "pea",
+            "currency": {"id": "EUR"},
+            "balance": 15000.0,
+        },
+        {
+            "id": 5678,
+            "id_connection": 20,
+            "name": "Livret A",
+            "type": "savings",
+            "currency": {"id": "EUR"},
+            "balance": 5000.0,
+        },
+        {
+            "id": 9999,
+            # No id_connection — institution_name should be None
+            "name": "Orphan",
+            "type": "checking",
+            "currency": {"id": "EUR"},
+            "balance": 0.0,
+        },
+    ]
+
+    monkeypatch.setattr("app.powens.aggregator.PowensClient.__init__", lambda self, token: None)
+    monkeypatch.setattr(
+        "app.powens.aggregator.PowensClient.__aenter__",
+        lambda self: AsyncMock(return_value=self)(),
+    )
+    monkeypatch.setattr(
+        "app.powens.aggregator.PowensClient.__aexit__",
+        lambda self, *_: AsyncMock()(),
+    )
+
+    async def fake_conns(self):
+        return fake_connections
+
+    async def fake_accs(self):
+        return fake_accounts
+
+    monkeypatch.setattr("app.powens.aggregator.PowensClient.get_connections", fake_conns)
+    monkeypatch.setattr("app.powens.aggregator.PowensClient.get_accounts", fake_accs)
+
+    accounts = await aggregator.get_accounts()
+    assert len(accounts) == 3
+    by_name = {a.name: a for a in accounts}
+    assert by_name["PEA Titres"].institution_name == "BNP Paribas"
+    assert by_name["Livret A"].institution_name == "Banque Populaire"
+    assert by_name["Orphan"].institution_name is None
+
+
+@pytest.mark.asyncio
+async def test_get_accounts_falls_back_when_connections_fail(aggregator, monkeypatch):
+    """If /connections fails, accounts still returned with institution_name=None."""
+    from app.powens.client import PowensError
+
+    fake_accounts = [
+        {
+            "id": 1,
+            "id_connection": 10,
+            "name": "PEA Titres",
+            "type": "pea",
+            "currency": "EUR",
+            "balance": 1.0,
+        },
+    ]
+
+    monkeypatch.setattr("app.powens.aggregator.PowensClient.__init__", lambda self, token: None)
+    monkeypatch.setattr(
+        "app.powens.aggregator.PowensClient.__aenter__",
+        lambda self: AsyncMock(return_value=self)(),
+    )
+    monkeypatch.setattr(
+        "app.powens.aggregator.PowensClient.__aexit__",
+        lambda self, *_: AsyncMock()(),
+    )
+
+    async def boom(self):
+        raise PowensError("simulated /connections outage")
+
+    async def fake_accs(self):
+        return fake_accounts
+
+    monkeypatch.setattr("app.powens.aggregator.PowensClient.get_connections", boom)
+    monkeypatch.setattr("app.powens.aggregator.PowensClient.get_accounts", fake_accs)
+
+    accounts = await aggregator.get_accounts()
+    assert len(accounts) == 1
+    assert accounts[0].institution_name is None
