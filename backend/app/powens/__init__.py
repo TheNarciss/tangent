@@ -4,7 +4,6 @@ Modules :
 - settings : pydantic-settings loadées depuis .env
 - client : HTTP client async vers l'API Powens
 - sync : pull /accounts /investments → mappe vers Position locales
-- state : tracking du dernier sync (data/powens_state.json)
 - webhooks : handler des events CONNECTION_SYNCED etc.
 """
 

@@ -1,11 +1,11 @@
-"""Powens routes — per-user OAuth + sync (no more superuser hack).
+"""Powens routes — per-user OAuth + sync (multi-tenant safe).
 
-Each authenticated user manages their own Powens token. The token is
-identified via the tangent_auth cookie (SameSite=lax → sent on Powens
-redirect to /auth/powens/callback).
+Each authenticated user manages their own Powens token. All sync state
+(last_sync_at, last_error, etc.) is persisted per-user in PowensCredential.
 """
 
 import logging
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
@@ -16,7 +16,6 @@ from ..auth import User, current_active_user
 from ..db.engine import get_session
 from ..db.models import PowensCredential
 from ..powens import settings as powens_settings
-from ..powens import state as powens_state
 from ..powens.crypto import decrypt_token, encrypt_token
 from ..powens.oauth import exchange_code_for_token
 from ..powens.sync import sync_portfolio
@@ -43,15 +42,11 @@ async def get_powens_webview(user: User = Depends(current_active_user)):
 @router.get("/auth/powens/callback")
 async def powens_auth_callback(
     code: str,
-    user: User = Depends(current_active_user),  # ← identifies user via tangent_auth cookie
+    user: User = Depends(current_active_user),
     connection_id: str | None = None,
     session: AsyncSession = Depends(get_session),
 ):
-    """OAuth callback — exchange code for token and store it for THIS user.
-
-    SameSite=lax allows the tangent_auth cookie to be sent on the Powens
-    top-level redirect, so current_active_user works here.
-    """
+    """OAuth callback — exchange code for token and store it for THIS user."""
     try:
         token_data = await exchange_code_for_token(code)
     except Exception:
@@ -66,7 +61,6 @@ async def powens_auth_callback(
             url=f"{powens_settings.frontend_url}/?powens_sync=error&error=no_access_token"
         )
 
-    # Upsert credential for THIS user (not "the first superuser")
     stmt = select(PowensCredential).where(PowensCredential.user_id == user.id)
     res = await session.execute(stmt)
     cred = res.scalars().first()
@@ -90,7 +84,7 @@ async def post_sync_powens(
     user: User = Depends(current_active_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """Trigger a sync for the current user (no superuser required)."""
+    """Trigger a Powens sync for the current user (multi-tenant safe)."""
     stmt = select(PowensCredential).where(PowensCredential.user_id == user.id)
     res = await session.execute(stmt)
     cred = res.scalars().first()
@@ -101,13 +95,14 @@ async def post_sync_powens(
             detail="No Powens connection. Click 'Connect Powens' first.",
         )
 
-    # TODO Phase 5 proper: pass token to sync_portfolio(user_id, token) directly.
-    # For now: temporarily inject into global settings (still mono-user under the hood).
-    powens_settings.user_token = decrypt_token(cred.encrypted_token)
+    token = decrypt_token(cred.encrypted_token)
 
-    result = await sync_portfolio()
+    result = await sync_portfolio(
+        token=token,
+        user_id=user.id,
+        session=session,
+    )
 
-    # Persist positions to DB for THIS user (multi-tenant)
     if result.success and result.positions:
         positions_data = [p.model_dump() for p in result.positions]
         await portfolio_repo.replace_positions(
@@ -116,7 +111,11 @@ async def post_sync_powens(
             new_positions=positions_data,
             cash=result.cash_balance,
         )
-        logger.info("Persisted %d positions to DB for user_id=%s", len(result.positions), user.id)
+        logger.info(
+            "Persisted %d positions to DB for user_id=%s",
+            len(result.positions),
+            user.id,
+        )
 
     return result
 
@@ -126,26 +125,44 @@ async def get_sync_status(
     user: User = Depends(current_active_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """Status of the user's Powens connection + last sync."""
+    """Status of the user's Powens connection + last sync (per-user, from DB)."""
     stmt = select(PowensCredential).where(PowensCredential.user_id == user.id)
     res = await session.execute(stmt)
-    has_cred = res.scalars().first() is not None
+    cred = res.scalars().first()
 
-    st = powens_state.load()
+    if cred is None:
+        return {
+            "configured": powens_settings.is_configured,
+            "user_connected": False,
+            "last_sync": None,
+            "last_webhook": None,
+            "last_error": None,
+            "age_hours": None,
+            "positions_count": 0,
+            "cash_balance": 0.0,
+            "is_stale": False,
+        }
+
+    age_hours: float | None = None
+    if cred.last_sync_at:
+        age_hours = (datetime.now(UTC) - cred.last_sync_at).total_seconds() / 3600
+
+    is_stale = age_hours is None or age_hours > powens_settings.autosync_threshold_hours
+
     return {
         "configured": powens_settings.is_configured,
-        "user_connected": has_cred,
-        "last_sync": st.last_sync.isoformat() if st.last_sync else None,
-        "last_webhook": st.last_webhook.isoformat() if st.last_webhook else None,
-        "last_error": st.last_error,
-        "age_hours": st.age_hours,
-        "positions_count": st.positions_count,
-        "cash_balance": st.cash_balance,
-        "is_stale": powens_state.is_stale(),
+        "user_connected": True,
+        "last_sync": cred.last_sync_at.isoformat() if cred.last_sync_at else None,
+        "last_webhook": cred.last_webhook_at.isoformat() if cred.last_webhook_at else None,
+        "last_error": cred.last_error,
+        "age_hours": age_hours,
+        "positions_count": cred.last_positions_count,
+        "cash_balance": cred.last_cash_balance,
+        "is_stale": is_stale,
     }
 
 
 @router.post("/webhooks/powens")
 async def post_webhook_powens(payload: dict):
-    """Powens webhooks (CONNECTION_SYNCED, etc.). No auth — Powens-to-server."""
+    """Powens webhooks — handler disabled until Phase A per-user mapping."""
     return await powens_handle_webhook(payload)

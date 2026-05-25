@@ -1,7 +1,7 @@
 """Client HTTP async pour l'API Powens.
 
 Wrapper minimal autour de httpx avec :
-- Auth Bearer automatique
+- Auth Bearer per-user (token passé en paramètre, plus de global state)
 - Retry léger sur 5xx (max 2 retries)
 - Timeout configurable
 - Exceptions explicites (PowensAuthError vs PowensConnectorError vs PowensConflictError)
@@ -35,21 +35,23 @@ class PowensConflictError(PowensError):
 
 
 class PowensClient:
-    """Client minimaliste pour /users/me/* endpoints.
+    """Client minimaliste pour /users/me/* endpoints (multi-tenant safe).
+
+    Le token est passé en paramètre, jamais lu depuis un global. Chaque user
+    Tangent a son propre token chiffré en DB.
 
     Usage :
-        async with PowensClient() as client:
+        async with PowensClient(token=user_token) as client:
             accounts = await client.get_accounts()
     """
 
-    def __init__(self) -> None:
-        if not settings.is_configured:
-            raise PowensError(
-                "Powens non configuré : remplis backend/.env avec POWENS_DOMAIN, "
-                "POWENS_USER_TOKEN, POWENS_CONNECTION_ID."
-            )
+    def __init__(self, token: str) -> None:
+        if not settings.domain:
+            raise PowensError("Powens not configured: POWENS_DOMAIN missing in .env")
+        if not token:
+            raise PowensError("PowensClient requires a non-empty token")
         self.base_url = settings.base_url
-        self.token = settings.user_token
+        self.token = token
         timeout = yaml_config.get("request_timeout_seconds", 30)
         self._client = httpx.AsyncClient(
             base_url=self.base_url,
@@ -71,15 +73,13 @@ class PowensClient:
                 response = await self._client.request(method, path, **kwargs)
                 if response.status_code == 401:
                     raise PowensAuthError(
-                        "Powens 401 : token user expiré ou invalide. "
-                        "Refais le flow OAuth et mets à jour POWENS_USER_TOKEN dans .env."
+                        "Powens 401: token expired or invalid. User must re-OAuth."
                     )
                 if response.status_code == 409:
                     raise PowensConflictError(f"Powens 409 sur {path} : {response.text[:200]}")
                 if response.status_code == 404:
                     raise PowensConnectorError(f"Powens 404 sur {path} — ressource introuvable.")
                 if response.status_code >= 500:
-                    # Retry sur 5xx
                     last_exc = PowensError(f"Powens {response.status_code} sur {path}")
                     await asyncio.sleep(0.5 * (attempt + 1))
                     continue
@@ -90,7 +90,7 @@ class PowensClient:
                 logger.warning("Powens timeout (tentative %d) sur %s", attempt + 1, path)
                 await asyncio.sleep(0.5 * (attempt + 1))
             except (PowensAuthError, PowensConflictError, PowensConnectorError):
-                raise  # pas de retry sur ces erreurs
+                raise
         raise PowensError(f"Powens unreachable après 3 tentatives : {last_exc}")
 
     # ── Endpoints publics ───────────────────────────────────────────────────

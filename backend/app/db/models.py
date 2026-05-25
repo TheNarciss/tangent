@@ -200,7 +200,12 @@ class Profile(Base):
 
 
 class PowensCredential(Base):
-    """Stocke le user_token Powens chiffré par utilisateur."""
+    """Stocke le user_token Powens chiffré par utilisateur + sync state (per-user).
+
+    Multi-tenant safe: chaque user_id Tangent a sa propre ligne. Toutes les
+    metadata de sync (last_sync, positions_count, etc.) sont per-user et lues
+    via /sync/status filtré par user_id.
+    """
 
     __tablename__ = "powens_credentials"
 
@@ -212,6 +217,13 @@ class PowensCredential(Base):
         unique=True,
     )
     encrypted_token: Mapped[str] = mapped_column(String, nullable=False)
+
+    # Per-user sync state (replaces the deprecated module-level powens.state)
+    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    last_webhook_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    last_error: Mapped[str | None] = mapped_column(Text, default=None)
+    last_positions_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_cash_balance: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

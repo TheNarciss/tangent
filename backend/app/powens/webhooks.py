@@ -1,65 +1,42 @@
-"""Handler des webhooks Powens.
+"""Powens webhooks — DISABLED until Phase A.
 
-Powens POST sur /webhooks/powens à chaque event de sync (par défaut
-CONNECTION_SYNCED, fires quand la sync quotidienne automatique se termine).
+Powens POST sur /webhooks/powens à chaque event de sync (CONNECTION_SYNCED, etc.).
 
-Notre handler trigger un sync_portfolio() à chaque CONNECTION_SYNCED
-qui correspond à notre connexion (filtré sur connection_id).
+⚠️ MULTI-TENANT BLOCKER: Le handler ne peut pas mapper id_user Powens →
+user_id Tangent sans stocker `powens_user_id` dans powens_credentials.
+Désactivé temporairement pour éviter tout sync cross-tenant.
 
-Note sécurité : Powens ne signe pas les webhooks (pas de HMAC standard).
-On valide simplement que le payload contient bien le connection_id attendu
-et que la requête vient d'une IP raisonnable (à durcir en prod).
+À réactiver en Phase A après l'ajout de la colonne `powens_user_id` et
+du mapping correspondant (cf ADR-019).
 """
 
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
 from typing import Any
-
-from . import settings, state
-from .sync import sync_portfolio
 
 logger = logging.getLogger(__name__)
 
 
-# Events qu'on traite — les autres sont silently ignored
-_HANDLED_EVENTS = {"CONNECTION_SYNCED", "ACCOUNTS_FETCHED", "ACCOUNT_SYNCED"}
-
-
 async def handle_webhook(payload: dict[str, Any]) -> dict:
-    """Route un payload webhook Powens.
+    """[DISABLED — multi-tenant TODO Phase A] Skip all webhook auto-sync.
 
-    Returns dict avec status + détails — utile pour debug via webhook.site.
+    Sans mapping id_user Powens → user_id Tangent, on ne peut pas trigger
+    un sync user-scoped sans risque de cross-tenant leak.
     """
     event_type = payload.get("event") or payload.get("event_type") or "UNKNOWN"
     connection_id = payload.get("id_connection") or payload.get("connection_id")
+    powens_user_id = payload.get("id_user") or payload.get("user_id")
 
-    logger.info("Powens webhook reçu : event=%s connection_id=%s", event_type, connection_id)
-
-    # Note la réception du webhook même si on ne le traite pas
-    st = state.load()
-    st.last_webhook = datetime.now(UTC)
-    state.save(st)
-
-    # Filtre 1 : event qui nous intéresse ?
-    if event_type not in _HANDLED_EVENTS:
-        return {"status": "ignored", "reason": f"event_type={event_type} non géré"}
-
-    # Filtre 2 : c'est bien NOTRE connexion ?
-    if connection_id and settings.connection_id and connection_id != settings.connection_id:
-        return {
-            "status": "ignored",
-            "reason": f"connection_id={connection_id} ≠ POWENS_CONNECTION_ID={settings.connection_id}",
-        }
-
-    # Trigger un sync
-    logger.info("Powens webhook %s → trigger sync_portfolio()", event_type)
-    result = await sync_portfolio()
+    logger.warning(
+        "Powens webhook received but handler disabled — "
+        "event=%s connection_id=%s powens_user_id=%s. "
+        "Re-enable in Phase A with per-user mapping (cf ADR-019).",
+        event_type,
+        connection_id,
+        powens_user_id,
+    )
     return {
-        "status": "ok",
-        "triggered_sync": True,
-        "sync_success": result.success,
-        "positions_count": result.positions_count,
-        "error": result.error,
+        "status": "ignored",
+        "reason": "webhook handler disabled (multi-tenant TODO Phase A — cf ADR-019)",
     }
