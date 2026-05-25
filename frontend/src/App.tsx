@@ -11,6 +11,7 @@ import {
   type OptimizerRequest,
 } from "@/api";
 import { ageFromBirthDate, useProfile } from "@/lib/profile";
+import { Accounts } from "@/components/Accounts";
 import { Assets } from "@/components/Assets";
 import { PowensCallbackHandler } from "@/components/PowensCallback";
 import { AuthScreen } from "@/components/auth/AuthScreen";
@@ -93,8 +94,9 @@ function Dashboard() {
 
         {dashboard.data && (
           <Tabs defaultValue="overview" className="space-y-6">
-            <TabsList className="grid grid-cols-2 sm:grid-cols-4 w-full max-w-2xl">
+            <TabsList className="grid grid-cols-2 sm:grid-cols-5 w-full max-w-3xl">
               <TabsTrigger value="overview">Aperçu</TabsTrigger>
+              <TabsTrigger value="accounts">Comptes</TabsTrigger>
               <TabsTrigger value="history">Historique</TabsTrigger>
               <TabsTrigger value="projection">Projection</TabsTrigger>
               <TabsTrigger value="optimization">Optimisation</TabsTrigger>
@@ -105,6 +107,10 @@ function Dashboard() {
               <Assets assets={dashboard.data.metrics.assets} />
               <StressTests stressTests={dashboard.data.stress_tests} />
               <Insights insights={dashboard.data.insights} />
+            </TabsContent>
+
+            <TabsContent value="accounts" className="space-y-6">
+              <Accounts />
             </TabsContent>
 
             <TabsContent value="history" className="space-y-6">

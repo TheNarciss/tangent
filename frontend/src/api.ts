@@ -666,3 +666,99 @@ export function useConfirmReset() {
       }),
   });
 }
+
+/* ── Bank Accounts (Phase A — multi-account aggregation) ──────────────────── */
+
+export type BankAccountType =
+  | "checking"
+  | "savings"
+  | "pea"
+  | "cto"
+  | "life_insurance"
+  | "loan"
+  | "card"
+  | "crypto"
+  | "other";
+
+export interface BankAccountResponse {
+  id: string;
+  provider: string;
+  provider_account_id: string;
+  name: string;
+  type: BankAccountType;
+  currency: string;
+  balance: number;
+  iban: string | null;
+  institution_name: string | null;
+  last_synced_at: string | null;
+}
+
+export interface HoldingResponse {
+  id: string;
+  bank_account_id: string;
+  provider_investment_id: string;
+  ticker: string;
+  isin: string | null;
+  label: string;
+  quantity: number;
+  unit_price: number;
+  current_value: number;
+  currency: string;
+}
+
+export interface BankTransactionResponse {
+  id: string;
+  bank_account_id: string;
+  provider_transaction_id: string;
+  amount: number;
+  currency: string;
+  transaction_date: string;
+  description: string;
+  category: string | null;
+}
+
+export interface SyncReport {
+  success: boolean;
+  accounts_persisted: number;
+  holdings_persisted: number;
+  transactions_persisted: number;
+  error: string | null;
+  synced_at: string;
+}
+
+export function useBankAccounts() {
+  return useQuery({
+    queryKey: ["bank-accounts"],
+    queryFn: () => http<BankAccountResponse[]>("/accounts"),
+    staleTime: 60_000,
+  });
+}
+
+export function useAccountHoldings(accountId: string | null) {
+  return useQuery({
+    queryKey: ["bank-accounts", accountId, "holdings"],
+    queryFn: () => http<HoldingResponse[]>(`/accounts/${accountId}/holdings`),
+    enabled: !!accountId,
+  });
+}
+
+export function useAccountTransactions(accountId: string | null, limit = 50) {
+  return useQuery({
+    queryKey: ["bank-accounts", accountId, "transactions", limit],
+    queryFn: () =>
+      http<BankTransactionResponse[]>(`/accounts/${accountId}/transactions?limit=${limit}`),
+    enabled: !!accountId,
+  });
+}
+
+export function useSyncBankAccounts() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => http<SyncReport>("/accounts/sync", { method: "POST" }),
+    onSuccess: (result) => {
+      if (result.success) {
+        qc.invalidateQueries({ queryKey: ["bank-accounts"] });
+      }
+    },
+  });
+}
