@@ -1,6 +1,11 @@
 """Bank account routes — multi-account aggregation (Phase A3, ADR-008).
 
 All endpoints filtered by current_active_user + per-user filter in the repos.
+
+POST /accounts/sync also writes to the legacy `positions` table as a bridge,
+so the dashboard/historique/optimisation tabs (which still read from the
+legacy Portfolio model) keep working while we migrate them to read from
+account_holdings directly. To be removed once the migration is complete.
 """
 
 from __future__ import annotations
@@ -23,6 +28,7 @@ from ..powens.crypto import decrypt_token
 from ..repositories import account_holdings as holdings_repo
 from ..repositories import bank_accounts as accounts_repo
 from ..repositories import bank_transactions as bank_txs_repo
+from ..repositories import portfolio as portfolio_repo
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/accounts", tags=["accounts"])
@@ -75,6 +81,7 @@ class SyncReport(BaseModel):
     accounts_persisted: int = 0
     holdings_persisted: int = 0
     transactions_persisted: int = 0
+    legacy_positions_synced: int = 0
     error: str | None = None
     synced_at: datetime
 
@@ -194,7 +201,12 @@ async def sync_accounts(
     user: User = Depends(current_active_user),
     session: AsyncSession = Depends(get_session),
 ) -> SyncReport:
-    """End-to-end sync: PowensAggregator → persist into bank_accounts/holdings/transactions."""
+    """End-to-end sync: PowensAggregator → persist into bank_accounts/holdings/transactions.
+
+    Also syncs into the legacy `positions` table as a bridge, so dashboard/
+    historique/optimisation tabs keep working until they're migrated to read
+    from account_holdings directly.
+    """
     stmt = select(PowensCredential).where(PowensCredential.user_id == user.id)
     res = await session.execute(stmt)
     cred = res.scalars().first()
@@ -211,7 +223,7 @@ async def sync_accounts(
     if not result.success:
         return SyncReport(success=False, error=result.error, synced_at=result.synced_at)
 
-    # Persist via repositories (idempotent)
+    # Persist into the new multi-account tables (idempotent)
     account_id_map: dict[str, uuid.UUID] = {}
     persisted_accounts = 0
     for acc_dto in result.accounts:
@@ -243,12 +255,18 @@ async def sync_accounts(
             )
             persisted_txs += inserted
 
+    # ── Legacy bridge: sync to portfolios/positions table ────────────────────
+    # The legacy dashboard/historique/optimisation routes still read from this
+    # table. Until we migrate them, derive legacy data from the new sync result.
+    legacy_positions_count = await _sync_to_legacy_portfolio(session, user.id, result)
+
     logger.info(
-        "Sync user=%s: %d accounts, %d holdings, %d new txs",
+        "Sync user=%s: %d accounts, %d holdings, %d new txs, %d legacy positions",
         user.id,
         persisted_accounts,
         persisted_holdings,
         persisted_txs,
+        legacy_positions_count,
     )
 
     return SyncReport(
@@ -256,5 +274,83 @@ async def sync_accounts(
         accounts_persisted=persisted_accounts,
         holdings_persisted=persisted_holdings,
         transactions_persisted=persisted_txs,
+        legacy_positions_synced=legacy_positions_count,
         synced_at=result.synced_at,
     )
+
+
+# ── Internal: legacy bridge ─────────────────────────────────────────────────
+
+
+_INVESTMENT_ACCOUNT_TYPES = {
+    AccountType.PEA,
+    AccountType.CTO,
+    AccountType.LIFE_INSURANCE,
+}
+
+_CASH_NAME_HINTS = ("espèces", "especes", "cash", "liquidités", "liquidites")
+
+
+def _is_pea_cash_account(acc) -> bool:
+    """Heuristic: a PEA sub-account named 'Espèces' / 'Cash' holds cash, not titles."""
+    if acc.type != AccountType.PEA:
+        return False
+    name_lower = (acc.name or "").lower()
+    return any(hint in name_lower for hint in _CASH_NAME_HINTS)
+
+
+async def _sync_to_legacy_portfolio(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    result,
+) -> int:
+    """Derive legacy Position list from the multi-account sync result and persist.
+
+    Aggregates holdings across all investment accounts by ticker (weighted-average
+    avg_cost if the same ticker appears in multiple accounts). Cash is the sum
+    of all PEA Espèces / Cash account balances.
+
+    Returns the number of legacy positions written.
+    """
+    # Build ticker → aggregated position
+    positions_by_ticker: dict[str, dict] = {}
+    for inv in result.investments:
+        if inv.quantity <= 0:
+            continue
+        if inv.ticker in positions_by_ticker:
+            existing = positions_by_ticker[inv.ticker]
+            total_qty = existing["quantity"] + inv.quantity
+            if total_qty > 0:
+                weighted_cost = (
+                    existing["quantity"] * existing["avg_cost"] + inv.quantity * inv.unit_price
+                ) / total_qty
+            else:
+                weighted_cost = 0.0
+            existing["quantity"] = total_qty
+            existing["avg_cost"] = weighted_cost
+        else:
+            positions_by_ticker[inv.ticker] = {
+                "ticker": inv.ticker,
+                "quantity": float(inv.quantity),
+                "avg_cost": float(inv.unit_price),
+                "isin": inv.isin,
+                "label": inv.label,
+            }
+
+    # Sum PEA cash balances
+    cash = 0.0
+    for acc in result.accounts:
+        if _is_pea_cash_account(acc):
+            cash += float(acc.balance)
+
+    legacy_positions = list(positions_by_ticker.values())
+
+    # Always write, even if empty — this also clears stale legacy positions
+    # when the user has no more investments (idempotent overwrite).
+    await portfolio_repo.replace_positions(
+        session,
+        user_id,
+        new_positions=legacy_positions,
+        cash=cash,
+    )
+    return len(legacy_positions)

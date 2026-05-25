@@ -90,46 +90,59 @@ function Dashboard() {
         </header>
 
         {dashboard.isLoading && <p className="text-sm text-muted-foreground">Chargement…</p>}
-        {dashboard.isError && <DashboardErrorPanel error={dashboard.error} />}
 
-        {dashboard.data && (
-          <Tabs defaultValue="overview" className="space-y-6">
-            <TabsList className="grid grid-cols-2 sm:grid-cols-5 w-full max-w-3xl">
-              <TabsTrigger value="overview">Aperçu</TabsTrigger>
-              <TabsTrigger value="accounts">Comptes</TabsTrigger>
-              <TabsTrigger value="history">Historique</TabsTrigger>
-              <TabsTrigger value="projection">Projection</TabsTrigger>
-              <TabsTrigger value="optimization">Optimisation</TabsTrigger>
-            </TabsList>
+        <Tabs defaultValue={dashboard.data ? "overview" : "accounts"} className="space-y-6">
+          <TabsList className="grid grid-cols-2 sm:grid-cols-5 w-full max-w-3xl">
+            <TabsTrigger value="overview">Aperçu</TabsTrigger>
+            <TabsTrigger value="accounts">Comptes</TabsTrigger>
+            <TabsTrigger value="history">Historique</TabsTrigger>
+            <TabsTrigger value="projection">Projection</TabsTrigger>
+            <TabsTrigger value="optimization">Optimisation</TabsTrigger>
+          </TabsList>
 
-            <TabsContent value="overview" className="space-y-6">
-              <Metrics metrics={dashboard.data.metrics} />
-              <Assets assets={dashboard.data.metrics.assets} />
-              <StressTests stressTests={dashboard.data.stress_tests} />
-              <Insights insights={dashboard.data.insights} />
-            </TabsContent>
+          <TabsContent value="overview" className="space-y-6">
+            {dashboard.isError && <DashboardErrorPanel error={dashboard.error} />}
+            {dashboard.data && (
+              <>
+                <Metrics metrics={dashboard.data.metrics} />
+                <Assets assets={dashboard.data.metrics.assets} />
+                <StressTests stressTests={dashboard.data.stress_tests} />
+                <Insights insights={dashboard.data.insights} />
+              </>
+            )}
+          </TabsContent>
 
-            <TabsContent value="accounts" className="space-y-6">
-              <Accounts />
-            </TabsContent>
+          <TabsContent value="accounts" className="space-y-6">
+            <Accounts />
+          </TabsContent>
 
-            <TabsContent value="history" className="space-y-6">
-              {timeseries.isLoading && (
-                <p className="text-sm text-muted-foreground">Chargement de l'historique…</p>
-              )}
-              {timeseries.data && <Timeline ts={timeseries.data} />}
-            </TabsContent>
+          <TabsContent value="history" className="space-y-6">
+            {timeseries.isLoading && (
+              <p className="text-sm text-muted-foreground">Chargement de l'historique…</p>
+            )}
+            {timeseries.data && <Timeline ts={timeseries.data} />}
+            {timeseries.isError && !timeseries.isLoading && (
+              <p className="text-sm text-muted-foreground">
+                Historique indisponible — ajoute des positions ou synchronise un compte d'abord.
+              </p>
+            )}
+          </TabsContent>
 
-            <TabsContent value="projection" className="space-y-6">
-              <Projection />
-              {profile && <BengenWidget profile={profile} />}
-            </TabsContent>
+          <TabsContent value="projection" className="space-y-6">
+            <Projection />
+            {profile && <BengenWidget profile={profile} />}
+          </TabsContent>
 
-            <TabsContent value="optimization" className="space-y-6">
+          <TabsContent value="optimization" className="space-y-6">
+            {dashboard.data ? (
               <OptimizationTab dashboard={dashboard.data} />
-            </TabsContent>
-          </Tabs>
-        )}
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Optimisation indisponible — ajoute des positions ou synchronise un compte d'abord.
+              </p>
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
@@ -288,7 +301,8 @@ function humanType(type: string): string {
 function errorAdvice(type: string): string | null {
   return (
     {
-      PortfolioEmptyError: "Clique sur « Modifier positions » pour ajouter au moins une ligne.",
+      PortfolioEmptyError:
+        "Va dans l'onglet « Comptes » pour synchroniser une banque, ou clique sur « Modifier positions » pour ajouter manuellement.",
       TickerNotFoundError:
         "Vérifie l'orthographe Yahoo Finance (ex: CW8.PA pour Amundi MSCI World, .PA pour Paris, .DE pour Frankfurt).",
       MarketDataError:

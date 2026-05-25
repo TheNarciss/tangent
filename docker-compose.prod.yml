@@ -8,6 +8,8 @@ services:
       CORS_ORIGINS: "https://riskybusinesses.uk,https://www.riskybusinesses.uk"
       BACKEND_URL: "https://riskybusinesses.uk"
       FRONTEND_URL: "https://riskybusinesses.uk"
+      WATCHFILES_FORCE_POLLING: ""        # disable, pas de --reload en prod
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --loop asyncio # ← NO --reload
 
   frontend:
     restart: unless-stopped
@@ -23,7 +25,7 @@ services:
     image: caddy:2-alpine
     restart: unless-stopped
     ports:
-      - "80:80"   # Bind localhost ONLY — cloudflared y accède en local
+      - "80:80"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
