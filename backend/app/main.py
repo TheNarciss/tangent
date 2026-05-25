@@ -20,6 +20,7 @@ from .db import ping as db_ping
 from .db.init_db import init_db
 from .errors import AppError
 from .routers import (
+    accounts,
     admin,
     analysis,
     dashboard,
@@ -171,6 +172,7 @@ app.include_router(
 
 # ─── Business routers (all require auth via current_active_user) ──────────
 app.include_router(portfolio.router)
+app.include_router(accounts.router)
 app.include_router(password_reset.router)
 app.include_router(dashboard.router)
 app.include_router(analysis.router)

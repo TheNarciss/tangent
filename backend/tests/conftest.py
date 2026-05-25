@@ -21,6 +21,7 @@ os.environ.setdefault(
 os.environ.setdefault("COOKIE_SECURE", "false")
 os.environ.setdefault("CORS_ORIGINS", "http://localhost:3000")
 
+import pytest  # noqa: E402
 import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 
@@ -39,3 +40,16 @@ async def client():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+
+
+@pytest.fixture(autouse=True)
+def _reset_auth_rate_limits():
+    """Wipe in-memory rate-limit counters before each test.
+
+    Without this, the 3/hour register limit (cf ADR-011) blocks any test suite
+    that creates more than 3 users via /auth/register on the same client IP.
+    """
+    from app.main import _attempts
+
+    _attempts.clear()
+    yield

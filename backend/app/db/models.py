@@ -257,3 +257,163 @@ class PasswordResetToken(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Phase A — Multi-account aggregation (ADR-008)
+#
+# These tables coexist with the legacy Portfolio/Position/Transaction (PEA-only)
+# until Phase A3 fully migrates the routes to use them. Until then, both stay.
+# ════════════════════════════════════════════════════════════════════════════
+
+
+class BankAccount(Base):
+    """Compte bancaire individuel agrégé via un provider (Powens, Bridge...).
+
+    1:N avec users. Source de vérité pour la liste de comptes (Phase A).
+    """
+
+    __tablename__ = "bank_accounts"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "provider",
+            "provider_account_id",
+            name="uq_bank_accounts_user_provider_acc",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    provider_account_id: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="EUR")
+    balance: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    iban: Mapped[str | None] = mapped_column(String(64), default=None)
+    institution_name: Mapped[str | None] = mapped_column(String(255), default=None)
+
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+    holdings: Mapped[list[AccountHolding]] = relationship(
+        back_populates="bank_account",
+        cascade="all, delete-orphan",
+    )
+    bank_transactions: Mapped[list[BankTransaction]] = relationship(
+        back_populates="bank_account",
+        cascade="all, delete-orphan",
+    )
+
+
+class AccountHolding(Base):
+    """Position dans un compte titres (PEA / CTO / life insurance).
+
+    1:N avec bank_accounts. Distinct de Position (legacy PEA-only).
+    Replace-all pattern : à chaque sync, on wipe + re-insert pour idempotence.
+    """
+
+    __tablename__ = "account_holdings"
+    __table_args__ = (
+        UniqueConstraint(
+            "bank_account_id",
+            "provider_investment_id",
+            name="uq_holdings_account_provider_inv",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    bank_account_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("bank_accounts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    provider_investment_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    ticker: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    isin: Mapped[str | None] = mapped_column(String(12), default=None)
+    label: Mapped[str] = mapped_column(String(255), nullable=False)
+    quantity: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    unit_price: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    current_value: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="EUR")
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+    bank_account: Mapped[BankAccount] = relationship(back_populates="holdings")
+
+
+class BankTransaction(Base):
+    """Transaction bancaire (checking / savings / card).
+
+    1:N avec bank_accounts. Append-only pattern : on n'efface jamais les anciennes.
+    """
+
+    __tablename__ = "bank_transactions"
+    __table_args__ = (
+        UniqueConstraint(
+            "bank_account_id",
+            "provider_transaction_id",
+            name="uq_bank_tx_account_provider_tx",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    bank_account_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("bank_accounts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    provider_transaction_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="EUR")
+    transaction_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    description: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    category: Mapped[str | None] = mapped_column(String(64), default=None, index=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+    )
+
+    bank_account: Mapped[BankAccount] = relationship(back_populates="bank_transactions")
