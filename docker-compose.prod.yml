@@ -1,5 +1,6 @@
 services:
   backend:
+    container_name: tangent-backend
     restart: unless-stopped
     env_file: ./backend/.env
     environment:
@@ -8,24 +9,27 @@ services:
       CORS_ORIGINS: "https://riskybusinesses.uk,https://www.riskybusinesses.uk"
       BACKEND_URL: "https://riskybusinesses.uk"
       FRONTEND_URL: "https://riskybusinesses.uk"
-      WATCHFILES_FORCE_POLLING: ""        # disable, pas de --reload en prod
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --loop asyncio # ← NO --reload
+      WATCHFILES_FORCE_POLLING: ""        # disable in prod — no --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
 
   frontend:
+    container_name: tangent-frontend
     restart: unless-stopped
     environment:
       VITE_API_URL: "https://riskybusinesses.uk"
 
   postgres:
+    container_name: tangent-postgres
     restart: unless-stopped
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
   caddy:
     image: caddy:2-alpine
+    container_name: tangent-caddy       # consistent naming, allows `docker restart tangent-caddy`
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "80:80"   # Bind localhost ONLY — cloudflared y accède en local
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
