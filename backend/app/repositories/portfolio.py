@@ -75,7 +75,7 @@ async def replace_positions(
     # Vide les positions existantes (relation cascade)
     for old in list(portfolio.positions):
         await session.delete(old)
-
+    await session.flush()
     # Ajoute les nouvelles
     for p in new_positions:
         if p.get("quantity", 0) <= 0:
