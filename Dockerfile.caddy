@@ -1,0 +1,26 @@
+# syntax=docker/dockerfile:1.6
+# Custom Caddy image for production: builds the Vite frontend and serves the
+# resulting static bundle directly. No separate frontend container needed.
+
+# ─── Stage 1: build the frontend bundle ─────────────────────────────────────
+FROM node:20-alpine AS builder
+WORKDIR /app
+
+# Install deps with BuildKit npm cache — fast rebuilds
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --include=dev --prefer-offline
+
+# Build the bundle
+COPY frontend/ ./
+ENV VITE_API_URL=https://riskybusinesses.uk
+RUN npm run build
+# → /app/dist contains the production bundle (index.html + hashed assets)
+
+# ─── Stage 2: Caddy with the bundle baked in ────────────────────────────────
+FROM caddy:2-alpine
+COPY --from=builder /app/dist /usr/share/caddy
+COPY Caddyfile /etc/caddy/Caddyfile
+
+EXPOSE 80
+# Default caddy entrypoint runs: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
