@@ -57,6 +57,11 @@ jobs:
         run: |
           set -euo pipefail
           docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+          # Force Caddy to reload the Caddyfile — bind-mounted file changes
+          # are NOT detected by `docker compose up` (image/env/command unchanged).
+          # `caddy reload` is zero-downtime; restart is the fallback.
+          docker exec tangent-caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile \
+            || docker restart tangent-caddy
           sleep 5
           docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
 
