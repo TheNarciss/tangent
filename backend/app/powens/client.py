@@ -99,7 +99,7 @@ class PowensClient:
         return await self._request("GET", "/users/me")
 
     async def get_connections(self) -> list[dict]:
-        data = await self._request("GET", "/users/me/connections")
+        data = await self._request("GET", "/users/me/connections?expand=connector,bank")
         return data.get("connections", [])
 
     async def get_accounts(self) -> list[dict]:
