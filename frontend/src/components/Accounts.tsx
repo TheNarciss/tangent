@@ -70,11 +70,9 @@ const CATEGORY_ICON: Record<Category, typeof Wallet> = {
 };
 
 const TYPE_LABELS: Record<BankAccountType, string> = {
-  // Cash
   checking: "Courant",
   card: "Carte",
   joint: "Joint",
-  // Savings
   savings: "Épargne",
   livret_a: "Livret A",
   livret_b: "Livret B",
@@ -83,30 +81,25 @@ const TYPE_LABELS: Record<BankAccountType, string> = {
   pel: "PEL",
   cel: "CEL",
   csl: "CSL",
-  cat: "Compte à terme",
+  cat: "CAT",
   deposit: "Dépôt",
-  // Investment
   pea: "PEA",
   cto: "CTO",
   life_insurance: "Assurance vie",
   capitalisation: "Capitalisation",
   real_estate: "Immobilier",
   crowdlending: "Crowdlending",
-  // Retirement
   per: "PER",
   perp: "PERP",
   perco: "PERCO",
   madelin: "Madelin",
-  article_83: "Article 83",
-  // Employee
+  article_83: "Art. 83",
   pee: "PEE",
   rsp: "RSP",
-  // Loans
   loan: "Prêt",
-  mortgage: "Prêt immobilier",
+  mortgage: "Prêt immo",
   consumer_credit: "Crédit conso",
-  revolving_credit: "Crédit revolving",
-  // Misc
+  revolving_credit: "Revolving",
   crypto: "Crypto",
   other: "Autre",
 };
@@ -189,7 +182,6 @@ function categorize(type: BankAccountType): Category {
 /* ── Helpers ──────────────────────────────────────────────────────────────── */
 
 function cleanName(name: string): string {
-  // Powens duplicates words sometimes: "PEA Espèces Espèces" → "PEA Espèces"
   const words = name.split(/\s+/);
   const seen = new Set<string>();
   return words
@@ -203,7 +195,7 @@ function cleanName(name: string): string {
 }
 
 function maskedIban(iban: string | null): string {
-  if (!iban) return "";
+  if (!iban) return "—";
   return `•••• ${iban.slice(-4)}`;
 }
 
@@ -212,11 +204,10 @@ function relativeTime(iso: string | null): string {
   const diff = Date.now() - new Date(iso).getTime();
   const minutes = Math.floor(diff / 60_000);
   if (minutes < 1) return "à l'instant";
-  if (minutes < 60) return `il y a ${minutes} min`;
+  if (minutes < 60) return `${minutes}min`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `il y a ${hours}h`;
-  const days = Math.floor(hours / 24);
-  return `il y a ${days}j`;
+  if (hours < 24) return `${hours}h`;
+  return `${Math.floor(hours / 24)}j`;
 }
 
 const MONTH_FR = [
@@ -250,8 +241,7 @@ function categoryTotal(accounts: BankAccountResponse[], category: Category): num
       return sum + (a.valuation ?? a.balance);
     }
     if (category === "loan") {
-      const owed = a.loan?.used_amount ?? Math.abs(a.balance);
-      return sum + owed;
+      return sum + (a.loan?.used_amount ?? Math.abs(a.balance));
     }
     return sum + a.balance;
   }, 0);
@@ -263,9 +253,8 @@ export function Accounts() {
   const accounts = useBankAccounts();
   const sync = useSyncBankAccounts();
   const refresh = useRefreshBankAccounts();
-  const [selected, setSelected] = useState<BankAccountResponse | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // Auto-sync once on mount
   const didAutoSync = useRef(false);
   useEffect(() => {
     if (!didAutoSync.current && accounts.data !== undefined) {
@@ -305,7 +294,7 @@ export function Accounts() {
   const lastReport = refresh.data ?? sync.data;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2">
@@ -355,12 +344,11 @@ export function Accounts() {
             </p>
           )}
 
-          {/* Net worth summary */}
           {accounts.data && accounts.data.length > 0 && (
             <div className="grid grid-cols-3 gap-4 pt-2">
-              <NetWorthTile label="Actifs" value={netWorth.assets} variant="positive" />
-              <NetWorthTile label="Dettes" value={netWorth.debt} variant="negative" />
-              <NetWorthTile label="Net" value={netWorth.net} variant="net" />
+              <NetWorthTile label="Actifs" value={netWorth.assets} />
+              <NetWorthTile label="Dettes" value={-netWorth.debt} negative />
+              <NetWorthTile label="Net" value={netWorth.net} bold />
             </div>
           )}
 
@@ -392,19 +380,11 @@ export function Accounts() {
               key={cat}
               category={cat}
               accounts={list}
-              selectedId={selected?.id ?? null}
-              onSelect={(a) => setSelected(selected?.id === a.id ? null : a)}
+              selectedId={selectedId}
+              onToggle={(id) => setSelectedId((prev) => (prev === id ? null : id))}
             />
           );
         })}
-
-      {/* ── Drill-down ──────────────────────────────────────────────────── */}
-      {selected && INVESTMENT_TYPES.includes(selected.type) && (
-        <AccountHoldings account={selected} />
-      )}
-      {selected && TRANSACTION_TYPES.includes(selected.type) && (
-        <AccountTransactions account={selected} />
-      )}
     </div>
   );
 }
@@ -414,22 +394,21 @@ export function Accounts() {
 function NetWorthTile({
   label,
   value,
-  variant,
+  negative,
+  bold,
 }: {
   label: string;
   value: number;
-  variant: "positive" | "negative" | "net";
+  negative?: boolean;
+  bold?: boolean;
 }) {
-  const colorClass =
-    variant === "negative"
-      ? "text-[hsl(var(--loss))]"
-      : variant === "net" && value < 0
-        ? "text-[hsl(var(--loss))]"
-        : "text-foreground";
+  const colorClass = negative || value < 0 ? "text-[hsl(var(--loss))]" : "text-foreground";
   return (
     <div>
       <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className={cn("text-lg font-mono tabular", colorClass)}>{fmt.eur(value)}</div>
+      <div className={cn("text-lg font-mono tabular", colorClass, bold && "font-semibold")}>
+        {fmt.signedEur(value)}
+      </div>
     </div>
   );
 }
@@ -440,179 +419,250 @@ function AccountSection({
   category,
   accounts,
   selectedId,
-  onSelect,
+  onToggle,
 }: {
   category: Category;
   accounts: BankAccountResponse[];
   selectedId: string | null;
-  onSelect: (a: BankAccountResponse) => void;
+  onToggle: (id: string) => void;
 }) {
   const Icon = CATEGORY_ICON[category];
   const total = categoryTotal(accounts, category);
   const isDebt = category === "loan";
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-baseline justify-between px-1">
-        <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+    <Card>
+      <CardHeader className="flex flex-row items-baseline justify-between py-3">
+        <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-2">
           <Icon className="h-4 w-4" />
           {CATEGORY_LABELS[category]}
           <span className="text-xs text-muted-foreground/70 normal-case">({accounts.length})</span>
-        </h2>
+        </CardTitle>
         <span className={cn("text-sm font-mono tabular", isDebt && "text-[hsl(var(--loss))]")}>
           {isDebt ? `−${fmt.eur(total)}` : fmt.eur(total)}
         </span>
-      </div>
-      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-        {accounts.map((a) => (
-          <AccountCard
-            key={a.id}
-            account={a}
-            category={category}
-            isSelected={selectedId === a.id}
-            onClick={() => onSelect(a)}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ── Account card (dispatch on category) ──────────────────────────────────── */
-
-function AccountCard({
-  account,
-  category,
-  isSelected,
-  onClick,
-}: {
-  account: BankAccountResponse;
-  category: Category;
-  isSelected: boolean;
-  onClick: () => void;
-}) {
-  const isClickable =
-    INVESTMENT_TYPES.includes(account.type) || TRANSACTION_TYPES.includes(account.type);
-
-  return (
-    <Card
-      onClick={isClickable ? onClick : undefined}
-      className={cn(
-        "transition relative",
-        isClickable && "cursor-pointer hover:border-primary/50",
-        isSelected && "border-primary ring-1 ring-primary/30",
-      )}
-    >
-      <CardContent className="p-4 space-y-3">
-        <CardHeading account={account} />
-        {category === "loan" && account.loan ? (
-          <LoanBody account={account} loan={account.loan} />
-        ) : category === "invest" || category === "retirement" || category === "employee" ? (
-          <InvestBody account={account} />
-        ) : (
-          <CashSavingsBody account={account} />
-        )}
-        <Footer account={account} showCaret={isClickable} isSelected={isSelected} />
+      </CardHeader>
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-8" />
+              <TableHead>Nom</TableHead>
+              <TableHead>Banque</TableHead>
+              <TableHead>{category === "loan" ? "Capital restant" : "Solde"}</TableHead>
+              <SecondaryColumnHead category={category} />
+              <TableHead className="text-right text-xs">Sync</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {accounts.map((a) => (
+              <AccountRowGroup
+                key={a.id}
+                account={a}
+                category={category}
+                isOpen={selectedId === a.id}
+                onToggle={() => onToggle(a.id)}
+              />
+            ))}
+          </TableBody>
+        </Table>
       </CardContent>
     </Card>
   );
 }
 
-function CardHeading({ account }: { account: BankAccountResponse }) {
-  return (
-    <div className="flex items-start justify-between gap-2">
-      <div className="min-w-0">
-        <div className="text-sm font-medium truncate">{cleanName(account.name)}</div>
-        <div className="text-xs text-muted-foreground truncate">
-          {account.institution_name ?? account.provider}
-        </div>
-      </div>
-      <span className="shrink-0 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-        {TYPE_LABELS[account.type]}
-      </span>
-    </div>
-  );
+function SecondaryColumnHead({ category }: { category: Category }) {
+  if (category === "invest" || category === "retirement" || category === "employee") {
+    return <TableHead>Gain / perte</TableHead>;
+  }
+  if (category === "loan") {
+    return <TableHead>Taux · Échéance</TableHead>;
+  }
+  return <TableHead className="text-muted-foreground">IBAN</TableHead>;
 }
 
-function CashSavingsBody({ account }: { account: BankAccountResponse }) {
+/* ── Row + inline accordion ───────────────────────────────────────────────── */
+
+function AccountRowGroup({
+  account,
+  category,
+  isOpen,
+  onToggle,
+}: {
+  account: BankAccountResponse;
+  category: Category;
+  isOpen: boolean;
+  onToggle: () => void;
+}) {
+  const expandable =
+    INVESTMENT_TYPES.includes(account.type) ||
+    TRANSACTION_TYPES.includes(account.type) ||
+    category === "loan";
+
   return (
-    <div>
-      <div className="text-2xl font-mono tabular">{fmt.eur(account.balance)}</div>
-      {account.iban && (
-        <div className="text-xs text-muted-foreground mt-1">{maskedIban(account.iban)}</div>
+    <>
+      <TableRow
+        onClick={expandable ? onToggle : undefined}
+        className={cn(expandable && "cursor-pointer", isOpen && "bg-accent/30")}
+      >
+        <TableCell className="w-8">
+          {expandable ? (
+            isOpen ? (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            )
+          ) : null}
+        </TableCell>
+        <TableCell className="font-medium">
+          <div className="flex items-center gap-2">
+            <span className="truncate">{cleanName(account.name)}</span>
+            <span className="shrink-0 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+              {TYPE_LABELS[account.type]}
+            </span>
+          </div>
+        </TableCell>
+        <TableCell className="text-muted-foreground text-sm">
+          {account.institution_name ?? "—"}
+        </TableCell>
+        <PrimaryValueCell account={account} category={category} />
+        <SecondaryCell account={account} category={category} />
+        <TableCell className="text-right text-xs text-muted-foreground">
+          {relativeTime(account.last_synced_at)}
+        </TableCell>
+      </TableRow>
+
+      {isOpen && (
+        <TableRow className="bg-muted/30 hover:bg-muted/30">
+          <TableCell colSpan={6} className="p-0">
+            <ExpandedRow account={account} category={category} />
+          </TableCell>
+        </TableRow>
       )}
-    </div>
+    </>
   );
 }
 
-function InvestBody({ account }: { account: BankAccountResponse }) {
-  const value = account.valuation ?? account.balance;
-  const hasDiff = account.diff !== null && account.diff_percent !== null;
-  const positive = (account.diff ?? 0) >= 0;
+function PrimaryValueCell({
+  account,
+  category,
+}: {
+  account: BankAccountResponse;
+  category: Category;
+}) {
+  if (category === "loan") {
+    const owed = account.loan?.used_amount ?? Math.abs(account.balance);
+    return (
+      <TableCell className="text-right font-mono tabular text-[hsl(var(--loss))]">
+        −{fmt.eur(owed)}
+      </TableCell>
+    );
+  }
+  if (category === "invest" || category === "retirement" || category === "employee") {
+    const value = account.valuation ?? account.balance;
+    return <TableCell className="text-right font-mono tabular">{fmt.eur(value)}</TableCell>;
+  }
+  return <TableCell className="text-right font-mono tabular">{fmt.eur(account.balance)}</TableCell>;
+}
 
-  return (
-    <div className="space-y-2">
-      <div>
-        <div className="text-2xl font-mono tabular">{fmt.eur(value)}</div>
-        {account.valuation !== null && Math.abs(account.valuation - account.balance) > 0.01 && (
-          <div className="text-xs text-muted-foreground">dont {fmt.eur(account.balance)} cash</div>
-        )}
-      </div>
-      {hasDiff && (
-        <div
+function SecondaryCell({
+  account,
+  category,
+}: {
+  account: BankAccountResponse;
+  category: Category;
+}) {
+  if (category === "loan") {
+    const loan = account.loan;
+    if (!loan) return <TableCell className="text-muted-foreground text-xs">—</TableCell>;
+    const parts: string[] = [];
+    if (loan.rate !== null) parts.push(formatRate(loan.rate));
+    if (loan.maturity_date) parts.push(monthYear(loan.maturity_date));
+    return (
+      <TableCell className="text-xs font-mono tabular text-muted-foreground">
+        {parts.join(" · ") || "—"}
+      </TableCell>
+    );
+  }
+  if (category === "invest" || category === "retirement" || category === "employee") {
+    if (account.diff === null || account.diff_percent === null) {
+      return <TableCell className="text-muted-foreground text-xs">—</TableCell>;
+    }
+    const positive = account.diff >= 0;
+    return (
+      <TableCell>
+        <span
           className={cn(
-            "inline-flex items-center gap-2 px-2 py-1 rounded text-xs font-mono tabular",
+            "inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded text-xs font-mono tabular",
             positive
               ? "bg-[hsl(var(--gain))]/10 text-[hsl(var(--gain))]"
               : "bg-[hsl(var(--loss))]/10 text-[hsl(var(--loss))]",
           )}
         >
-          <span>{fmt.signedEur(account.diff!)}</span>
-          <span className="opacity-70">{fmt.signedPct(account.diff_percent!)}</span>
-        </div>
-      )}
-    </div>
+          <span>{fmt.signedEur(account.diff)}</span>
+          <span className="opacity-70">{fmt.signedPct(account.diff_percent)}</span>
+        </span>
+      </TableCell>
+    );
+  }
+  return (
+    <TableCell className="text-muted-foreground text-xs font-mono tabular">
+      {maskedIban(account.iban)}
+    </TableCell>
   );
 }
 
-function LoanBody({ account, loan }: { account: BankAccountResponse; loan: LoanResponse }) {
-  const capitalRemaining = loan.used_amount ?? Math.abs(account.balance);
+/* ── Expanded inline content (drill-down) ─────────────────────────────────── */
+
+function ExpandedRow({ account, category }: { account: BankAccountResponse; category: Category }) {
+  if (category === "loan" && account.loan) {
+    return <LoanDetails loan={account.loan} />;
+  }
+  if (INVESTMENT_TYPES.includes(account.type)) {
+    return <HoldingsInline accountId={account.id} />;
+  }
+  if (TRANSACTION_TYPES.includes(account.type)) {
+    return <TransactionsInline accountId={account.id} />;
+  }
+  return <div className="p-4 text-sm text-muted-foreground">Aucun détail disponible.</div>;
+}
+
+function LoanDetails({ loan }: { loan: LoanResponse }) {
   const progress =
     loan.nb_payments_done !== null && loan.nb_payments_total !== null && loan.nb_payments_total > 0
       ? (loan.nb_payments_done / loan.nb_payments_total) * 100
       : null;
 
   return (
-    <div className="space-y-3">
-      <div>
-        <div className="text-xs uppercase tracking-wider text-muted-foreground">
-          Capital restant
-        </div>
-        <div className="text-2xl font-mono tabular text-[hsl(var(--loss))]">
-          {fmt.eur(capitalRemaining)}
-          {loan.total_amount && (
-            <span className="text-xs text-muted-foreground ml-2">
-              / {fmt.eur(loan.total_amount)}
-            </span>
-          )}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+    <div className="p-4 space-y-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+        {loan.total_amount !== null && (
+          <Stat label="Capital initial" value={fmt.eur(loan.total_amount)} />
+        )}
+        {loan.used_amount !== null && (
+          <Stat label="Capital restant" value={fmt.eur(loan.used_amount)} />
+        )}
         {loan.rate !== null && <Stat label="Taux" value={formatRate(loan.rate)} />}
-        {loan.maturity_date && <Stat label="Échéance" value={monthYear(loan.maturity_date)} />}
-        {loan.nb_payments_left !== null && (
-          <Stat label="Restant" value={`${loan.nb_payments_left} mois`} />
+        {loan.duration_months !== null && (
+          <Stat label="Durée totale" value={`${loan.duration_months} mois`} />
         )}
         {loan.next_payment_amount !== null && loan.next_payment_amount > 0 && (
           <Stat label="Mensualité" value={fmt.eur(loan.next_payment_amount)} />
+        )}
+        {loan.nb_payments_left !== null && (
+          <Stat label="Échéances restantes" value={`${loan.nb_payments_left} mois`} />
+        )}
+        {loan.maturity_date && <Stat label="Fin du prêt" value={monthYear(loan.maturity_date)} />}
+        {loan.insurance_amount !== null && loan.insurance_amount > 0 && (
+          <Stat label="Assurance / mois" value={fmt.eur(loan.insurance_amount)} />
         )}
       </div>
 
       {loan.deferred && (
         <div className="text-xs text-muted-foreground italic">
           Prêt différé
-          {loan.start_repayment_date && ` · début remb. ${monthYear(loan.start_repayment_date)}`}
+          {loan.start_repayment_date &&
+            ` · début remboursement : ${monthYear(loan.start_repayment_date)}`}
         </div>
       )}
 
@@ -622,7 +672,8 @@ function LoanBody({ account, loan }: { account: BankAccountResponse; loan: LoanR
             <div className="h-full bg-primary" style={{ width: `${progress}%` }} />
           </div>
           <div className="text-xs text-muted-foreground">
-            {loan.nb_payments_done} / {loan.nb_payments_total} échéances
+            Progression : {loan.nb_payments_done} / {loan.nb_payments_total} échéances (
+            {progress.toFixed(1).replace(".", ",")} %)
           </div>
         </div>
       )}
@@ -633,138 +684,88 @@ function LoanBody({ account, loan }: { account: BankAccountResponse; loan: LoanR
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
-      <div className="text-muted-foreground">{label}</div>
+      <div className="text-muted-foreground uppercase tracking-wider text-[10px]">{label}</div>
       <div className="font-mono tabular truncate">{value}</div>
     </div>
   );
 }
 
-function Footer({
-  account,
-  showCaret,
-  isSelected,
-}: {
-  account: BankAccountResponse;
-  showCaret: boolean;
-  isSelected: boolean;
-}) {
+function HoldingsInline({ accountId }: { accountId: string }) {
+  const holdings = useAccountHoldings(accountId);
+  if (holdings.isLoading) return <p className="p-4 text-sm text-muted-foreground">Chargement…</p>;
+  if (!holdings.data || holdings.data.length === 0)
+    return <p className="p-4 text-sm text-muted-foreground">Aucune position.</p>;
   return (
-    <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t">
-      <span>{relativeTime(account.last_synced_at)}</span>
-      {showCaret && (
-        <span className="flex items-center gap-1">
-          {isSelected ? "Masquer" : "Détails"}
-          {isSelected ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-        </span>
-      )}
+    <div className="p-2">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Ticker</TableHead>
+            <TableHead>Libellé</TableHead>
+            <TableHead className="text-right">Quantité</TableHead>
+            <TableHead className="text-right">PRU</TableHead>
+            <TableHead className="text-right">Valorisation</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {holdings.data.map((h) => (
+            <TableRow key={h.id}>
+              <TableCell className="font-mono font-medium">{h.ticker}</TableCell>
+              <TableCell className="text-muted-foreground">{h.label}</TableCell>
+              <TableCell className="text-right font-mono tabular">{fmt.num(h.quantity)}</TableCell>
+              <TableCell className="text-right font-mono tabular">
+                {fmt.eur(h.unit_price)}
+              </TableCell>
+              <TableCell className="text-right font-mono tabular">
+                {fmt.eur(h.current_value)}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </div>
   );
 }
 
-/* ── Drill-down: holdings ─────────────────────────────────────────────────── */
-
-function AccountHoldings({ account }: { account: BankAccountResponse }) {
-  const holdings = useAccountHoldings(account.id);
+function TransactionsInline({ accountId }: { accountId: string }) {
+  const txs = useAccountTransactions(accountId, 50);
+  if (txs.isLoading) return <p className="p-4 text-sm text-muted-foreground">Chargement…</p>;
+  if (!txs.data || txs.data.length === 0)
+    return <p className="p-4 text-sm text-muted-foreground">Aucune transaction.</p>;
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-          {cleanName(account.name)} · Positions
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {holdings.isLoading && <p className="text-sm text-muted-foreground">Chargement…</p>}
-        {holdings.data && holdings.data.length === 0 && (
-          <p className="text-sm text-muted-foreground">Aucune position.</p>
-        )}
-        {holdings.data && holdings.data.length > 0 && (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Ticker</TableHead>
-                <TableHead>Libellé</TableHead>
-                <TableHead className="text-right">Quantité</TableHead>
-                <TableHead className="text-right">PRU</TableHead>
-                <TableHead className="text-right">Valorisation</TableHead>
+    <div className="p-2">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Date</TableHead>
+            <TableHead>Libellé</TableHead>
+            <TableHead>Catégorie</TableHead>
+            <TableHead className="text-right">Montant</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {txs.data.map((t) => {
+            const positive = t.amount >= 0;
+            return (
+              <TableRow key={t.id}>
+                <TableCell className="font-mono tabular text-xs">
+                  {new Date(t.transaction_date).toLocaleDateString("fr-FR")}
+                </TableCell>
+                <TableCell className="max-w-[300px] truncate">{t.description}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{t.category ?? "—"}</TableCell>
+                <TableCell
+                  className={cn(
+                    "text-right font-mono tabular",
+                    positive ? "text-[hsl(var(--gain))]" : "text-[hsl(var(--loss))]",
+                  )}
+                >
+                  {fmt.signedEur(t.amount)}
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {holdings.data.map((h) => (
-                <TableRow key={h.id}>
-                  <TableCell className="font-mono font-medium">{h.ticker}</TableCell>
-                  <TableCell className="text-muted-foreground">{h.label}</TableCell>
-                  <TableCell className="text-right font-mono tabular">
-                    {fmt.num(h.quantity)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono tabular">
-                    {fmt.eur(h.unit_price)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono tabular">
-                    {fmt.eur(h.current_value)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-/* ── Drill-down: transactions ─────────────────────────────────────────────── */
-
-function AccountTransactions({ account }: { account: BankAccountResponse }) {
-  const txs = useAccountTransactions(account.id, 50);
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-          {cleanName(account.name)} · 50 dernières transactions
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {txs.isLoading && <p className="text-sm text-muted-foreground">Chargement…</p>}
-        {txs.data && txs.data.length === 0 && (
-          <p className="text-sm text-muted-foreground">Aucune transaction.</p>
-        )}
-        {txs.data && txs.data.length > 0 && (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Libellé</TableHead>
-                <TableHead>Catégorie</TableHead>
-                <TableHead className="text-right">Montant</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {txs.data.map((t) => {
-                const positive = t.amount >= 0;
-                return (
-                  <TableRow key={t.id}>
-                    <TableCell className="font-mono tabular text-xs">
-                      {new Date(t.transaction_date).toLocaleDateString("fr-FR")}
-                    </TableCell>
-                    <TableCell className="max-w-[300px] truncate">{t.description}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {t.category ?? "—"}
-                    </TableCell>
-                    <TableCell
-                      className={cn(
-                        "text-right font-mono tabular",
-                        positive ? "text-[hsl(var(--gain))]" : "text-[hsl(var(--loss))]",
-                      )}
-                    >
-                      {fmt.signedEur(t.amount)}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        )}
-      </CardContent>
-    </Card>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
   );
 }
