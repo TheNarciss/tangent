@@ -31,8 +31,8 @@ except ImportError:
 # Importer Base depuis auth.models (où il est défini)
 # PUIS importer db.models pour que les tables s'enregistrent dans la metadata
 # (sinon autogenerate ne voit que la table users)
-from app.auth.models import Base  # noqa: E402
-import app.db.models  # noqa: E402, F401 — side effect: registers tables
+import app.db.models  # noqa: F401 — side effect: registers tables
+from app.auth.models import Base
 
 target_metadata = Base.metadata
 
