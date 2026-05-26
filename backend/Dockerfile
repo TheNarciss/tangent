@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.6
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -14,8 +15,11 @@ COPY pyproject.toml ./
 COPY app/ ./app/
 COPY config/ ./config/
 
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -e .
+# BuildKit cache mount: réutilise le cache pip entre builds → 3-5x plus rapide
+# sur les rebuilds après le 1er. Cache persiste hors de l'image (pas de bloat).
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip && \
+    pip install -e .
 
 # Alembic migrations (alembic.ini + alembic/ requis par init_db.py au startup)
 COPY alembic.ini ./
