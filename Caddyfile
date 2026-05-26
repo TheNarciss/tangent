@@ -1,4 +1,5 @@
 :80 {
+    # ── API routes → backend container ──────────────────────────────────────
     @api {
         path /auth/* /users/*
         path /portfolio* /dashboard* /timeseries* /transactions*
@@ -9,9 +10,21 @@
     }
     reverse_proxy @api backend:8000
 
-    reverse_proxy frontend:5173
+    # ── Static SPA bundle baked into this image (see Dockerfile.caddy) ──────
+    # try_files: serves the asset if it exists, else falls back to index.html
+    # so client-side routing (React Router etc.) works on direct URL hits.
+    root * /usr/share/caddy
+    try_files {path} /index.html
+    file_server
 
     encode gzip zstd
+
+    # Long cache on hashed assets, short cache on index.html
+    @hashed {
+        path *.js *.css *.woff2 *.png *.jpg *.svg *.ico
+    }
+    header @hashed Cache-Control "public, max-age=31536000, immutable"
+    header /index.html Cache-Control "no-cache, must-revalidate"
 
     log {
         output stdout

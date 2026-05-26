@@ -40,12 +40,24 @@ logger = logging.getLogger("app")
 # ─── Lifespan (replaces deprecated @app.on_event) ─────────────────────────
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    """App lifespan: init DB schema at startup."""
+    """App lifespan: init DB schema at startup, dispose engine at shutdown.
+
+    Disposing the engine on shutdown closes all pooled connections cleanly,
+    avoiding zombie 'idle in transaction' sessions in Postgres after restart.
+    """
     try:
         await init_db()
     except Exception:
         logger.exception("Failed to initialize DB schema at startup")
     yield
+    # Shutdown: close all pooled DB connections cleanly
+    try:
+        from .db.engine import engine
+
+        await engine.dispose()
+        logger.info("DB engine disposed cleanly on shutdown")
+    except Exception:
+        logger.exception("Failed to dispose DB engine on shutdown")
 
 
 app = FastAPI(title="Portfolio Dashboard", version="0.8.0", lifespan=lifespan)

@@ -9,14 +9,14 @@ services:
       CORS_ORIGINS: "https://riskybusinesses.uk,https://www.riskybusinesses.uk"
       BACKEND_URL: "https://riskybusinesses.uk"
       FRONTEND_URL: "https://riskybusinesses.uk"
-      WATCHFILES_FORCE_POLLING: ""        # disable in prod — no --reload
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
 
+  # Frontend disabled in prod — Caddy now serves the static Vite build
+  # (baked into the caddy image via Dockerfile.caddy).
+  # `profiles: [never]` keeps the service definition for dev but prevents
+  # it from being started unless --profile never is explicitly passed.
   frontend:
-    container_name: tangent-frontend
-    restart: unless-stopped
-    environment:
-      VITE_API_URL: "https://riskybusinesses.uk"
+    profiles: [never]
 
   postgres:
     container_name: tangent-postgres
@@ -25,18 +25,19 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   caddy:
-    image: caddy:2-alpine
-    container_name: tangent-caddy       # consistent naming, allows `docker restart tangent-caddy`
+    build:
+      context: .
+      dockerfile: Dockerfile.caddy
+    image: tangent-caddy:latest
+    container_name: tangent-caddy
     restart: unless-stopped
     ports:
       - "80:80"   # Bind localhost ONLY — cloudflared y accède en local
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
       - backend
-      - frontend
 
 volumes:
   postgres_data:

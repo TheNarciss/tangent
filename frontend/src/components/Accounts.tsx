@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Banknote, RefreshCw } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Banknote, ChevronRight, RefreshCw } from "lucide-react";
 
 import {
   useBankAccounts,
@@ -47,10 +47,87 @@ function relativeTime(iso: string | null): string {
   return `il y a ${days}j`;
 }
 
+/* ── Grouping logic ────────────────────────────────────────────────────────
+ * PEA accounts at the same institution (typically PEA Titres + PEA Espèces)
+ * are bundled into a single expandable row. All other accounts render flat.
+ */
+
+type AccountGroup =
+  | { kind: "single"; key: string; account: BankAccountResponse }
+  | {
+      kind: "bundle";
+      key: string;
+      label: string;
+      institution: string | null;
+      type: BankAccountType;
+      accounts: BankAccountResponse[];
+      totalBalance: number;
+      latestSync: string | null;
+    };
+
+function groupAccounts(accounts: BankAccountResponse[]): AccountGroup[] {
+  const peaByInstitution = new Map<string, BankAccountResponse[]>();
+  const others: BankAccountResponse[] = [];
+
+  for (const acc of accounts) {
+    if (acc.type === "pea") {
+      const key = acc.institution_name ?? "_unknown";
+      if (!peaByInstitution.has(key)) peaByInstitution.set(key, []);
+      peaByInstitution.get(key)!.push(acc);
+    } else {
+      others.push(acc);
+    }
+  }
+
+  const groups: AccountGroup[] = [];
+
+  for (const [inst, peas] of peaByInstitution) {
+    if (peas.length === 1) {
+      groups.push({ kind: "single", key: peas[0].id, account: peas[0] });
+    } else {
+      const totalBalance = peas.reduce((s, a) => s + a.balance, 0);
+      const latestSync =
+        peas
+          .map((a) => a.last_synced_at)
+          .filter((s): s is string => !!s)
+          .sort()
+          .reverse()[0] ?? null;
+      groups.push({
+        kind: "bundle",
+        key: `pea-${inst}`,
+        label: inst === "_unknown" ? "PEA" : `PEA · ${inst}`,
+        institution: inst === "_unknown" ? null : inst,
+        type: "pea",
+        accounts: peas,
+        totalBalance,
+        latestSync,
+      });
+    }
+  }
+
+  for (const acc of others) {
+    groups.push({ kind: "single", key: acc.id, account: acc });
+  }
+
+  return groups;
+}
+
 export function Accounts() {
   const accounts = useBankAccounts();
   const sync = useSyncBankAccounts();
   const [selected, setSelected] = useState<BankAccountResponse | null>(null);
+  const [expandedBundles, setExpandedBundles] = useState<Set<string>>(new Set());
+
+  const groups = useMemo(() => groupAccounts(accounts.data ?? []), [accounts.data]);
+
+  const toggleBundle = (key: string) => {
+    setExpandedBundles((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -97,7 +174,7 @@ export function Accounts() {
               </p>
             </div>
           )}
-          {accounts.data && accounts.data.length > 0 && (
+          {groups.length > 0 && (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -109,25 +186,95 @@ export function Accounts() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {accounts.data.map((a) => (
-                  <TableRow
-                    key={a.id}
-                    onClick={() => setSelected(selected?.id === a.id ? null : a)}
-                    className={cn("cursor-pointer", selected?.id === a.id && "bg-accent")}
-                  >
-                    <TableCell className="font-medium">{a.name}</TableCell>
-                    <TableCell>{TYPE_LABELS[a.type]}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {a.institution_name ?? "—"}
-                    </TableCell>
-                    <TableCell className="text-right font-mono tabular">
-                      {fmt.eur(a.balance)}
-                    </TableCell>
-                    <TableCell className="text-right text-xs text-muted-foreground">
-                      {relativeTime(a.last_synced_at)}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {groups.map((g) => {
+                  if (g.kind === "single") {
+                    const a = g.account;
+                    return (
+                      <TableRow
+                        key={g.key}
+                        onClick={() => setSelected(selected?.id === a.id ? null : a)}
+                        className={cn("cursor-pointer", selected?.id === a.id && "bg-accent")}
+                      >
+                        <TableCell className="font-medium">{a.name}</TableCell>
+                        <TableCell>{TYPE_LABELS[a.type]}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {a.institution_name ?? "—"}
+                        </TableCell>
+                        <TableCell className="text-right font-mono tabular">
+                          {fmt.eur(a.balance)}
+                        </TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground">
+                          {relativeTime(a.last_synced_at)}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  }
+
+                  // Bundle row + (optionally) sub-rows
+                  const isExpanded = expandedBundles.has(g.key);
+                  return (
+                    <>
+                      <TableRow
+                        key={g.key}
+                        onClick={() => toggleBundle(g.key)}
+                        className="cursor-pointer hover:bg-accent/50"
+                      >
+                        <TableCell className="font-medium">
+                          <span className="inline-flex items-center gap-1.5">
+                            <ChevronRight
+                              className={cn(
+                                "h-3.5 w-3.5 transition-transform",
+                                isExpanded && "rotate-90",
+                              )}
+                            />
+                            {g.label}
+                            <span className="text-xs text-muted-foreground font-normal ml-1">
+                              ({g.accounts.length} sous-comptes)
+                            </span>
+                          </span>
+                        </TableCell>
+                        <TableCell>{TYPE_LABELS[g.type]}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {g.institution ?? "—"}
+                        </TableCell>
+                        <TableCell className="text-right font-mono tabular font-medium">
+                          {fmt.eur(g.totalBalance)}
+                        </TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground">
+                          {relativeTime(g.latestSync)}
+                        </TableCell>
+                      </TableRow>
+                      {isExpanded &&
+                        g.accounts.map((sub) => (
+                          <TableRow
+                            key={sub.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelected(selected?.id === sub.id ? null : sub);
+                            }}
+                            className={cn(
+                              "cursor-pointer bg-muted/30",
+                              selected?.id === sub.id && "bg-accent",
+                            )}
+                          >
+                            <TableCell className="pl-9 text-sm text-muted-foreground">
+                              ↳ {sub.name}
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {TYPE_LABELS[sub.type]}
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground">—</TableCell>
+                            <TableCell className="text-right font-mono tabular text-sm">
+                              {fmt.eur(sub.balance)}
+                            </TableCell>
+                            <TableCell className="text-right text-xs text-muted-foreground">
+                              {relativeTime(sub.last_synced_at)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                    </>
+                  );
+                })}
               </TableBody>
             </Table>
           )}
