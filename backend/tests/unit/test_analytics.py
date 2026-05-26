@@ -1,9 +1,7 @@
-import pytest
-
 """Unit tests for pure finance functions (no DB, no I/O)."""
 
-import numpy as np
 import pandas as pd
+import pytest
 
 from app.finance import analytics
 

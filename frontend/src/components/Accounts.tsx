@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
-import { Banknote, ChevronRight, RefreshCw } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Banknote, ChevronRight, RefreshCw, Zap } from "lucide-react";
 
 import {
   useBankAccounts,
   useAccountHoldings,
   useAccountTransactions,
+  useRefreshBankAccounts,
   useSyncBankAccounts,
   type BankAccountResponse,
   type BankAccountType,
@@ -46,11 +47,6 @@ function relativeTime(iso: string | null): string {
   const days = Math.floor(hours / 24);
   return `il y a ${days}j`;
 }
-
-/* ── Grouping logic ────────────────────────────────────────────────────────
- * PEA accounts at the same institution (typically PEA Titres + PEA Espèces)
- * are bundled into a single expandable row. All other accounts render flat.
- */
 
 type AccountGroup =
   | { kind: "single"; key: string; account: BankAccountResponse }
@@ -115,8 +111,20 @@ function groupAccounts(accounts: BankAccountResponse[]): AccountGroup[] {
 export function Accounts() {
   const accounts = useBankAccounts();
   const sync = useSyncBankAccounts();
+  const refresh = useRefreshBankAccounts();
   const [selected, setSelected] = useState<BankAccountResponse | null>(null);
   const [expandedBundles, setExpandedBundles] = useState<Set<string>>(new Set());
+
+  // Auto-sync at mount, but only if user already has accounts (= Powens connected).
+  // Backend cache (5 min) absorbs spam — calling /sync repeatedly is cheap.
+  const autoSyncDoneRef = useRef(false);
+  useEffect(() => {
+    if (autoSyncDoneRef.current) return;
+    if (!accounts.data || accounts.data.length === 0) return;
+    autoSyncDoneRef.current = true;
+    sync.mutate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accounts.data]);
 
   const groups = useMemo(() => groupAccounts(accounts.data ?? []), [accounts.data]);
 
@@ -129,34 +137,72 @@ export function Accounts() {
     });
   };
 
+  const syncBusy = sync.isPending || refresh.isPending;
+  const syncError = sync.isError || refresh.isError;
+  const syncErrorMessage = refresh.isError
+    ? refresh.error instanceof Error
+      ? refresh.error.message
+      : "inconnue"
+    : sync.error instanceof Error
+      ? sync.error.message
+      : "inconnue";
+
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
           <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
             Mes comptes
           </CardTitle>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => sync.mutate()}
-            disabled={sync.isPending}
-            className="gap-2"
-          >
-            <RefreshCw className={cn("h-4 w-4", sync.isPending && "animate-spin")} />
-            Synchroniser
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => sync.mutate()}
+              disabled={syncBusy}
+              className="gap-2"
+              title="Lit le cache Powens (rapide, 5 min de TTL)"
+            >
+              <RefreshCw className={cn("h-4 w-4", sync.isPending && "animate-spin")} />
+              Synchroniser
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => refresh.mutate()}
+              disabled={syncBusy}
+              className="gap-2"
+              title="Force Powens à re-contacter la banque (lent, ~15s)"
+            >
+              <Zap className={cn("h-4 w-4", refresh.isPending && "animate-pulse")} />
+              {refresh.isPending ? "Connexion banque…" : "Forcer banque"}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
-          {sync.isError && (
-            <p className="text-sm text-[hsl(var(--loss))] mb-3">
-              Erreur sync : {sync.error instanceof Error ? sync.error.message : "inconnue"}
+          {syncError && (
+            <p className="text-sm text-[hsl(var(--loss))] mb-3">Erreur sync : {syncErrorMessage}</p>
+          )}
+          {refresh.data && refresh.data.success && (
+            <p className="text-xs text-muted-foreground mb-3">
+              Refresh forcé OK · {refresh.data.accounts_persisted} comptes ·{" "}
+              {refresh.data.holdings_persisted} positions
             </p>
           )}
-          {sync.data && sync.data.success && (
+          {sync.data && sync.data.success && !refresh.data && (
             <p className="text-xs text-muted-foreground mb-3">
-              Dernière sync : {sync.data.accounts_persisted} comptes, {sync.data.holdings_persisted}{" "}
-              positions, {sync.data.transactions_persisted} nouvelles transactions.
+              {sync.data.from_cache ? (
+                <>
+                  Affichage du cache (sync &lt; 5 min). Bouton « Forcer banque » pour fraîcheur
+                  garantie.
+                </>
+              ) : (
+                <>
+                  Dernière sync : {sync.data.accounts_persisted} comptes,{" "}
+                  {sync.data.holdings_persisted} positions, {sync.data.transactions_persisted}{" "}
+                  nouvelles transactions.
+                </>
+              )}
             </p>
           )}
 
@@ -210,7 +256,6 @@ export function Accounts() {
                     );
                   }
 
-                  // Bundle row + (optionally) sub-rows
                   const isExpanded = expandedBundles.has(g.key);
                   return (
                     <>

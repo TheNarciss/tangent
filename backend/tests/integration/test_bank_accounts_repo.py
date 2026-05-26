@@ -13,12 +13,14 @@ from sqlalchemy import select
 
 from app.aggregator import (
     AccountType,
-    BankAccount as BankAccountDTO,
     Investment,
     Transaction,
 )
+from app.aggregator import (
+    BankAccount as BankAccountDTO,
+)
 from app.db.engine import async_session_factory
-from app.db.models import AccountHolding, BankAccount, BankTransaction
+from app.db.models import BankAccount
 from app.repositories import account_holdings as holdings_repo
 from app.repositories import bank_accounts as accounts_repo
 from app.repositories import bank_transactions as bank_txs_repo
@@ -47,9 +49,7 @@ async def _register_and_get_user_id(client, email: str, password: str) -> uuid.U
 async def _cleanup_user(user_id: uuid.UUID) -> None:
     """Cascade-delete all rows for a user."""
     async with async_session_factory() as session:
-        await session.execute(
-            BankAccount.__table__.delete().where(BankAccount.user_id == user_id)
-        )
+        await session.execute(BankAccount.__table__.delete().where(BankAccount.user_id == user_id))
         await session.commit()
 
 
@@ -229,15 +229,11 @@ async def test_upsert_transactions_skips_duplicates(client):
                 ),
             ]
 
-            inserted_1 = await bank_txs_repo.upsert_transactions(
-                session, user_id, account_id, txs
-            )
+            inserted_1 = await bank_txs_repo.upsert_transactions(session, user_id, account_id, txs)
             assert inserted_1 == 2
 
             # Re-upsert same txs → 0 new
-            inserted_2 = await bank_txs_repo.upsert_transactions(
-                session, user_id, account_id, txs
-            )
+            inserted_2 = await bank_txs_repo.upsert_transactions(session, user_id, account_id, txs)
             assert inserted_2 == 0
 
             # List should still have 2

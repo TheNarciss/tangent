@@ -724,6 +724,7 @@ export interface SyncReport {
   transactions_persisted: number;
   error: string | null;
   synced_at: string;
+  from_cache: boolean;
 }
 
 export function useBankAccounts() {
@@ -758,6 +759,24 @@ export function useSyncBankAccounts() {
     onSuccess: (result) => {
       if (result.success) {
         qc.invalidateQueries({ queryKey: ["bank-accounts"] });
+      }
+    },
+  });
+}
+/** Force a fresh sync at the bank level (Powens force_sync + re-fetch).
+ *  Slower than useSyncBankAccounts (~10-30s) but guarantees the latest balance
+ *  from the bank itself, not just Powens' cached snapshot. */
+export function useRefreshBankAccounts() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => http<SyncReport>("/accounts/refresh", { method: "POST" }),
+    onSuccess: (result) => {
+      if (result.success) {
+        qc.invalidateQueries({ queryKey: ["bank-accounts"] });
+        qc.invalidateQueries({ queryKey: ["portfolio"] });
+        qc.invalidateQueries({ queryKey: ["dashboard"] });
+        qc.invalidateQueries({ queryKey: ["timeseries"] });
+        qc.invalidateQueries({ queryKey: ["optimizer"] });
       }
     },
   });

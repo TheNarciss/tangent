@@ -21,9 +21,9 @@ os.environ.setdefault(
 os.environ.setdefault("COOKIE_SECURE", "false")
 os.environ.setdefault("CORS_ORIGINS", "http://localhost:3000")
 
-import pytest  # noqa: E402
-import pytest_asyncio  # noqa: E402
-from httpx import ASGITransport, AsyncClient  # noqa: E402
+import pytest
+import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
 
 
 @pytest_asyncio.fixture(loop_scope="session", scope="session")

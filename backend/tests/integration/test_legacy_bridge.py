@@ -10,7 +10,7 @@ We test the bridge function directly (no Powens HTTP mocking required).
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import select
@@ -86,7 +86,7 @@ def _sync_result(
         accounts=accounts,
         investments=investments,
         transactions=[],
-        synced_at=datetime.now(timezone.utc),
+        synced_at=datetime.now(UTC),
     )
 
 
@@ -169,6 +169,7 @@ async def test_bridge_idempotent_overwrites_stale_positions():
     finally:
         await _cleanup_user(user_id)
 
+
 @pytest.mark.integration
 async def test_bridge_replaces_positions_with_same_ticker():
     """Regression: 2nd sync with same ticker as 1st must not violate uq constraint."""
@@ -200,6 +201,8 @@ async def test_bridge_replaces_positions_with_same_ticker():
             assert portfolio.positions[0].quantity == 50.0
     finally:
         await _cleanup_user(user_id)
+
+
 @pytest.mark.integration
 async def test_bridge_skips_zero_quantity_holdings():
     user_id = await _create_test_user()
@@ -233,8 +236,6 @@ async def _cleanup_user(user_id: uuid.UUID) -> None:
             await session.execute(
                 Position.__table__.delete().where(Position.portfolio_id == portfolio.id)
             )
-            await session.execute(
-                Portfolio.__table__.delete().where(Portfolio.id == portfolio.id)
-            )
+            await session.execute(Portfolio.__table__.delete().where(Portfolio.id == portfolio.id))
         await session.execute(User.__table__.delete().where(User.id == user_id))
         await session.commit()

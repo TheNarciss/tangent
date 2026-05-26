@@ -271,6 +271,8 @@ class BankAccount(Base):
     """Compte bancaire individuel agrégé via un provider (Powens, Bridge...).
 
     1:N avec users. Source de vérité pour la liste de comptes (Phase A).
+
+    Storage strategy: hot fields + raw_data JSONB (ADR-013).
     """
 
     __tablename__ = "bank_accounts"
@@ -294,15 +296,61 @@ class BankAccount(Base):
     provider: Mapped[str] = mapped_column(String(32), nullable=False)
     provider_account_id: Mapped[str] = mapped_column(String(64), nullable=False)
 
+    # ── Core identification ────────────────────────────────────────────────
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="EUR")
-    balance: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    iban: Mapped[str | None] = mapped_column(String(64), default=None)
     institution_name: Mapped[str | None] = mapped_column(String(255), default=None)
 
+    # ── Identifiers ────────────────────────────────────────────────────────
+    iban: Mapped[str | None] = mapped_column(String(64), default=None)
+    bic: Mapped[str | None] = mapped_column(String(11), default=None)
+    number: Mapped[str | None] = mapped_column(String(64), default=None)
+
+    # ── Balance & valuation (cf ADR-013) ───────────────────────────────────
+    # `balance`     = raw balance from the bank (cash accounts, loans)
+    # `valuation`   = Powens-computed sum of holdings (invest accounts only).
+    #                 For invest, prefer this over `balance` (fresher).
+    balance: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    valuation: Mapped[float | None] = mapped_column(Float, default=None)
+    coming: Mapped[float | None] = mapped_column(Float, default=None)
+    coming_balance: Mapped[float | None] = mapped_column(Float, default=None)
+
+    # Gain/loss (computed by Powens for invest accounts)
+    diff: Mapped[float | None] = mapped_column(Float, default=None)
+    diff_percent: Mapped[float | None] = mapped_column(Float, default=None)
+    prev_diff: Mapped[float | None] = mapped_column(Float, default=None)
+    prev_diff_percent: Mapped[float | None] = mapped_column(Float, default=None)
+
+    # ── Account context ────────────────────────────────────────────────────
+    usage: Mapped[str | None] = mapped_column(String(8), default=None)  # PRIV | ORGA
+    ownership: Mapped[str | None] = mapped_column(
+        String(20), default=None
+    )  # owner | co-owner | attorney
+    company_name: Mapped[str | None] = mapped_column(String(255), default=None)  # PEE/PERCO
+    opening_date: Mapped[date | None] = mapped_column(Date, default=None)
+
+    # ── State (user-controlled or bank-side) ───────────────────────────────
+    bookmarked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    display: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    powens_deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    powens_disabled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    powens_error: Mapped[str | None] = mapped_column(String(64), default=None)
+    powens_last_update: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+
+    # ── Sync tracking ──────────────────────────────────────────────────────
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
+    # ── Full raw Powens payload (ADR-013) ──────────────────────────────────
+    raw_data: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+    # ── Timestamps ─────────────────────────────────────────────────────────
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
@@ -313,6 +361,7 @@ class BankAccount(Base):
         onupdate=lambda: datetime.now(UTC),
     )
 
+    # ── Relationships ──────────────────────────────────────────────────────
     holdings: Mapped[list[AccountHolding]] = relationship(
         back_populates="bank_account",
         cascade="all, delete-orphan",
@@ -320,6 +369,12 @@ class BankAccount(Base):
     bank_transactions: Mapped[list[BankTransaction]] = relationship(
         back_populates="bank_account",
         cascade="all, delete-orphan",
+    )
+    loan: Mapped[Loan | None] = relationship(
+        back_populates="bank_account",
+        cascade="all, delete-orphan",
+        uselist=False,
+        lazy="selectin",
     )
 
 
@@ -417,3 +472,85 @@ class BankTransaction(Base):
     )
 
     bank_account: Mapped[BankAccount] = relationship(back_populates="bank_transactions")
+
+
+# Append this class at the end of backend/app/db/models.py
+# (right after BankTransaction class).
+
+
+class Loan(Base):
+    """Détails d'un prêt — one-to-one avec un BankAccount de type loan-like.
+
+    Présent uniquement si le BankAccount a type ∈ {loan, mortgage,
+    consumercredit, revolvingcredit}.
+
+    Storage: hot fields + raw_data JSONB (ADR-013). raw_data contient le
+    Loan-object complet renvoyé par Powens, incluant les champs non-promus
+    en colonne.
+    """
+
+    __tablename__ = "loans"
+    __table_args__ = (UniqueConstraint("bank_account_id", name="uq_loans_bank_account_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    bank_account_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("bank_accounts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    # ── Capital amounts ────────────────────────────────────────────────────
+    total_amount: Mapped[float | None] = mapped_column(Float, default=None)
+    available_amount: Mapped[float | None] = mapped_column(Float, default=None)
+    used_amount: Mapped[float | None] = mapped_column(Float, default=None)
+
+    # ── Key dates ──────────────────────────────────────────────────────────
+    subscription_date: Mapped[date | None] = mapped_column(Date, default=None)
+    maturity_date: Mapped[date | None] = mapped_column(Date, default=None, index=True)
+    start_repayment_date: Mapped[date | None] = mapped_column(Date, default=None)
+    deferred: Mapped[bool | None] = mapped_column(Boolean, default=None)
+
+    # ── Payments ───────────────────────────────────────────────────────────
+    next_payment_amount: Mapped[float | None] = mapped_column(Float, default=None)
+    next_payment_date: Mapped[date | None] = mapped_column(Date, default=None)
+    last_payment_amount: Mapped[float | None] = mapped_column(Float, default=None)
+    last_payment_date: Mapped[date | None] = mapped_column(Date, default=None)
+    nb_payments_done: Mapped[int | None] = mapped_column(Integer, default=None)
+    nb_payments_left: Mapped[int | None] = mapped_column(Integer, default=None)
+    nb_payments_total: Mapped[int | None] = mapped_column(Integer, default=None)
+
+    # ── Rate & duration ────────────────────────────────────────────────────
+    rate: Mapped[float | None] = mapped_column(Float, default=None)  # absolute % (2.0 = 2%)
+    duration_months: Mapped[int | None] = mapped_column(Integer, default=None)
+
+    # ── Insurance ──────────────────────────────────────────────────────────
+    insurance_label: Mapped[str | None] = mapped_column(String(255), default=None)
+    insurance_amount: Mapped[float | None] = mapped_column(Float, default=None)
+    insurance_rate: Mapped[float | None] = mapped_column(Float, default=None)
+
+    # ── Misc ───────────────────────────────────────────────────────────────
+    account_label: Mapped[str | None] = mapped_column(String(255), default=None)
+    loan_type: Mapped[str | None] = mapped_column(String(32), default=None)
+
+    # ── Full raw Powens payload (ADR-013) ──────────────────────────────────
+    raw_data: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+    # ── Timestamps ─────────────────────────────────────────────────────────
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+    # ── Relationships ──────────────────────────────────────────────────────
+    bank_account: Mapped[BankAccount] = relationship(back_populates="loan")

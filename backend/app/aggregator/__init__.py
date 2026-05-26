@@ -14,6 +14,7 @@ from .types import (
     AccountType,
     BankAccount,
     Investment,
+    Loan,
     SyncResult,
     Transaction,
 )
@@ -23,6 +24,7 @@ __all__ = [
     "BankAccount",
     "IBankAggregator",
     "Investment",
+    "Loan",
     "SyncResult",
     "Transaction",
 ]

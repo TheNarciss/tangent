@@ -64,9 +64,7 @@ async def test_get_accounts_maps_pea_correctly(aggregator, monkeypatch):
         "app.powens.aggregator.PowensClient.__aexit__",
         lambda self, *_: AsyncMock()(),
     )
-    monkeypatch.setattr(
-        "app.powens.aggregator.PowensClient.get_connections", fake_get_connections
-    )
+    monkeypatch.setattr("app.powens.aggregator.PowensClient.get_connections", fake_get_connections)
     monkeypatch.setattr("app.powens.aggregator.PowensClient.get_accounts", fake_get_accounts)
 
     accounts = await aggregator.get_accounts()
@@ -102,9 +100,7 @@ async def test_get_accounts_unknown_type_falls_back_to_other(aggregator, monkeyp
         "app.powens.aggregator.PowensClient.__aexit__",
         lambda self, *_: AsyncMock()(),
     )
-    monkeypatch.setattr(
-        "app.powens.aggregator.PowensClient.get_connections", fake_get_connections
-    )
+    monkeypatch.setattr("app.powens.aggregator.PowensClient.get_connections", fake_get_connections)
     monkeypatch.setattr("app.powens.aggregator.PowensClient.get_accounts", fake_get_accounts)
 
     accounts = await aggregator.get_accounts()
