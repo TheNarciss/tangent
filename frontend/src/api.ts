@@ -669,28 +669,119 @@ export function useConfirmReset() {
 
 /* ── Bank Accounts (Phase A — multi-account aggregation) ──────────────────── */
 
+// Replace the existing "Bank Accounts (Phase A — multi-account aggregation)" section
+// in frontend/src/api.ts with this. Lines ~670 to ~727 in the current file.
+
+/* ── Bank Accounts (multi-account aggregation, ADR-013 hot+JSONB) ─────────── */
+
 export type BankAccountType =
+  // Cash-flow
   | "checking"
   | "savings"
+  | "card"
+  // Livrets / regulated savings
+  | "livret_a"
+  | "livret_b"
+  | "ldds"
+  | "lep"
+  | "pel"
+  | "cel"
+  | "csl"
+  | "cat"
+  | "deposit"
+  // Investment
   | "pea"
   | "cto"
   | "life_insurance"
+  | "capitalisation"
+  | "real_estate"
+  | "crowdlending"
+  // Retirement
+  | "per"
+  | "perp"
+  | "perco"
+  | "madelin"
+  | "article_83"
+  // Employee savings
+  | "pee"
+  | "rsp"
+  // Loans
   | "loan"
-  | "card"
+  | "mortgage"
+  | "consumer_credit"
+  | "revolving_credit"
+  // Misc
+  | "joint"
   | "crypto"
   | "other";
+
+export interface LoanResponse {
+  total_amount: number | null;
+  available_amount: number | null;
+  used_amount: number | null;
+  subscription_date: string | null;
+  maturity_date: string | null;
+  start_repayment_date: string | null;
+  deferred: boolean | null;
+  next_payment_amount: number | null;
+  next_payment_date: string | null;
+  last_payment_amount: number | null;
+  last_payment_date: string | null;
+  nb_payments_done: number | null;
+  nb_payments_left: number | null;
+  nb_payments_total: number | null;
+  rate: number | null;
+  duration_months: number | null;
+  insurance_label: string | null;
+  insurance_amount: number | null;
+  insurance_rate: number | null;
+  account_label: string | null;
+  loan_type: string | null;
+}
 
 export interface BankAccountResponse {
   id: string;
   provider: string;
   provider_account_id: string;
+
+  // Identification
   name: string;
   type: BankAccountType;
   currency: string;
-  balance: number;
-  iban: string | null;
   institution_name: string | null;
+
+  // Identifiers
+  iban: string | null;
+  bic: string | null;
+  number: string | null;
+
+  // Balance & valuation
+  balance: number;
+  valuation: number | null;
+  coming: number | null;
+  coming_balance: number | null;
+
+  // Gain/loss (Powens-computed for invest accounts)
+  diff: number | null;
+  diff_percent: number | null;
+  prev_diff: number | null;
+  prev_diff_percent: number | null;
+
+  // Context
+  usage: string | null;
+  ownership: string | null;
+  company_name: string | null;
+  opening_date: string | null;
+
+  // State
+  bookmarked: boolean;
+  display: boolean;
+
+  // Sync tracking
   last_synced_at: string | null;
+
+  // Loan sub-object (only when type is loan-like)
+  loan: LoanResponse | null;
 }
 
 export interface HoldingResponse {
@@ -722,9 +813,10 @@ export interface SyncReport {
   accounts_persisted: number;
   holdings_persisted: number;
   transactions_persisted: number;
+  legacy_positions_synced?: number;
   error: string | null;
   synced_at: string;
-  from_cache: boolean;
+  from_cache?: boolean;
 }
 
 export function useBankAccounts() {
@@ -763,9 +855,7 @@ export function useSyncBankAccounts() {
     },
   });
 }
-/** Force a fresh sync at the bank level (Powens force_sync + re-fetch).
- *  Slower than useSyncBankAccounts (~10-30s) but guarantees the latest balance
- *  from the bank itself, not just Powens' cached snapshot. */
+
 export function useRefreshBankAccounts() {
   const qc = useQueryClient();
   return useMutation({
@@ -773,11 +863,43 @@ export function useRefreshBankAccounts() {
     onSuccess: (result) => {
       if (result.success) {
         qc.invalidateQueries({ queryKey: ["bank-accounts"] });
-        qc.invalidateQueries({ queryKey: ["portfolio"] });
-        qc.invalidateQueries({ queryKey: ["dashboard"] });
-        qc.invalidateQueries({ queryKey: ["timeseries"] });
-        qc.invalidateQueries({ queryKey: ["optimizer"] });
       }
     },
   });
+}
+export interface BankAccountResponse {
+  id: string;
+  provider: string;
+  provider_account_id: string;
+  name: string;
+  type: BankAccountType;
+  currency: string;
+  balance: number;
+  iban: string | null;
+  institution_name: string | null;
+  last_synced_at: string | null;
+}
+
+export interface HoldingResponse {
+  id: string;
+  bank_account_id: string;
+  provider_investment_id: string;
+  ticker: string;
+  isin: string | null;
+  label: string;
+  quantity: number;
+  unit_price: number;
+  current_value: number;
+  currency: string;
+}
+
+export interface BankTransactionResponse {
+  id: string;
+  bank_account_id: string;
+  provider_transaction_id: string;
+  amount: number;
+  currency: string;
+  transaction_date: string;
+  description: string;
+  category: string | null;
 }
