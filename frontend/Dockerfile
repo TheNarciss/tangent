@@ -1,13 +1,16 @@
+# syntax=docker/dockerfile:1.6
 # Dockerfile pour le frontend Vite + React tangent
-# Mode dev (hot reload). Pour la prod on ferait un multi-stage avec nginx.
+# Mode dev (hot reload). Pour la prod on ferait un multi-stage avec Caddy
+# servant le build statique (cf TODO Batch 4 cleanup).
 
 FROM node:20-alpine
 
 WORKDIR /app
 
-# Install deps en premier (cache layer)
+# Install deps en premier (cache layer Docker) + BuildKit cache pour npm
 COPY package.json package-lock.json* ./
-RUN npm ci --include=dev
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --include=dev --prefer-offline
 
 # Copie le reste du code source
 COPY . .
