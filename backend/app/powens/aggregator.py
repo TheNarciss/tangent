@@ -76,6 +76,27 @@ def _parse_powens_date(s: Any) -> date | None:
         return None
 
 
+def _extract_institution_name(conn: dict) -> str | None:
+    """Pull the institution name from a Powens connection dict.
+
+    Powens responses may shape this in two ways depending on API version:
+    - Modern: `connector: {"id": 5, "name": "BNP Paribas"}`
+    - Legacy: `bank: {"id": 5, "name": "BNP Paribas"}`
+    Returns None if neither shape is present.
+    """
+    connector = conn.get("connector")
+    if isinstance(connector, dict):
+        name = connector.get("name")
+        if isinstance(name, str) and name.strip():
+            return name.strip()
+    bank = conn.get("bank")
+    if isinstance(bank, dict):
+        name = bank.get("name")
+        if isinstance(name, str) and name.strip():
+            return name.strip()
+    return None
+
+
 class PowensAggregator:
     """Implements IBankAggregator for the Powens provider.
 
@@ -98,51 +119,47 @@ class PowensAggregator:
     # ── IBankAggregator methods ────────────────────────────────────────────
 
     async def get_accounts(self) -> list[BankAccount]:
-        """Fetch all accounts the user has connected, mapped to BankAccount DTOs.
+        """Fetch all accounts and enrich each one with its institution name.
 
-        Also fetches `/users/me/connections` to enrich each account with
-        `institution_name` (e.g. "BNP Paribas"). If the /connections call fails,
-        institution_name is left None and a warning is logged — the sync is not
-        aborted, since institution_name is purely cosmetic.
+        Two HTTP calls: /connections (for the institution mapping) and
+        /accounts. /connections failure degrades gracefully — accounts are
+        still returned, just without `institution_name`.
         """
-        powens_connections: list[dict] = []
         async with PowensClient(token=self._token) as client:
+            # Try to build a connection_id -> institution_name map.
+            # Fail-soft: if /connections breaks, accounts still load.
+            id_to_institution: dict[int, str] = {}
             try:
-                powens_connections = await client.get_connections()
+                connections = await client.get_connections()
+                for conn in connections:
+                    conn_id = conn.get("id")
+                    name = _extract_institution_name(conn)
+                    if isinstance(conn_id, int) and name:
+                        id_to_institution[conn_id] = name
+                logger.debug(
+                    "Powens [user=%s]: built %d institution mappings",
+                    self._user_id,
+                    len(id_to_institution),
+                )
             except PowensError as exc:
                 logger.warning(
-                    "Failed to fetch Powens connections for user=%s, "
-                    "institution_name will be null: %s",
+                    "Powens [user=%s]: /connections failed, institution_name will be null: %s",
                     self._user_id,
                     exc,
                 )
+
             powens_accounts = await client.get_accounts()
-        # Build {id_connection: bank_name} lookup.
-        # Modern Powens uses `connector.name`; legacy responses use `bank.name`.
-        bank_by_connection: dict[int, str] = {}
-        for conn in powens_connections:
-            conn_id = conn.get("id")
-            if conn_id is None:
-                continue
-            connector = conn.get("connector") or conn.get("bank") or {}
-            if isinstance(connector, dict):
-                name = connector.get("name")
-                if isinstance(name, str) and name:
-                    try:
-                        bank_by_connection[int(conn_id)] = name
-                    except (TypeError, ValueError):
-                        continue
+
+        # Mark all accounts synced at the same moment (now)
+        synced_at = datetime.now(UTC)
 
         accounts: list[BankAccount] = []
         for acc in powens_accounts:
             try:
+                conn_id = acc.get("id_connection")
                 institution_name: str | None = None
-                id_connection = acc.get("id_connection")
-                if id_connection is not None:
-                    try:
-                        institution_name = bank_by_connection.get(int(id_connection))
-                    except (TypeError, ValueError):
-                        institution_name = None
+                if isinstance(conn_id, int):
+                    institution_name = id_to_institution.get(conn_id)
 
                 accounts.append(
                     BankAccount(
@@ -154,7 +171,7 @@ class PowensAggregator:
                         balance=float(acc.get("balance", 0) or 0),
                         iban=acc.get("iban"),
                         institution_name=institution_name,
-                        last_synced_at=None,
+                        last_synced_at=synced_at,
                         raw_data=acc,
                     )
                 )
