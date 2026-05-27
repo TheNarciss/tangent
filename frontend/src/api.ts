@@ -259,6 +259,8 @@ export interface OptimizerResponse {
 /* ── Auth types ─────────────────────────────────────────────────────── */
 
 export interface UserRead {
+  terms_version_accepted: string | null;
+  terms_accepted_at: string | null;
   id: string;
   email: string;
   is_active: boolean;
@@ -961,4 +963,39 @@ export function listOAuthAccounts(): Promise<OAuthAccountPublic[]> {
 /** Unlink an OAuth account by id. */
 export function deleteOAuthAccount(id: string): Promise<void> {
   return http<void>(`/users/me/oauth-accounts/${id}`, { method: "DELETE" });
+}
+
+/* ────────────────────────────────────────────────────────────────────── */
+/*  Terms acceptance (CGU + Privacy click-through)                        */
+/* ────────────────────────────────────────────────────────────────────── */
+
+export interface TermsVersion {
+  version: string;
+}
+
+export interface TermsStatus {
+  version: string;
+  accepted_at: string;
+}
+
+/** Public endpoint — no auth required. */
+export async function fetchTermsVersion(): Promise<TermsVersion> {
+  const res = await fetch(`${API_URL}/auth/terms-version`);
+  if (!res.ok) {
+    throw new ApiError(
+      res.status,
+      "TermsVersionFetchFailed",
+      "Impossible de récupérer la version des CGU.",
+    );
+  }
+  return (await res.json()) as TermsVersion;
+}
+
+/** User accepts the current Terms + Privacy version. */
+export function acceptTerms(version: string): Promise<TermsStatus> {
+  return http<TermsStatus>("/users/me/accept-terms", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ version }),
+  });
 }

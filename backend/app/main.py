@@ -36,6 +36,7 @@ from .routers import (
     portfolio,
     powens,
     profile,
+    terms,
     watchlist,
 )
 
@@ -250,6 +251,7 @@ app.include_router(envelopes.router)
 app.include_router(powens.router)
 app.include_router(admin.router)
 app.include_router(profile.router)
+app.include_router(terms.router)
 app.include_router(oauth_accounts.router)
 
 

@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="index, follow" />
+    <title>À propos — Tangent</title>
+    <link rel="icon" href="/favicon.ico" />
+    <meta
+      name="description"
+      content="Tangent est un agrégateur patrimonial personnel : centralisez vos comptes bancaires, placements et prêts pour analyser votre allocation et vos performances."
+    />
+    <style>
+      :root {
+        --bg: #fafaf9;
+        --fg: #1c1917;
+        --muted: #78716c;
+        --border: #e7e5e4;
+        --accent: #0f172a;
+        --card: #ffffff;
+        --link: #0f172a;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0c0a09;
+          --fg: #fafaf9;
+          --muted: #a8a29e;
+          --border: #292524;
+          --accent: #fafaf9;
+          --card: #1c1917;
+          --link: #fafaf9;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        background: var(--bg); color: var(--fg); line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+      }
+      .container { max-width: 760px; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+      header.site {
+        display: flex; justify-content: space-between; align-items: baseline;
+        padding-bottom: 1.5rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem;
+      }
+      header.site .brand { font-size: 1.125rem; font-weight: 600; text-decoration: none; color: var(--fg); }
+      header.site .back { font-size: 0.875rem; color: var(--muted); text-decoration: none; }
+      header.site .back:hover { color: var(--fg); }
+      h1 { font-size: 2.25rem; font-weight: 600; margin: 0 0 0.5rem; letter-spacing: -0.025em; }
+      .subtitle { color: var(--muted); font-size: 1rem; margin: 0 0 2.5rem; line-height: 1.5; }
+      h2 { font-size: 1.25rem; font-weight: 600; margin: 2.5rem 0 0.75rem; letter-spacing: -0.01em; }
+      p { margin: 0 0 0.875rem; }
+      ul { padding-left: 1.25rem; margin: 0.25rem 0 1rem; }
+      li { margin-bottom: 0.375rem; }
+      a { color: var(--link); text-decoration: underline; text-underline-offset: 2px; }
+      a:hover { text-decoration-thickness: 2px; }
+      .muted { color: var(--muted); }
+      .cta {
+        display: inline-block; padding: 0.625rem 1.25rem; background: var(--accent);
+        color: var(--bg); text-decoration: none; border-radius: 6px; font-weight: 500;
+        margin-top: 1rem;
+      }
+      .cta:hover { opacity: 0.9; text-decoration: none; }
+      .features {
+        display: grid; grid-template-columns: 1fr; gap: 1rem; margin: 1.5rem 0;
+      }
+      @media (min-width: 600px) {
+        .features { grid-template-columns: 1fr 1fr; }
+      }
+      .feature {
+        padding: 1.125rem 1.25rem; background: var(--card); border: 1px solid var(--border);
+        border-radius: 8px;
+      }
+      .feature h3 { margin: 0 0 0.375rem; font-size: 0.9375rem; font-weight: 600; }
+      .feature p { margin: 0; font-size: 0.875rem; color: var(--muted); }
+      footer.site {
+        margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+        display: flex; flex-wrap: wrap; gap: 1rem; font-size: 0.8125rem; color: var(--muted);
+      }
+      footer.site a { color: var(--muted); text-decoration: none; }
+      footer.site a:hover { color: var(--fg); text-decoration: underline; }
+      footer.site .spacer { flex: 1; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header class="site">
+        <a href="/" class="brand">Tangent</a>
+        <a href="/" class="back">← Application</a>
+      </header>
+
+      <h1>Votre patrimoine, lisible.</h1>
+      <p class="subtitle">
+        Tangent agrège vos comptes bancaires, placements et prêts en un tableau de bord clair —
+        et vous donne les outils pour analyser votre allocation, simuler des scénarios, et mesurer
+        votre performance dans le temps.
+      </p>
+
+      <a href="/" class="cta">Accéder à l'application →</a>
+
+      <h2>Ce que vous pouvez faire</h2>
+      <div class="features">
+        <div class="feature">
+          <h3>Agrégation DSP2</h3>
+          <p>
+            Connectez vos banques via Powens (agréé ACPR). Mises à jour automatiques de vos
+            comptes, placements et prêts.
+          </p>
+        </div>
+        <div class="feature">
+          <h3>Analyse de portefeuille</h3>
+          <p>
+            Allocation, corrélations, frontière efficiente, Sharpe, drawdown. Comprenez où votre
+            argent travaille.
+          </p>
+        </div>
+        <div class="feature">
+          <h3>Projections</h3>
+          <p>
+            Simulez l'évolution de votre patrimoine sur 10, 20, 30 ans avec différentes hypothèses
+            de rendement et d'inflation.
+          </p>
+        </div>
+        <div class="feature">
+          <h3>Stress tests</h3>
+          <p>
+            Mesurez l'impact de scénarios extrêmes (krach, choc inflation, hausse de taux) sur
+            votre allocation actuelle.
+          </p>
+        </div>
+        <div class="feature">
+          <h3>Multi-comptes</h3>
+          <p>
+            Suivez ensemble PEA, CTO, livrets, comptes courants, et patrimoine non bancaire saisi
+            à la main.
+          </p>
+        </div>
+        <div class="feature">
+          <h3>Privé par défaut</h3>
+          <p>
+            Auto-hébergé, chiffrement au repos des jetons sensibles, isolation stricte entre
+            utilisateurs. Aucune pub, aucun tracking.
+          </p>
+        </div>
+      </div>
+
+      <h2>Stack technique</h2>
+      <p>
+        Backend Python 3.12 / FastAPI / PostgreSQL 16. Frontend React 18 / TypeScript / Vite.
+        Hébergement self-host avec Docker Compose, Caddy et Cloudflare Tunnel. Agrégation
+        bancaire <a href="https://www.powens.com/" target="_blank" rel="noopener">Powens</a>
+        (DSP2). Emails transactionnels via Resend.
+      </p>
+
+      <h2>Important</h2>
+      <p>
+        Tangent est un outil d'analyse personnel.
+        <strong>
+          Il ne constitue pas un conseil en investissement régulé au sens de l'article L. 541-1
+          du Code monétaire et financier.
+        </strong>
+        Les analyses et projections sont indicatives — toute décision d'investissement vous
+        appartient. Voir les
+        <a href="/legal/terms.html">Conditions d'utilisation</a> pour le détail.
+      </p>
+
+      <h2>Contact</h2>
+      <p>
+        <a href="mailto:privacy@riskybusinesses.uk">privacy@riskybusinesses.uk</a>
+      </p>
+
+      <footer class="site">
+        <a href="/legal/about.html">À propos</a>
+        <a href="/legal/terms.html">Conditions d'utilisation</a>
+        <a href="/legal/privacy.html">Politique de confidentialité</a>
+        <span class="spacer"></span>
+        <span>© 2026 Tangent · Clément Gardair · Paris</span>
+      </footer>
+    </div>
+  </body>
+</html>

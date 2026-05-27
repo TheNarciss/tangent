@@ -75,6 +75,17 @@ export function UserMenu() {
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <a href="/legal/terms.html" className="cursor-pointer">
+            <span>Conditions d&apos;utilisation</span>
+          </a>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <a href="/legal/privacy.html" className="cursor-pointer">
+            <span>Confidentialité</span>
+          </a>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={() => logout.mutate()}
           disabled={logout.isPending}
