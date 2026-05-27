@@ -12,10 +12,15 @@ from time import time as _now
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from . import logging_config
 from .auth import UserCreate, UserRead, UserUpdate, auth_backend, fastapi_users
+from .auth.oauth_router import (
+    build_google_associate_router,
+    build_google_login_router,
+    is_oauth_configured,
+)
 from .db import ping as db_ping
 from .db.init_db import init_db
 from .errors import AppError
@@ -25,6 +30,7 @@ from .routers import (
     analysis,
     dashboard,
     envelopes,
+    oauth_accounts,
     password_reset,
     planning,
     portfolio,
@@ -37,30 +43,18 @@ logging_config.configure()
 logger = logging.getLogger("app")
 
 
-# ─── Lifespan (replaces deprecated @app.on_event) ─────────────────────────
+# ─── Lifespan ─────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    """App lifespan: init DB schema at startup, dispose engine at shutdown.
-
-    Disposing the engine on shutdown closes all pooled connections cleanly,
-    avoiding zombie 'idle in transaction' sessions in Postgres after restart.
-    """
+    """App lifespan: init DB schema at startup."""
     try:
         await init_db()
     except Exception:
         logger.exception("Failed to initialize DB schema at startup")
     yield
-    # Shutdown: close all pooled DB connections cleanly
-    try:
-        from .db.engine import engine
-
-        await engine.dispose()
-        logger.info("DB engine disposed cleanly on shutdown")
-    except Exception:
-        logger.exception("Failed to dispose DB engine on shutdown")
 
 
-app = FastAPI(title="Portfolio Dashboard", version="0.8.0", lifespan=lifespan)
+app = FastAPI(title="Portfolio Dashboard", version="0.9.0", lifespan=lifespan)
 
 
 # ─── Rate limiter (sliding window) ────────────────────────────────────────
@@ -106,6 +100,46 @@ async def apply_auth_rate_limits(request: Request, call_next):
     return await call_next(request)
 
 
+# ─── OAuth callback redirect middleware (cf ADR-014) ──────────────────────
+# fastapi-users OAuth callback retourne un 204 No Content avec Set-Cookie.
+# Pour une UX correcte (l'user vient d'une nav full-page depuis Google),
+# on convertit ce 204 en 303 redirect vers le frontend, en préservant les
+# cookies du auth_backend (CookieTransport).
+@app.middleware("http")
+async def oauth_callback_to_redirect(request: Request, call_next):
+    response = await call_next(request)
+
+    if request.url.path not in {
+        "/auth/google/callback",
+        "/auth/associate/google/callback",
+    }:
+        return response
+
+    frontend = os.getenv("FRONTEND_URL", "/").rstrip("/")
+
+    if response.status_code == 204:
+        # Succès : cookie set, redirect vers le home frontend avec flag
+        redirect = RedirectResponse(
+            url=f"{frontend}/?oauth=success",
+            status_code=303,
+        )
+        # Préserve les Set-Cookie du CookieTransport
+        for header_name, header_value in response.raw_headers:
+            if header_name.lower() == b"set-cookie":
+                redirect.raw_headers.append((header_name, header_value))
+        return redirect
+
+    if response.status_code >= 400:
+        # Échec : redirect avec code d'erreur (le body JSON est perdu mais
+        # le frontend peut afficher un message générique selon le code)
+        return RedirectResponse(
+            url=f"{frontend}/?oauth_error={response.status_code}",
+            status_code=303,
+        )
+
+    return response
+
+
 # ─── CORS ─────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
@@ -139,7 +173,9 @@ async def security_headers(request: Request, call_next):
             "script-src 'self' 'unsafe-inline'; "
             "style-src 'self' 'unsafe-inline'; "
             "img-src 'self' data: https:; "
-            "connect-src 'self' https://*.biapi.pro https://api.resend.com; "
+            "connect-src 'self' https://*.biapi.pro https://api.resend.com "
+            "https://accounts.google.com https://oauth2.googleapis.com "
+            "https://openidconnect.googleapis.com; "
             "font-src 'self' data:; "
             "object-src 'none'; "
             "frame-ancestors 'none'"
@@ -181,6 +217,26 @@ app.include_router(
     fastapi_users.get_users_router(UserRead, UserUpdate), prefix="/users", tags=["users"]
 )
 
+# ─── OAuth routes (Google, cf ADR-014) ────────────────────────────────────
+if is_oauth_configured():
+    app.include_router(
+        build_google_login_router(),
+        prefix="/auth/google",
+        tags=["auth"],
+    )
+    app.include_router(
+        build_google_associate_router(),
+        prefix="/auth/associate/google",
+        tags=["auth"],
+    )
+    logger.info("OAuth Google routers mounted (ADR-014)")
+else:
+    logger.warning(
+        "OAuth Google not configured — endpoints disabled. "
+        "Set GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, "
+        "OAUTH_STATE_SECRET, FRONTEND_URL in backend/.env to enable."
+    )
+
 
 # ─── Business routers (all require auth via current_active_user) ──────────
 app.include_router(portfolio.router)
@@ -194,6 +250,7 @@ app.include_router(envelopes.router)
 app.include_router(powens.router)
 app.include_router(admin.router)
 app.include_router(profile.router)
+app.include_router(oauth_accounts.router)
 
 
 # ─── Exception handlers ───────────────────────────────────────────────────

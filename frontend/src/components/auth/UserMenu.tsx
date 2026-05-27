@@ -1,6 +1,7 @@
-import { LogOut, User as UserIcon } from "lucide-react";
+import { Link2, LogOut, User as UserIcon } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 
-import { useCurrentUser, useLogout } from "@/api";
+import { listOAuthAccounts, useCurrentUser, useLogout } from "@/api";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -10,14 +11,30 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { startGoogleAssociate } from "@/api";
 
 export function UserMenu() {
   const { data: user } = useCurrentUser();
   const logout = useLogout();
+  const oauthAccounts = useQuery({
+    queryKey: ["user", "oauth-accounts"],
+    queryFn: listOAuthAccounts,
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+  });
 
   if (!user) return null;
 
   const initial = (user.display_name?.[0] || user.email[0]).toUpperCase();
+  const hasGoogle = oauthAccounts.data?.some((a) => a.oauth_name === "google") ?? false;
+
+  const handleLinkGoogle = async () => {
+    try {
+      await startGoogleAssociate();
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "Impossible de lier le compte Google.");
+    }
+  };
 
   return (
     <DropdownMenu>
@@ -45,6 +62,18 @@ export function UserMenu() {
           <UserIcon className="mr-2 h-3.5 w-3.5" />
           <span className="text-muted-foreground">{user.id.slice(0, 8)}…</span>
         </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        {hasGoogle ? (
+          <DropdownMenuItem disabled className="text-xs">
+            <Link2 className="mr-2 h-3.5 w-3.5" />
+            <span className="text-muted-foreground">Google lié ✓</span>
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem onClick={handleLinkGoogle}>
+            <Link2 className="mr-2 h-3.5 w-3.5" />
+            <span>Lier mon compte Google</span>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={() => logout.mutate()}
