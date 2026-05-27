@@ -14,6 +14,7 @@ import { ageFromBirthDate, useProfile } from "@/lib/profile";
 import { Accounts } from "@/components/Accounts";
 import { Assets } from "@/components/Assets";
 import { PowensCallbackHandler } from "@/components/PowensCallback";
+import { OAuthCallbackHandler } from "@/components/OAuthCallback";
 import { AuthScreen } from "@/components/auth/AuthScreen";
 import { useProfileSync } from "@/lib/profile-sync";
 import { UserMenu } from "@/components/auth/UserMenu";
@@ -65,6 +66,7 @@ function Dashboard() {
   return (
     <div className="min-h-screen bg-background">
       <PowensCallbackHandler />
+      <OAuthCallbackHandler />
       <div className="container max-w-7xl py-10 space-y-8">
         <header className="flex items-baseline justify-between border-b pb-6">
           <div>

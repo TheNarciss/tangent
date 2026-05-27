@@ -903,3 +903,62 @@ export interface BankTransactionResponse {
   description: string;
   category: string | null;
 }
+
+/* ────────────────────────────────────────────────────────────────────── */
+/*  OAuth (Google, cf ADR-014)                                            */
+/* ────────────────────────────────────────────────────────────────────── */
+
+export interface OAuthAuthorizeResponse {
+  authorization_url: string;
+}
+
+export interface OAuthAccountPublic {
+  id: string;
+  oauth_name: "google";
+  account_email: string;
+}
+
+/**
+ * Initiates Google OAuth login/signup flow.
+ * Fetches the Google authorization URL, then navigates the browser to it.
+ * Google redirects back to backend's /auth/google/callback after consent;
+ * backend sets the auth cookie and redirects to /?oauth=success.
+ */
+export async function startGoogleLogin(): Promise<void> {
+  const res = await fetch(`${API_URL}/auth/google/authorize`, {
+    credentials: "include",
+  });
+  if (!res.ok) {
+    throw new ApiError(
+      res.status,
+      "OAuthStartFailed",
+      "Impossible de démarrer l'authentification Google.",
+    );
+  }
+  const data = (await res.json()) as OAuthAuthorizeResponse;
+  window.location.href = data.authorization_url;
+}
+
+/**
+ * Initiates Google OAuth account linking (user must already be logged in).
+ */
+export async function startGoogleAssociate(): Promise<void> {
+  const res = await fetch(`${API_URL}/auth/associate/google/authorize`, {
+    credentials: "include",
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, "OAuthAssociateFailed", "Impossible de lier le compte Google.");
+  }
+  const data = (await res.json()) as OAuthAuthorizeResponse;
+  window.location.href = data.authorization_url;
+}
+
+/** List OAuth accounts linked to the current user. */
+export function listOAuthAccounts(): Promise<OAuthAccountPublic[]> {
+  return http<OAuthAccountPublic[]>("/users/me/oauth-accounts");
+}
+
+/** Unlink an OAuth account by id. */
+export function deleteOAuthAccount(id: string): Promise<void> {
+  return http<void>(`/users/me/oauth-accounts/${id}`, { method: "DELETE" });
+}

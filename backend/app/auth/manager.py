@@ -1,9 +1,9 @@
-"""UserManager FastAPI-Users — handlers register/login/reset-password/etc.
+"""UserManager FastAPI-Users — handlers register/login/oauth/reset-password/etc.
 
 Configure :
 - Argon2 comme password hashing (recommandé OWASP 2026)
 - Validations custom (mot de passe min 8 chars, email pas pris)
-- Hooks après register/login (logs, futures notifs email)
+- Hooks après register/login/oauth (audit logs)
 """
 
 import logging
@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
 from .models import User
+from .oauth_models import OAuthAccount
 from .schemas import UserCreate
 
 logger = logging.getLogger(__name__)
@@ -30,11 +31,11 @@ _password_hash = PasswordHash((Argon2Hasher(),))
 _password_helper = PasswordHelper(_password_hash)
 
 
-class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
+# User.hashed_password nullable (ADR-014) — runtime safe, mais viole UserProtocol
+class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):  # type: ignore[type-var]
     """Logique métier des users — appelée par les routes /auth/*."""
 
     # Secrets pour signer les tokens de reset password + email verification.
-    # On utilise le même JWT_SECRET que le backend auth (= défini en env).
     reset_password_token_secret = os.getenv("JWT_SECRET", "CHANGE_ME_IN_PRODUCTION")
     verification_token_secret = os.getenv("JWT_SECRET", "CHANGE_ME_IN_PRODUCTION")
 
@@ -43,19 +44,13 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     async def validate_password(  # type: ignore[override]
         self, password: str, user: UserCreate | User
     ) -> None:
-        """Règles de mot de passe (silently log, raise InvalidPasswordException si KO).
-
-        type: ignore[override] : UserCreate is our concrete UC TypeVar, narrower than
-        the parent's `UC | User`. Liskov is technically violated but runtime is safe.
-        """
+        """Règles de mot de passe (silently log, raise InvalidPasswordException si KO)."""
         if len(password) < 8:
             raise exceptions.InvalidPasswordException(
                 reason="Le mot de passe doit faire au moins 8 caractères."
             )
-        # Possible : ajouter des checks plus stricts (majuscule, chiffre, etc.)
-        # On reste laxiste pour un projet perso — l'argon2 hashing compense.
 
-    # ── Hooks ──
+    # ── Hooks classiques ──
 
     async def on_after_register(self, user: User, request: Request | None = None) -> None:
         from .audit import log_event
@@ -63,7 +58,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         log_event(
             "AUTH_REGISTER",
             user_id=str(user.id),
-            email=user.email,
             ip=request.client.host if request and request.client else None,
         )
 
@@ -75,7 +69,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         log_event(
             "AUTH_LOGIN_SUCCESS",
             user_id=str(user.id),
-            email=user.email,
             ip=request.client.host if request and request.client else None,
         )
 
@@ -87,11 +80,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         log_event(
             "AUTH_PASSWORD_RESET_REQUEST",
             user_id=str(user.id),
-            email=user.email,
             ip=request.client.host if request and request.client else None,
         )
-        # Token sent via email only (Resend). Never logged — was leaking
-        # via APP_ENV default to "dev" if env var missing. See Semgrep finding.
 
     async def on_after_reset_password(self, user: User, request: Request | None = None) -> None:
         from .audit import log_event
@@ -99,7 +89,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         log_event(
             "AUTH_PASSWORD_RESET_CONFIRM",
             user_id=str(user.id),
-            email=user.email,
             ip=request.client.host if request and request.client else None,
         )
 
@@ -107,13 +96,67 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         self, user: User, token: str, request: Request | None = None
     ) -> None:
         # Token sent via email only — never logged.
-        # Hook reserved for future audit logging.
+        pass
+
+    # ── OAuth hooks (cf ADR-014) ──
+
+    async def oauth_callback(
+        self,
+        oauth_name: str,
+        access_token: str,
+        account_id: str,
+        account_email: str,
+        expires_at: int | None = None,
+        refresh_token: str | None = None,
+        request: Request | None = None,
+        *,
+        associate_by_email: bool = False,
+        is_verified_by_default: bool = False,
+    ) -> User:
+        """Override pour audit log + détection new-vs-existing.
+
+        Note : la validation email_verified=true est faite plus tôt dans
+        GoogleOAuth2Verified.get_id_email — si l'email n'est pas vérifié, on
+        n'arrive jamais ici (cf ADR-014 §4).
+        """
+        from .audit import log_event
+
+        # Détecter new user vs link existant AVANT l'appel parent
+        existing = await self.user_db.get_by_email(account_email)
+        is_new_user = existing is None
+
+        user = await super().oauth_callback(
+            oauth_name,
+            access_token,
+            account_id,
+            account_email,
+            expires_at,
+            refresh_token,
+            request,
+            associate_by_email=associate_by_email,
+            is_verified_by_default=is_verified_by_default,
+        )
+
+        ip = request.client.host if request and request.client else None
+        event = "OAUTH_REGISTER" if is_new_user else "OAUTH_LOGIN_SUCCESS"
+        log_event(
+            event,
+            user_id=str(user.id),
+            oauth_name=oauth_name,
+            ip=ip,
+        )
+        return user
+
+    async def on_after_update(
+        self, user: User, update_dict: dict, request: Request | None = None
+    ) -> None:
+        # Hook réservé pour audit futur
         pass
 
 
 async def get_user_db(session: AsyncSession = Depends(get_session)):
-    """Dependency : injecte la couche d'accès DB pour les users."""
-    yield SQLAlchemyUserDatabase(session, User)
+    """Dependency : injecte la couche d'accès DB pour users + oauth_accounts."""
+    yield SQLAlchemyUserDatabase(session, User, OAuthAccount)
 
 
 async def get_user_manager(user_db=Depends(get_user_db)):
