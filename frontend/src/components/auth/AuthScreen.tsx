@@ -60,6 +60,23 @@ export function AuthScreen() {
         <p className="text-center text-xs text-muted-foreground">
           Tes données restent privées — chaque compte voit uniquement son portefeuille.
         </p>
+        <p className="text-center text-xs text-muted-foreground">
+          En vous inscrivant, vous acceptez nos{" "}
+          <a
+            href="/legal/terms.html"
+            className="underline underline-offset-2 hover:text-foreground"
+          >
+            Conditions
+          </a>{" "}
+          et notre{" "}
+          <a
+            href="/legal/privacy.html"
+            className="underline underline-offset-2 hover:text-foreground"
+          >
+            Politique de confidentialité
+          </a>
+          .
+        </p>
       </div>
     </div>
   );
