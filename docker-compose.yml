@@ -49,7 +49,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command: uvicorn app.main:app --reload --reload-dir /app/app --host 0.0.0.0 --port 8000
+    command: uvicorn app.main:app --reload --reload-dir /app/app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips '*'
 
   frontend:
     build:
