@@ -15,6 +15,9 @@ import { Accounts } from "@/components/Accounts";
 import { Assets } from "@/components/Assets";
 import { PowensCallbackHandler } from "@/components/PowensCallback";
 import { OAuthCallbackHandler } from "@/components/OAuthCallback";
+import { TermsGate } from "@/components/TermsGate";
+import { fetchTermsVersion } from "@/api";
+import { useQuery } from "@tanstack/react-query";
 import { AuthScreen } from "@/components/auth/AuthScreen";
 import { useProfileSync } from "@/lib/profile-sync";
 import { UserMenu } from "@/components/auth/UserMenu";
@@ -38,6 +41,15 @@ export default function App() {
   const auth = useCurrentUser();
   useProfileSync(!!auth.data);
 
+  // CGU click-through gate (cf TermsGate). enabled uniquement
+  // quand loggé pour éviter un fetch inutile sur AuthScreen.
+  const termsVersionQuery = useQuery({
+    queryKey: ["terms-version"],
+    queryFn: fetchTermsVersion,
+    enabled: !!auth.data,
+    staleTime: Infinity,
+  });
+
   // Auth still loading — show empty shell to avoid login flash
   if (auth.isLoading) {
     return (
@@ -50,6 +62,12 @@ export default function App() {
   // Not logged in → AuthScreen
   if (!auth.data) {
     return <AuthScreen />;
+  }
+
+  // CGU pas (encore) acceptées pour la version actuelle → gate
+  const currentTermsVersion = termsVersionQuery.data?.version;
+  if (currentTermsVersion && auth.data.terms_version_accepted !== currentTermsVersion) {
+    return <TermsGate user={auth.data} />;
   }
 
   // Logged in → main dashboard

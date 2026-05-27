@@ -50,6 +50,15 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     )
 
     display_name: Mapped[str | None] = mapped_column(String(64), default=None)
+
+    # Acceptation des CGU/Privacy (click-through gate, cf TermsGate frontend)
+    # NULL = pas accepté → frontend affiche TermsGate au login
+    terms_version_accepted: Mapped[str | None] = mapped_column(
+        String(20), default=None, nullable=True
+    )
+    terms_accepted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None, nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
