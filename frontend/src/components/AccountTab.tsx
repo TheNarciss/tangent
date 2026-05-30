@@ -279,9 +279,10 @@ function OAuthSection() {
           {accounts.data.map((acc) => (
             <OAuthRow
               key={acc.id}
+              accountId={acc.id}
               provider={acc.oauth_name}
               email={acc.account_email}
-              canUnlink={hasPassword}
+              canUnlink={hasPassword || accounts.data.length > 1}
             />
           ))}
         </div>
@@ -291,10 +292,12 @@ function OAuthSection() {
 }
 
 function OAuthRow({
+  accountId,
   provider,
   email,
   canUnlink,
 }: {
+  accountId: string;
   provider: string;
   email: string | null;
   canUnlink: boolean;
@@ -304,7 +307,7 @@ function OAuthRow({
   const [error, setError] = useState<string | null>(null);
 
   const mutation = useMutation({
-    mutationFn: () => unlinkOAuthAccount(provider),
+    mutationFn: () => unlinkOAuthAccount(accountId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["oauth-accounts"] });
       setConfirming(false);

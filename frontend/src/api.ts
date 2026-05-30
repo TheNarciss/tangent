@@ -1039,8 +1039,8 @@ export function fetchOAuthAccounts(): Promise<OAuthAccountPublic[]> {
   return http<OAuthAccountPublic[]>("/users/me/oauth-accounts");
 }
 
-export async function unlinkOAuthAccount(provider: string): Promise<void> {
-  await http<void>(`/users/me/oauth-accounts/${encodeURIComponent(provider)}`, {
+export async function unlinkOAuthAccount(accountId: string): Promise<void> {
+  await http<void>(`/users/me/oauth-accounts/${encodeURIComponent(accountId)}`, {
     method: "DELETE",
   });
 }

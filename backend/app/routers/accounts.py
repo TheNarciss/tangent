@@ -241,6 +241,132 @@ async def list_accounts(
     return [_bank_account_to_response(r) for r in rows]
 
 
+class BankConnectionResponse(BaseModel):
+    """Powens connection metadata + count of bank_accounts in Tangent for it."""
+
+    connection_id: int
+    institution_name: str
+    accounts_count: int
+    last_update: datetime | None = None
+    error: str | None = None
+
+
+@router.get("/connections", response_model=list[BankConnectionResponse])
+async def list_bank_connections(
+    user: User = Depends(current_active_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[BankConnectionResponse]:
+    """List Powens connections of the current user with bank_account counts.
+
+    Returns [] if the user has no Powens credential yet.
+    """
+    stmt = select(PowensCredential).where(PowensCredential.user_id == user.id)
+    cred = (await session.execute(stmt)).scalars().first()
+    if cred is None:
+        return []
+
+    token = decrypt_token(cred.encrypted_token)
+    try:
+        async with PowensClient(token=token) as client:
+            connections = await client.get_connections()
+    except PowensError as exc:
+        logger.warning("list_bank_connections user=%s: Powens error: %s", user.id, exc)
+        return []
+
+    out: list[BankConnectionResponse] = []
+    for conn in connections:
+        conn_id = conn.get("id")
+        if not isinstance(conn_id, int):
+            continue
+        bank = conn.get("bank") or {}
+        connector = conn.get("connector") or {}
+        institution_name = bank.get("name") or connector.get("name") or "Banque"
+
+        # Count Tangent bank_accounts whose raw_data.id_connection == conn_id
+        count_stmt = (
+            select(BankAccount)
+            .where(BankAccount.user_id == user.id)
+            .where(BankAccount.raw_data["id_connection"].astext == str(conn_id))
+        )
+        accounts = (await session.execute(count_stmt)).scalars().all()
+        out.append(
+            BankConnectionResponse(
+                connection_id=conn_id,
+                institution_name=institution_name,
+                accounts_count=len(accounts),
+                last_update=_parse_iso(conn.get("last_update")),
+                error=conn.get("error"),
+            )
+        )
+    return out
+
+
+@router.delete("/connections/{connection_id}", status_code=204)
+async def delete_bank_connection(
+    connection_id: int,
+    user: User = Depends(current_active_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Delete a Powens connection AND its bank_accounts in Tangent.
+
+    Order matters: we first try to delete in Powens (to revoke DSP2 access),
+    then clean up Tangent. If Powens errors (e.g. already deleted), we still
+    clean up locally to avoid orphan rows.
+    """
+    stmt = select(PowensCredential).where(PowensCredential.user_id == user.id)
+    cred = (await session.execute(stmt)).scalars().first()
+    if cred is None:
+        raise HTTPException(404, "No Powens credential.")
+
+    token = decrypt_token(cred.encrypted_token)
+
+    # 1. Delete côté Powens (revoke DSP2 + drop accounts upstream)
+    try:
+        async with PowensClient(token=token) as client:
+            await client.delete_connection(connection_id)
+        logger.info(
+            "delete_bank_connection user=%s conn=%s: deleted on Powens",
+            user.id,
+            connection_id,
+        )
+    except PowensError as exc:
+        logger.warning(
+            "delete_bank_connection user=%s conn=%s: Powens DELETE failed (%s) "
+            "— cleaning up Tangent anyway",
+            user.id,
+            connection_id,
+            exc,
+        )
+
+    # 2. Delete côté Tangent — bank_accounts matching id_connection
+    accounts_stmt = (
+        select(BankAccount)
+        .where(BankAccount.user_id == user.id)
+        .where(BankAccount.raw_data["id_connection"].astext == str(connection_id))
+    )
+    accounts = (await session.execute(accounts_stmt)).scalars().all()
+    for acc in accounts:
+        await session.delete(acc)  # cascade via FK on loan/holdings/transactions
+    await session.commit()
+
+    logger.info(
+        "delete_bank_connection user=%s conn=%s: %d Tangent accounts deleted",
+        user.id,
+        connection_id,
+        len(accounts),
+    )
+
+
+def _parse_iso(s: str | None) -> datetime | None:
+    """Parse an ISO datetime string from Powens (handles trailing Z)."""
+    if not s:
+        return None
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+
+
 @router.get("/{account_id}", response_model=BankAccountResponse)
 async def get_account(
     account_id: uuid.UUID,
@@ -405,132 +531,6 @@ async def refresh_accounts(
     report = await _do_sync(user, session)
     await sync_cache.set(user.id, report)
     return report
-
-
-class BankConnectionResponse(BaseModel):
-    """Powens connection metadata + count of bank_accounts in Tangent for it."""
-
-    connection_id: int
-    institution_name: str
-    accounts_count: int
-    last_update: datetime | None = None
-    error: str | None = None
-
-
-@router.get("/connections", response_model=list[BankConnectionResponse])
-async def list_bank_connections(
-    user: User = Depends(current_active_user),
-    session: AsyncSession = Depends(get_session),
-) -> list[BankConnectionResponse]:
-    """List Powens connections of the current user with bank_account counts.
-
-    Returns [] if the user has no Powens credential yet.
-    """
-    stmt = select(PowensCredential).where(PowensCredential.user_id == user.id)
-    cred = (await session.execute(stmt)).scalars().first()
-    if cred is None:
-        return []
-
-    token = decrypt_token(cred.encrypted_token)
-    try:
-        async with PowensClient(token=token) as client:
-            connections = await client.get_connections()
-    except PowensError as exc:
-        logger.warning("list_bank_connections user=%s: Powens error: %s", user.id, exc)
-        return []
-
-    out: list[BankConnectionResponse] = []
-    for conn in connections:
-        conn_id = conn.get("id")
-        if not isinstance(conn_id, int):
-            continue
-        bank = conn.get("bank") or {}
-        connector = conn.get("connector") or {}
-        institution_name = bank.get("name") or connector.get("name") or "Banque"
-
-        # Count Tangent bank_accounts whose raw_data.id_connection == conn_id
-        count_stmt = (
-            select(BankAccount)
-            .where(BankAccount.user_id == user.id)
-            .where(BankAccount.raw_data["id_connection"].astext == str(conn_id))
-        )
-        accounts = (await session.execute(count_stmt)).scalars().all()
-        out.append(
-            BankConnectionResponse(
-                connection_id=conn_id,
-                institution_name=institution_name,
-                accounts_count=len(accounts),
-                last_update=_parse_iso(conn.get("last_update")),
-                error=conn.get("error"),
-            )
-        )
-    return out
-
-
-@router.delete("/connections/{connection_id}", status_code=204)
-async def delete_bank_connection(
-    connection_id: int,
-    user: User = Depends(current_active_user),
-    session: AsyncSession = Depends(get_session),
-) -> None:
-    """Delete a Powens connection AND its bank_accounts in Tangent.
-
-    Order matters: we first try to delete in Powens (to revoke DSP2 access),
-    then clean up Tangent. If Powens errors (e.g. already deleted), we still
-    clean up locally to avoid orphan rows.
-    """
-    stmt = select(PowensCredential).where(PowensCredential.user_id == user.id)
-    cred = (await session.execute(stmt)).scalars().first()
-    if cred is None:
-        raise HTTPException(404, "No Powens credential.")
-
-    token = decrypt_token(cred.encrypted_token)
-
-    # 1. Delete côté Powens (revoke DSP2 + drop accounts upstream)
-    try:
-        async with PowensClient(token=token) as client:
-            await client.delete_connection(connection_id)
-        logger.info(
-            "delete_bank_connection user=%s conn=%s: deleted on Powens",
-            user.id,
-            connection_id,
-        )
-    except PowensError as exc:
-        logger.warning(
-            "delete_bank_connection user=%s conn=%s: Powens DELETE failed (%s) "
-            "— cleaning up Tangent anyway",
-            user.id,
-            connection_id,
-            exc,
-        )
-
-    # 2. Delete côté Tangent — bank_accounts matching id_connection
-    accounts_stmt = (
-        select(BankAccount)
-        .where(BankAccount.user_id == user.id)
-        .where(BankAccount.raw_data["id_connection"].astext == str(connection_id))
-    )
-    accounts = (await session.execute(accounts_stmt)).scalars().all()
-    for acc in accounts:
-        await session.delete(acc)  # cascade via FK on loan/holdings/transactions
-    await session.commit()
-
-    logger.info(
-        "delete_bank_connection user=%s conn=%s: %d Tangent accounts deleted",
-        user.id,
-        connection_id,
-        len(accounts),
-    )
-
-
-def _parse_iso(s: str | None) -> datetime | None:
-    """Parse an ISO datetime string from Powens (handles trailing Z)."""
-    if not s:
-        return None
-    try:
-        return datetime.fromisoformat(s.replace("Z", "+00:00"))
-    except (TypeError, ValueError):
-        return None
 
 
 # ── Internal sync helper ────────────────────────────────────────────────────

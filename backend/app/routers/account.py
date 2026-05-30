@@ -18,7 +18,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi_users.password import PasswordHelper
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, select
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import User, current_active_user
@@ -56,14 +56,6 @@ class DeleteAccountRequest(BaseModel):
 
     confirmation: str = Field(min_length=1, max_length=20)
     current_password: str | None = Field(default=None, max_length=200)
-
-
-class OAuthAccountPublic(BaseModel):
-    """Sanitized OAuth account info (no tokens exposed)."""
-
-    id: str
-    oauth_name: str
-    account_email: str | None = None
 
 
 # ── Change password ───────────────────────────────────────────────────
@@ -204,80 +196,3 @@ async def delete_my_account(
     response = Response(status_code=status.HTTP_204_NO_CONTENT)
     response.delete_cookie(key="tangent_auth", httponly=True, samesite="lax", secure=True)
     return response
-
-
-# ── OAuth account management ──────────────────────────────────────────
-
-
-@router.get(
-    "/users/me/oauth-accounts",
-    response_model=list[OAuthAccountPublic],
-    summary="List OAuth accounts linked to the current user",
-)
-async def list_oauth_accounts(
-    user: Annotated[User, Depends(current_active_user)],
-    session: Annotated[AsyncSession, Depends(get_session)],
-) -> list[OAuthAccountPublic]:
-    """Return a sanitized list of OAuth accounts linked to this user.
-
-    Returns [] if the OAuth feature is not enabled (no OAuthAccount model).
-    """
-    stmt = select(OAuthAccount).where(OAuthAccount.user_id == user.id)
-    res = await session.execute(stmt)
-    rows = res.scalars().all()
-
-    return [
-        OAuthAccountPublic(
-            id=str(r.id),
-            oauth_name=r.oauth_name,
-            account_email=getattr(r, "account_email", None),
-        )
-        for r in rows
-    ]
-
-
-@router.delete(
-    "/users/me/oauth-accounts/{provider}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    summary="Unlink an OAuth account from the current user",
-)
-async def unlink_oauth_account(
-    provider: str,
-    user: Annotated[User, Depends(current_active_user)],
-    session: Annotated[AsyncSession, Depends(get_session)],
-) -> Response:
-    """Unlink the OAuth account from the user.
-
-    Refuses if the user has no password — would lock them out of their account.
-    """
-    if not user.hashed_password:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            detail=("Cannot unlink your only login method. Set a password on your account first."),
-        )
-
-    stmt = select(OAuthAccount).where(
-        OAuthAccount.user_id == user.id,
-        OAuthAccount.oauth_name == provider,  # type: ignore[arg-type]
-    )
-    res = await session.execute(stmt)
-    rows = res.scalars().all()
-
-    if not rows:
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND,
-            detail=f"No {provider!r} account linked to this user.",
-        )
-
-    for r in rows:
-        await session.delete(r)
-    await session.commit()
-
-    log_event(
-        "OAUTH_UNLINKED",
-        user_id=str(user.id),
-        provider=provider,
-        count=len(rows),
-    )
-
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
