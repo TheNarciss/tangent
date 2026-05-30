@@ -138,3 +138,11 @@ class PowensClient:
         if not isinstance(code, str) or not code:
             raise PowensError("Powens /auth/token/code returned no code")
         return code
+
+    async def delete_connection(self, connection_id: int) -> None:
+        """Delete a Powens connection (revokes DSP2 access to that bank).
+
+        Powens-side, this also drops the associated accounts, transactions and
+        investments. Tangent-side cleanup is the caller's responsibility.
+        """
+        await self._request("DELETE", f"/users/me/connections/{connection_id}")

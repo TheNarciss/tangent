@@ -16,6 +16,7 @@ class UserRead(schemas.BaseUser[uuid.UUID]):
     display_name: str | None = None
     terms_version_accepted: str | None = None
     terms_accepted_at: datetime | None = None
+    has_password: bool = True  # computed property (cf User model)
 
 
 class UserCreate(schemas.BaseUserCreate):

@@ -259,6 +259,7 @@ export interface OptimizerResponse {
 /* ── Auth types ─────────────────────────────────────────────────────── */
 
 export interface UserRead {
+  has_password?: boolean;
   terms_version_accepted: string | null;
   terms_accepted_at: string | null;
   id: string;
@@ -997,5 +998,59 @@ export function acceptTerms(version: string): Promise<TermsStatus> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ version }),
+  });
+}
+
+/* ────────────────────────────────────────────────────────────────────── */
+/*  Account management                                                    */
+/* ────────────────────────────────────────────────────────────────────── */
+
+export interface BankConnection {
+  connection_id: number;
+  institution_name: string;
+  accounts_count: number;
+  last_update: string | null;
+  error: string | null;
+}
+
+export async function changePassword(
+  current_password: string,
+  new_password: string,
+): Promise<void> {
+  await http<void>("/users/me/change-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ current_password, new_password }),
+  });
+}
+
+export async function deleteMyAccount(payload: {
+  confirmation: string;
+  current_password: string | null;
+}): Promise<void> {
+  await http<void>("/users/me/delete-account", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchOAuthAccounts(): Promise<OAuthAccountPublic[]> {
+  return http<OAuthAccountPublic[]>("/users/me/oauth-accounts");
+}
+
+export async function unlinkOAuthAccount(provider: string): Promise<void> {
+  await http<void>(`/users/me/oauth-accounts/${encodeURIComponent(provider)}`, {
+    method: "DELETE",
+  });
+}
+
+export function fetchBankConnections(): Promise<BankConnection[]> {
+  return http<BankConnection[]>("/accounts/connections");
+}
+
+export async function unlinkBankConnection(connectionId: number): Promise<void> {
+  await http<void>(`/accounts/connections/${connectionId}`, {
+    method: "DELETE",
   });
 }
