@@ -16,6 +16,7 @@ from ..auth import User, current_active_user
 from ..db.engine import get_session
 from ..db.models import PowensCredential
 from ..powens import settings as powens_settings
+from ..powens.client import PowensClient, PowensError
 from ..powens.crypto import decrypt_token, encrypt_token
 from ..powens.oauth import exchange_code_for_token
 from ..powens.sync import sync_portfolio
@@ -27,26 +28,83 @@ router = APIRouter(tags=["powens"])
 
 
 @router.get("/auth/powens/initiate")
-async def get_powens_webview(user: User = Depends(current_active_user)):
-    """Returns the URL the frontend must redirect to in order to start the Powens flow."""
+async def get_powens_webview(
+    user: User = Depends(current_active_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Returns the Powens webview URL to start an "Add bank" flow.
+
+    Critical: if the user already has a Powens credential (= already linked
+    at least one bank), we MUST generate a temporary_code scoped to that user
+    and pass it in the URL. Without it, Powens creates a NEW anonymous user
+    on every webview load, which orphans the previous bank (cf bug post-OAuth).
+
+    Behavior:
+    - First-ever bank: no code → Powens creates the Tangent user's Powens user.
+    - Subsequent banks: code = single-access temp code scoped to existing user.
+    """
     if not powens_settings.domain or not powens_settings.client_id:
         raise HTTPException(status_code=500, detail="Powens not configured.")
+
     redirect_uri = f"{powens_settings.backend_url}/auth/powens/callback"
-    url = (
+    base_url = (
         f"https://{powens_settings.domain}/2.0/auth/webview/connect"
         f"?client_id={powens_settings.client_id}&redirect_uri={redirect_uri}"
     )
-    return {"webview_url": url}
+
+    # If a credential already exists, generate a temp code to ADD a new
+    # connection to the same Powens user (instead of creating a fresh one).
+    stmt = select(PowensCredential).where(PowensCredential.user_id == user.id)
+    res = await session.execute(stmt)
+    cred = res.scalars().first()
+
+    if cred is None:
+        logger.info("Powens initiate user=%s: first-time connect (no temp code)", user.id)
+        return {"webview_url": base_url}
+
+    try:
+        token = decrypt_token(cred.encrypted_token)
+        async with PowensClient(token=token) as client:
+            temp_code = await client.get_temporary_code()
+    except PowensError:
+        # Token might be revoked or invalid — fall back to fresh user.
+        # The new user will replace this credential at callback.
+        logger.exception(
+            "Powens initiate user=%s: temp code generation failed, falling back to fresh user flow",
+            user.id,
+        )
+        return {"webview_url": base_url}
+
+    logger.info("Powens initiate user=%s: adding bank to existing Powens user", user.id)
+    return {"webview_url": f"{base_url}&code={temp_code}"}
 
 
 @router.get("/auth/powens/callback")
 async def powens_auth_callback(
-    code: str,
     user: User = Depends(current_active_user),
+    code: str | None = None,
     connection_id: str | None = None,
     session: AsyncSession = Depends(get_session),
 ):
-    """OAuth callback — exchange code for token and store it for THIS user."""
+    """OAuth callback — handles both first-time connect and "add another bank".
+
+    Powens behavior (cf webview /connect doc):
+    - First time (no code sent to webview): callback receives a `code` that we
+      must exchange for a permanent access_token. We persist it.
+    - Subsequent times (we sent code=<temp> to webview): callback has NO code
+      because the existing token already covers the new connection. Nothing
+      to persist; we just confirm to the frontend.
+    """
+    # Case 2: adding a bank to existing Powens user — no new token to store
+    if code is None:
+        logger.info(
+            "Powens callback user=%s: connection added to existing user (connection_id=%s)",
+            user.id,
+            connection_id,
+        )
+        return RedirectResponse(url=f"{powens_settings.frontend_url}/?powens_sync=success")
+
+    # Case 1: first-time connect — exchange code → token, store credential
     try:
         token_data = await exchange_code_for_token(code)
     except Exception:
@@ -65,15 +123,21 @@ async def powens_auth_callback(
     res = await session.execute(stmt)
     cred = res.scalars().first()
     if cred:
+        # Should not normally happen now (temp_code path used instead), but
+        # defensive: replace token if somehow we end up here.
         cred.encrypted_token = encrypt_token(access_token)
-        logger.info("Updated Powens token for user_id=%s", user.id)
+        logger.warning(
+            "Powens callback user=%s: replacing existing token (unexpected — "
+            "temp_code path should have been used)",
+            user.id,
+        )
     else:
         cred = PowensCredential(
             user_id=user.id,
             encrypted_token=encrypt_token(access_token),
         )
         session.add(cred)
-        logger.info("Stored new Powens token for user_id=%s", user.id)
+        logger.info("Stored initial Powens token for user_id=%s", user.id)
     await session.commit()
 
     return RedirectResponse(url=f"{powens_settings.frontend_url}/?powens_sync=success")
