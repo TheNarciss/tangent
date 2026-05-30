@@ -28,8 +28,8 @@ import { Metrics } from "@/components/Metrics";
 import { StressTests } from "@/components/StressTests";
 import { Optimizer } from "@/components/Optimizer";
 import { Scanner } from "@/components/Scanner";
-import { ProfileButton } from "@/components/Profile";
-import { SettingsButton } from "@/components/Settings";
+import { ProfilePage } from "@/components/Profile";
+import { SettingsPage } from "@/components/Settings";
 import { AddBankButton } from "@/components/AddBankButton";
 import { Projection } from "@/components/Projection";
 import { BengenWidget } from "@/components/BengenWidget";
@@ -37,9 +37,12 @@ import { RiskReturn } from "@/components/RiskReturn";
 import { Timeline } from "@/components/Timeline";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+type View = "dashboard" | "profile" | "settings";
+
 export default function App() {
   const auth = useCurrentUser();
   useProfileSync(!!auth.data);
+  const [view, setView] = useState<View>("dashboard");
 
   // CGU click-through gate (cf TermsGate). enabled uniquement
   // quand loggé pour éviter un fetch inutile sur AuthScreen.
@@ -70,11 +73,17 @@ export default function App() {
     return <TermsGate user={auth.data} />;
   }
 
-  // Logged in → main dashboard
-  return <Dashboard />;
+  // Logged in → route to selected view
+  if (view === "profile") {
+    return <ProfilePage onBack={() => setView("dashboard")} />;
+  }
+  if (view === "settings") {
+    return <SettingsPage onBack={() => setView("dashboard")} />;
+  }
+  return <Dashboard onNavigate={setView} />;
 }
 
-function Dashboard() {
+function Dashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
   const { data: user } = useCurrentUser();
   const dashboard = useDashboard();
   const portfolio = usePortfolio();
@@ -102,10 +111,9 @@ function Dashboard() {
           </div>
           <div className="flex items-center gap-2">
             <AddBankButton />
-            <ProfileButton />
-            <SettingsButton />
+
             {portfolio.data && <Editor portfolio={portfolio.data} />}
-            <UserMenu />
+            <UserMenu onNavigate={onNavigate} />
           </div>
         </header>
 
