@@ -122,14 +122,24 @@ async def test_bridge_aggregates_holdings_by_ticker_across_accounts():
 
 @pytest.mark.integration
 async def test_bridge_sums_pea_cash_accounts_into_legacy_cash():
+    """PEA sub-accounts with 0 holdings (= cash sub-accounts) sum into legacy cash.
+
+    PEA sub-accounts WITH holdings are excluded — their balance represents the
+    titres valuation, already aggregated into positions.
+    """
     user_id = await _create_test_user()
     try:
         accounts = [
+            # PEA Titres with 1 holding → NOT cash (excluded by structural check)
             _acc("pea-titres", "PEA Titres", AccountType.PEA, 10000.0),
+            # PEA Espèces sub-accounts with 0 holdings → cash
             _acc("pea-espece-bnp", "PEA Espèces", AccountType.PEA, 250.50),
             _acc("pea-cash-bp", "PEA Cash BP", AccountType.PEA, 100.00),
         ]
-        result = _sync_result(accounts, investments=[])
+        investments = [
+            _inv("pea-titres", "inv-1", "WPEA.PA", 50.0, 200.0, 200.0),
+        ]
+        result = _sync_result(accounts, investments=investments)
 
         async with async_session_factory() as session:
             await _sync_to_legacy_portfolio(session, user_id, result)
@@ -344,3 +354,64 @@ async def test_bridge_excludes_savings_and_loans_from_cash():
         pf = portfolios.scalar_one()
         # Aucun de ces comptes ne doit alimenter le cash legacy
         assert pf.cash == 0.0
+
+
+@pytest.mark.integration
+async def test_bridge_detects_pea_cash_by_zero_holdings():
+    """Structural detection: PEA with 0 holdings → cash, no name match needed."""
+    from app.routers.accounts import _sync_to_legacy_portfolio
+
+    user_id = await _create_test_user()
+    result = SyncResult(
+        success=True,
+        provider="powens",
+        accounts=[
+            # A PEA cash sub-account — note: name doesn't contain "espèces"
+            BankAccount(
+                provider="powens",
+                provider_account_id="pea-cash-de",
+                institution_name="Test Bank",
+                type=AccountType.PEA,
+                name="PEA Bargeld",  # German name — would fail old name heuristic
+                balance=1000.0,
+                valuation=1000.0,
+                currency="EUR",
+                raw_data={},
+            ),
+            # A PEA titres sub-account with holdings
+            BankAccount(
+                provider="powens",
+                provider_account_id="pea-titres-1",
+                institution_name="Test Bank",
+                type=AccountType.PEA,
+                name="PEA Securities",
+                balance=5000.0,
+                valuation=5500.0,
+                currency="EUR",
+                raw_data={},
+            ),
+        ],
+        investments=[
+            Investment(
+                provider="powens",
+                provider_investment_id="inv-1",
+                provider_account_id="pea-titres-1",
+                ticker="WPEA.PA",
+                label="iShares MSCI World",
+                quantity=10.0,
+                unit_price=500.0,
+                current_value=550.0,
+                currency="EUR",
+            ),
+        ],
+        synced_at=datetime.now(tz=UTC),
+    )
+
+    async with async_session_factory() as session:
+        await _sync_to_legacy_portfolio(session, user_id, result)
+        await session.commit()
+
+        portfolios = await session.execute(select(Portfolio).where(Portfolio.user_id == user_id))
+        pf = portfolios.scalar_one()
+        # Only the PEA-cash (0 holdings) counts as cash, despite German name
+        assert pf.cash == 1000.0

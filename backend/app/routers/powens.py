@@ -19,9 +19,7 @@ from ..powens import settings as powens_settings
 from ..powens.client import PowensClient, PowensError
 from ..powens.crypto import decrypt_token, encrypt_token
 from ..powens.oauth import exchange_code_for_token
-from ..powens.sync import sync_portfolio
 from ..powens.webhooks import handle_webhook as powens_handle_webhook
-from ..repositories import portfolio as portfolio_repo
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["powens"])
@@ -141,47 +139,6 @@ async def powens_auth_callback(
     await session.commit()
 
     return RedirectResponse(url=f"{powens_settings.frontend_url}/?powens_sync=success")
-
-
-@router.post("/sync/powens")
-async def post_sync_powens(
-    user: User = Depends(current_active_user),
-    session: AsyncSession = Depends(get_session),
-):
-    """Trigger a Powens sync for the current user (multi-tenant safe)."""
-    stmt = select(PowensCredential).where(PowensCredential.user_id == user.id)
-    res = await session.execute(stmt)
-    cred = res.scalars().first()
-
-    if not cred:
-        raise HTTPException(
-            status_code=400,
-            detail="No Powens connection. Click 'Connect Powens' first.",
-        )
-
-    token = decrypt_token(cred.encrypted_token)
-
-    result = await sync_portfolio(
-        token=token,
-        user_id=user.id,
-        session=session,
-    )
-
-    if result.success and result.positions:
-        positions_data = [p.model_dump() for p in result.positions]
-        await portfolio_repo.replace_positions(
-            session,
-            user.id,
-            new_positions=positions_data,
-            cash=result.cash_balance,
-        )
-        logger.info(
-            "Persisted %d positions to DB for user_id=%s",
-            len(result.positions),
-            user.id,
-        )
-
-    return result
 
 
 @router.get("/sync/status")

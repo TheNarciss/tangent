@@ -2,32 +2,6 @@
 api_version: "2.0"
 request_timeout_seconds: 30
 
-# Mapping stock_market (label Powens) → suffixe yfinance ticker
-# Ex: "Euronext Paris" + symbol "DCAM" → "DCAM.PA"
-market_suffixes:
-  "Euronext Paris": ".PA"
-  "Euronext Amsterdam": ".AS"
-  "Euronext Brussels": ".BR"
-  "Euronext Lisbon": ".LS"
-  "Xetra": ".DE"
-  "Frankfurt": ".F"
-  "London Stock Exchange": ".L"
-  "Borsa Italiana": ".MI"
-  "Bolsa de Madrid": ".MC"
-  "SIX Swiss Exchange": ".SW"
-
-# Règles d'identification des comptes — heuristiques sur le type + nom
-# Powens renvoie type="pea" pour TOUS les sous-comptes PEA (espèces ET titres).
-# On les distingue par le nom.
-pea_titres:
-  type: "pea"
-  name_contains_any: ["Titres", "PEA Titres"]
-
-pea_cash:
-  type: "pea"
-  name_contains_any: ["Espèces", "Especes", "Cash"]
-
-# Types de comptes à mapper vers tes envelopes
 account_type_mapping:
   pea: "pea"
   savings: "livret"

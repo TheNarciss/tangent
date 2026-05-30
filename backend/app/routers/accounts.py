@@ -623,31 +623,24 @@ _INVESTMENT_ACCOUNT_TYPES = {
     AccountType.LIFE_INSURANCE,
 }
 
-_CASH_NAME_HINTS = ("espèces", "especes", "cash", "liquidités", "liquidites")
 
-
-def _is_pea_cash_account(acc) -> bool:
-    """A PEA sub-account named 'Espèces' / 'Cash' holds cash, not titles."""
-    if acc.type != AccountType.PEA:
-        return False
-    name_lower = (acc.name or "").lower()
-    return any(hint in name_lower for hint in _CASH_NAME_HINTS)
-
-
-def _is_liquid_cash(acc) -> bool:
+def _is_liquid_cash(acc, holdings_count: int) -> bool:
     """An account whose balance is investable cash for legacy analytics.
 
-    Includes :
-    - PEA "Espèces" sub-accounts (investable inside the PEA)
+    Detection is purely structural (agnostic of bank/locale):
+    - PEA sub-account with 0 holdings → cash sub-account (Powens does not
+      expose a sub-type, but a PEA cash account never has investments
+      attached. Brand-new PEAs with cash awaiting investment also count
+      here, which is semantically correct.)
     - Checking accounts (cash available, can be DCA'd)
 
     Excludes :
     - Savings / Livrets : already modelled as separate envelopes
       (cf envelopes.yaml + finance/envelopes.py) — must NOT be merged into
       legacy cash or the optimiser will double-count them.
-    - Loans : liabilities, will be modelled separately in Wealth (Phase 2).
+    - Loans : liabilities, modelled separately in Wealth (Phase 2).
     """
-    if _is_pea_cash_account(acc):
+    if acc.type == AccountType.PEA and holdings_count == 0:
         return True
     return acc.type == AccountType.CHECKING
 
@@ -682,9 +675,18 @@ async def _sync_to_legacy_portfolio(
                 "label": inv.label,
             }
 
+    # Count holdings per account (structural discriminator for PEA cash vs titres)
+    holdings_per_account: dict[str, int] = {acc.provider_account_id: 0 for acc in result.accounts}
+    for inv in result.investments:
+        if inv.quantity > 0:
+            holdings_per_account[inv.provider_account_id] = (
+                holdings_per_account.get(inv.provider_account_id, 0) + 1
+            )
+
     cash = 0.0
     for acc in result.accounts:
-        if _is_liquid_cash(acc):
+        holdings_count = holdings_per_account.get(acc.provider_account_id, 0)
+        if _is_liquid_cash(acc, holdings_count):
             cash += float(acc.balance)
 
     legacy_positions = list(positions_by_ticker.values())
