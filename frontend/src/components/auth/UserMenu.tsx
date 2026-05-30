@@ -1,4 +1,4 @@
-import { Link2, LogOut, User as UserIcon } from "lucide-react";
+import { Settings as SettingsIcon, Link2, LogOut, User as UserIcon } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
 import { listOAuthAccounts, useCurrentUser, useLogout } from "@/api";
@@ -13,7 +13,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { startGoogleAssociate } from "@/api";
 
-export function UserMenu() {
+interface UserMenuProps {
+  onNavigate: (v: "dashboard" | "profile" | "settings") => void;
+}
+
+export function UserMenu({ onNavigate }: UserMenuProps) {
   const { data: user } = useCurrentUser();
   const logout = useLogout();
   const oauthAccounts = useQuery({
@@ -74,6 +78,15 @@ export function UserMenu() {
             <span>Lier mon compte Google</span>
           </DropdownMenuItem>
         )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => onNavigate("profile")} className="cursor-pointer">
+          <UserIcon className="mr-2 h-3.5 w-3.5" />
+          <span>Mon profil</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onNavigate("settings")} className="cursor-pointer">
+          <SettingsIcon className="mr-2 h-3.5 w-3.5" />
+          <span>Réglages</span>
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <a href="/legal/terms.html" className="cursor-pointer">
