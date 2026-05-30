@@ -30,7 +30,7 @@ import { Optimizer } from "@/components/Optimizer";
 import { Scanner } from "@/components/Scanner";
 import { ProfileButton } from "@/components/Profile";
 import { SettingsButton } from "@/components/Settings";
-import { SyncButton } from "@/components/SyncButton";
+import { AddBankButton } from "@/components/AddBankButton";
 import { Projection } from "@/components/Projection";
 import { BengenWidget } from "@/components/BengenWidget";
 import { RiskReturn } from "@/components/RiskReturn";
@@ -101,7 +101,7 @@ function Dashboard() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <SyncButton />
+            <AddBankButton />
             <ProfileButton />
             <SettingsButton />
             {portfolio.data && <Editor portfolio={portfolio.data} />}
