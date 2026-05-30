@@ -27,9 +27,7 @@ async def test_change_password_success(client):
 
     # Logout, puis re-login avec le NEW password
     await client.post("/auth/logout")
-    login = await client.post(
-        "/auth/login", data={"username": email, "password": new_pwd}
-    )
+    login = await client.post("/auth/login", data={"username": email, "password": new_pwd})
     assert login.status_code in (200, 204)
 
 
@@ -98,9 +96,7 @@ async def test_delete_account_happy_path(client):
     assert resp.status_code == 204
 
     # Re-login doit fail (user gone)
-    login = await client.post(
-        "/auth/login", data={"username": email, "password": pwd}
-    )
+    login = await client.post("/auth/login", data={"username": email, "password": pwd})
     assert login.status_code in (400, 401, 422)
 
 

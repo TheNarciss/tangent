@@ -239,3 +239,108 @@ async def _cleanup_user(user_id: uuid.UUID) -> None:
             await session.execute(Portfolio.__table__.delete().where(Portfolio.id == portfolio.id))
         await session.execute(User.__table__.delete().where(User.id == user_id))
         await session.commit()
+
+
+@pytest.mark.integration
+async def test_bridge_includes_checking_accounts_in_cash():
+    """Phase 1 fix: checking account balances must flow into legacy cash."""
+    from app.routers.accounts import _sync_to_legacy_portfolio
+
+    user_id = await _create_test_user()
+    result = SyncResult(
+        success=True,
+        provider="powens",
+        accounts=[
+            BankAccount(
+                provider="powens",
+                provider_account_id="bnp-checking-1",
+                institution_name="BNP Paribas",
+                type=AccountType.CHECKING,
+                name="Compte de chèques",
+                balance=2036.77,
+                valuation=None,
+                currency="EUR",
+                raw_data={},
+            ),
+            BankAccount(
+                provider="powens",
+                provider_account_id="bp-checking-1",
+                institution_name="Banque Populaire",
+                type=AccountType.CHECKING,
+                name="COMPTE DE CHEQUES",
+                balance=17.16,
+                valuation=None,
+                currency="EUR",
+                raw_data={},
+            ),
+        ],
+        investments=[],
+        synced_at=datetime.now(tz=UTC),
+    )
+
+    async with async_session_factory() as session:
+        await _sync_to_legacy_portfolio(session, user_id, result)
+        await session.commit()
+
+        portfolios = await session.execute(select(Portfolio).where(Portfolio.user_id == user_id))
+        pf = portfolios.scalar_one()
+        # 2036.77 + 17.16 = 2053.93
+        assert abs(pf.cash - 2053.93) < 0.01
+
+
+@pytest.mark.integration
+async def test_bridge_excludes_savings_and_loans_from_cash():
+    """Livrets and loans must NOT contaminate the legacy cash."""
+    from app.routers.accounts import _sync_to_legacy_portfolio
+
+    user_id = await _create_test_user()
+    result = SyncResult(
+        success=True,
+        provider="powens",
+        accounts=[
+            BankAccount(
+                provider="powens",
+                provider_account_id="livret-a",
+                institution_name="BNP",
+                type=AccountType.LIVRET_A,
+                name="Livret A",
+                balance=15000.0,
+                valuation=None,
+                currency="EUR",
+                raw_data={},
+            ),
+            BankAccount(
+                provider="powens",
+                provider_account_id="loan-1",
+                institution_name="BNP",
+                type=AccountType.LOAN,
+                name="Prêt personnel",
+                balance=-30000.0,
+                valuation=None,
+                currency="EUR",
+                raw_data={},
+            ),
+            BankAccount(
+                provider="powens",
+                provider_account_id="savings-1",
+                institution_name="BNP",
+                type=AccountType.SAVINGS,
+                name="Compte épargne",
+                balance=5000.0,
+                valuation=None,
+                currency="EUR",
+                raw_data={},
+            ),
+        ],
+        investments=[],
+        synced_at=datetime.now(tz=UTC),
+    )
+
+    async with async_session_factory() as session:
+        await _sync_to_legacy_portfolio(session, user_id, result)
+        await session.commit()
+
+        portfolios = await session.execute(select(Portfolio).where(Portfolio.user_id == user_id))
+        pf = portfolios.scalar_one()
+        # Aucun de ces comptes ne doit alimenter le cash legacy
+        assert pf.cash == 0.0

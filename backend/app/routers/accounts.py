@@ -627,11 +627,29 @@ _CASH_NAME_HINTS = ("espèces", "especes", "cash", "liquidités", "liquidites")
 
 
 def _is_pea_cash_account(acc) -> bool:
-    """Heuristic: a PEA sub-account named 'Espèces' / 'Cash' holds cash, not titles."""
+    """A PEA sub-account named 'Espèces' / 'Cash' holds cash, not titles."""
     if acc.type != AccountType.PEA:
         return False
     name_lower = (acc.name or "").lower()
     return any(hint in name_lower for hint in _CASH_NAME_HINTS)
+
+
+def _is_liquid_cash(acc) -> bool:
+    """An account whose balance is investable cash for legacy analytics.
+
+    Includes :
+    - PEA "Espèces" sub-accounts (investable inside the PEA)
+    - Checking accounts (cash available, can be DCA'd)
+
+    Excludes :
+    - Savings / Livrets : already modelled as separate envelopes
+      (cf envelopes.yaml + finance/envelopes.py) — must NOT be merged into
+      legacy cash or the optimiser will double-count them.
+    - Loans : liabilities, will be modelled separately in Wealth (Phase 2).
+    """
+    if _is_pea_cash_account(acc):
+        return True
+    return acc.type == AccountType.CHECKING
 
 
 async def _sync_to_legacy_portfolio(
@@ -666,7 +684,7 @@ async def _sync_to_legacy_portfolio(
 
     cash = 0.0
     for acc in result.accounts:
-        if _is_pea_cash_account(acc):
+        if _is_liquid_cash(acc):
             cash += float(acc.balance)
 
     legacy_positions = list(positions_by_ticker.values())

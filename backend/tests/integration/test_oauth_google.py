@@ -171,6 +171,7 @@ async def test_oauth_accounts_isolated_between_users(client):
     # car la query filtre par user.oauth_accounts (donc l'account "n'existe pas"
     # pour user B même s'il appartenait à user A)
     import uuid
+
     fake_id = uuid.uuid4()
     resp_delete = await client.delete(f"/users/me/oauth-accounts/{fake_id}")
     assert resp_delete.status_code == 404
