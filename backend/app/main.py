@@ -25,6 +25,7 @@ from .db import ping as db_ping
 from .db.init_db import init_db
 from .errors import AppError
 from .routers import (
+    account,
     accounts,
     admin,
     analysis,
@@ -251,6 +252,7 @@ app.include_router(envelopes.router)
 app.include_router(powens.router)
 app.include_router(admin.router)
 app.include_router(profile.router)
+app.include_router(account.router)
 app.include_router(terms.router)
 app.include_router(oauth_accounts.router)
 

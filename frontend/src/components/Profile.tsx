@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AccountTab } from "@/components/AccountTab";
 
 const TMI_OPTIONS = [
   { value: "0", label: "0 % — non imposable" },
@@ -358,24 +359,6 @@ function StrategyTab({ draft, setDraft }: TabProps) {
             }
           />
         </Field>
-      </div>
-    </Section>
-  );
-}
-
-function AccountTab() {
-  return (
-    <Section
-      title="Mon compte"
-      description="Gestion de ton compte Tangent (email, mot de passe, comptes liés, suppression)."
-    >
-      <div className="rounded-md border bg-muted/30 p-8 text-center">
-        <Shield className="h-10 w-10 mx-auto text-muted-foreground/60 mb-3" />
-        <p className="text-sm font-medium">Section en cours de développement</p>
-        <p className="text-xs text-muted-foreground mt-2 max-w-md mx-auto leading-relaxed">
-          Changement de mot de passe, gestion des comptes Google liés et suppression de compte
-          (droit à l&apos;effacement RGPD) arrivent dans la prochaine itération.
-        </p>
       </div>
     </Section>
   );

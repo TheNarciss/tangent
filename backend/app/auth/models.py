@@ -51,6 +51,11 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
 
     display_name: Mapped[str | None] = mapped_column(String(64), default=None)
 
+    @property
+    def has_password(self) -> bool:
+        """True if the user has a local password (vs OAuth-only)."""
+        return bool(self.hashed_password)
+
     # Acceptation des CGU/Privacy (click-through gate, cf TermsGate frontend)
     # NULL = pas accepté → frontend affiche TermsGate au login
     terms_version_accepted: Mapped[str | None] = mapped_column(
