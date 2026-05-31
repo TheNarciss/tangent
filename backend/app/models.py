@@ -1,8 +1,8 @@
 """Pydantic schemas used both as API contracts and domain models."""
 
-from datetime import date
+from datetime import date, datetime
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class Position(BaseModel):
@@ -334,3 +334,199 @@ class StrategyRequest(BaseModel):
 
 # Forward-ref resolution: DashboardResponse references StressTestResult defined later
 DashboardResponse.model_rebuild()
+
+
+# ════════════════════════════════════════════════════════════════════════════
+#  Wealth domain models (Phase 2 of the legacy migration)
+# ════════════════════════════════════════════════════════════════════════════
+#
+# Models the user's complete financial picture in 5 distinct categories.
+# Names prefixed with "Wealth" where they would clash with existing classes
+# (e.g. `Position` above, `Envelope` in finance/envelopes.py).
+#
+# No DB equivalent — built on the fly by `deps.get_user_wealth()`.
+
+
+from datetime import date as _dt_date  # noqa: E402
+from uuid import UUID as _UUID  # noqa: E402
+
+
+class WealthPosition(BaseModel):
+    """A position inside an investment account, with current valuation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ticker: str
+    label: str
+    isin: str | None = None
+    quantity: float
+    avg_cost: float = Field(..., description="Cost basis per unit (PRU)")
+    current_value: float = Field(..., description="Total current valuation")
+    currency: str = "EUR"
+
+    @property
+    def cost_basis(self) -> float:
+        return self.quantity * self.avg_cost
+
+    @property
+    def unrealized_pnl(self) -> float:
+        return self.current_value - self.cost_basis
+
+    @property
+    def unrealized_pnl_pct(self) -> float:
+        if self.cost_basis == 0:
+            return 0.0
+        return self.unrealized_pnl / self.cost_basis
+
+
+class CashAccount(BaseModel):
+    """Liquid cash account : checking, non-regulated savings, or PEA cash."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider_account_id: str
+    institution_name: str | None = None
+    name: str
+    balance: float
+    currency: str = "EUR"
+    is_pea_cash: bool = Field(
+        default=False,
+        description="True for PEA cash sub-accounts (investable inside PEA only)",
+    )
+
+
+class WealthEnvelope(BaseModel):
+    """A user's regulated savings envelope. Runtime data + metadata from YAML."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider_account_id: str
+    institution_name: str | None = None
+    name: str
+    balance: float
+    envelope_type: str = Field(..., description="livret_a | ldds | lep | pel | ...")
+    currency: str = "EUR"
+
+    display_name: str | None = Field(default=None, description="Human label from YAML")
+    rate_pct: float | None = Field(default=None, description="Annual rate as decimal")
+    ceiling_eur: float | None = Field(default=None, description="Legal ceiling")
+    tax_status: str | None = Field(default=None, description='"net" or "gross"')
+
+    @property
+    def headroom_eur(self) -> float | None:
+        if self.ceiling_eur is None:
+            return None
+        return max(0.0, self.ceiling_eur - self.balance)
+
+
+class InvestmentAccount(BaseModel):
+    """A wrapper account (PEA, CTO, life insurance) and its positions."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider_account_id: str
+    institution_name: str | None = None
+    name: str
+    account_type: str = Field(..., description="pea | cto | life_insurance")
+    currency: str = "EUR"
+    positions: list[WealthPosition] = []
+
+    @property
+    def positions_value(self) -> float:
+        return sum(p.current_value for p in self.positions)
+
+    @property
+    def cost_basis(self) -> float:
+        return sum(p.cost_basis for p in self.positions)
+
+    @property
+    def unrealized_pnl(self) -> float:
+        return self.positions_value - self.cost_basis
+
+
+class Loan(BaseModel):
+    """Outstanding loan. `outstanding_balance` is positive (amount still owed)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider_account_id: str
+    institution_name: str | None = None
+    name: str
+    outstanding_balance: float = Field(..., ge=0)
+    currency: str = "EUR"
+
+    interest_rate_pct: float | None = None
+    monthly_payment: float | None = None
+    next_payment_date: _dt_date | None = None
+    deferral_until: _dt_date | None = None
+    maturity_date: _dt_date | None = None
+
+    @property
+    def is_in_deferral(self) -> bool:
+        if self.deferral_until is None:
+            return False
+        return _dt_date.today() < self.deferral_until
+
+
+class Wealth(BaseModel):
+    """Complete patrimony snapshot. Aggregate root."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: _UUID
+    snapshot_at: datetime
+
+    checking_accounts: list[CashAccount] = []
+    pea_cash_accounts: list[CashAccount] = []
+    envelopes: list[WealthEnvelope] = []
+    investment_accounts: list[InvestmentAccount] = []
+    loans: list[Loan] = []
+
+    @property
+    def checking_total(self) -> float:
+        return sum(a.balance for a in self.checking_accounts)
+
+    @property
+    def pea_cash_total(self) -> float:
+        return sum(a.balance for a in self.pea_cash_accounts)
+
+    @property
+    def envelopes_total(self) -> float:
+        return sum(e.balance for e in self.envelopes)
+
+    @property
+    def investments_total(self) -> float:
+        return sum(acc.positions_value for acc in self.investment_accounts)
+
+    @property
+    def investments_cost_basis(self) -> float:
+        return sum(acc.cost_basis for acc in self.investment_accounts)
+
+    @property
+    def unrealized_pnl(self) -> float:
+        return self.investments_total - self.investments_cost_basis
+
+    @property
+    def liquid_assets(self) -> float:
+        return self.checking_total
+
+    @property
+    def total_assets(self) -> float:
+        return (
+            self.checking_total
+            + self.pea_cash_total
+            + self.envelopes_total
+            + self.investments_total
+        )
+
+    @property
+    def total_liabilities(self) -> float:
+        return sum(loan.outstanding_balance for loan in self.loans)
+
+    @property
+    def net_worth(self) -> float:
+        return self.total_assets - self.total_liabilities
+
+    @property
+    def all_positions(self) -> list[WealthPosition]:
+        return [p for acc in self.investment_accounts for p in acc.positions]
