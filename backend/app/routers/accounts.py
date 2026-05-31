@@ -617,7 +617,7 @@ async def _do_sync(user: User, session: AsyncSession) -> SyncReport:
     # table. Until we migrate them, derive legacy data from the new sync result.
 
     logger.info(
-        "Sync user=%s: %d accounts, %d holdings, %d new txs, %d legacy positions",
+        "Sync user=%s: %d accounts, %d holdings, %d new txs",
         user.id,
         persisted_accounts,
         persisted_holdings,
