@@ -20,9 +20,8 @@ import pandas as pd
 import yfinance as yf
 from yfinance import EquityQuery
 
-from .. import portfolio
-from ..errors import AppError
-from ..models import ScanCandidate, ScanRequest, ScanResponse
+from ..errors import AppError, PortfolioEmptyError
+from ..models import ScanCandidate, ScanRequest, ScanResponse, Wealth
 from . import analytics, cma, market
 
 logger = logging.getLogger(__name__)
@@ -166,11 +165,13 @@ def _rationale(delta: float, rho: float, mu_c: float) -> str:
     return f"Modeste amélioration (ρ={rho:.2f}, μ={mu_c * 100:.1f} %)"
 
 
-def scan(req: ScanRequest, portfolio_data=None) -> ScanResponse:
+def scan(req: ScanRequest, wealth: "Wealth | None" = None) -> ScanResponse:
     start = time.time()
 
-    pf = portfolio_data if portfolio_data is not None else portfolio.load()
-    if not pf.positions:
+    if wealth is None:
+        raise PortfolioEmptyError("Wealth required for scanner.")
+    positions = wealth.all_positions
+    if not positions:
         raise AppError("Aucune position en portefeuille — impossible de scanner.")
 
     # Resolve expert settings (mêmes défauts que dashboard)
@@ -185,7 +186,7 @@ def scan(req: ScanRequest, portfolio_data=None) -> ScanResponse:
     cma_overrides = expert.cma_overrides if expert else {}
 
     # Stats portfolio courant
-    pf_tickers = [p.ticker for p in pf.positions]
+    pf_tickers = list({p.ticker for p in positions})
     prices_p = market.fetch_prices(pf_tickers, period=period)
     returns_p = analytics.daily_log_returns(prices_p[pf_tickers])
 
@@ -196,7 +197,10 @@ def scan(req: ScanRequest, portfolio_data=None) -> ScanResponse:
     mu_override_p = {t: float(blended_p[i]) for i, t in enumerate(pf_tickers)}
 
     latest = {t: float(prices_p[t].dropna().iloc[-1]) for t in pf_tickers}
-    values = np.array([p.quantity * latest[p.ticker] for p in pf.positions])
+    _qty: dict[str, float] = {}
+    for p in positions:
+        _qty[p.ticker] = _qty.get(p.ticker, 0.0) + p.quantity
+    values = np.array([_qty[t] * latest[t] for t in pf_tickers])
     weights = values / float(values.sum())
 
     pf_stats = analytics.portfolio_stats(

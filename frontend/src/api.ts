@@ -4,19 +4,6 @@ const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? "http://
 
 /* ── Types (mirror backend Pydantic models) ─────────────────────────── */
 
-export interface Position {
-  ticker: string;
-  quantity: number;
-  avg_cost: number;
-  isin?: string | null;
-  label?: string | null;
-}
-
-export interface Portfolio {
-  positions: Position[];
-  cash: number;
-}
-
 export interface AssetMetrics {
   ticker: string;
   price: number;
@@ -525,7 +512,6 @@ export function useWatchlistAdd() {
       http<string[]>(`/watchlist/${encodeURIComponent(ticker)}`, { method: "POST" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["watchlist"] });
-      qc.invalidateQueries({ queryKey: ["portfolio"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       qc.invalidateQueries({ queryKey: ["optimizer"] });
     },
@@ -539,30 +525,7 @@ export function useWatchlistRemove() {
       http<string[]>(`/watchlist/${encodeURIComponent(ticker)}`, { method: "DELETE" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["watchlist"] });
-      qc.invalidateQueries({ queryKey: ["portfolio"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
-      qc.invalidateQueries({ queryKey: ["optimizer"] });
-    },
-  });
-}
-
-export function usePortfolio() {
-  return useQuery({
-    queryKey: ["portfolio"],
-    queryFn: () => http<Portfolio>("/portfolio"),
-  });
-}
-
-export function useUpdatePortfolio() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (p: Portfolio) =>
-      http<Portfolio>("/portfolio", { method: "PUT", body: JSON.stringify(p) }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["portfolio"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-      qc.invalidateQueries({ queryKey: ["timeseries"] });
-      qc.invalidateQueries({ queryKey: ["projection"] });
       qc.invalidateQueries({ queryKey: ["optimizer"] });
     },
   });
@@ -624,7 +587,6 @@ export function useSyncPowens() {
     mutationFn: () => http<SyncResult>("/sync/powens", { method: "POST" }),
     onSuccess: (result) => {
       if (result.success) {
-        qc.invalidateQueries({ queryKey: ["portfolio"] });
         qc.invalidateQueries({ queryKey: ["dashboard"] });
         qc.invalidateQueries({ queryKey: ["timeseries"] });
         qc.invalidateQueries({ queryKey: ["projection"] });
