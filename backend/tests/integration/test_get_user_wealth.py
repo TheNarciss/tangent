@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import select
 
-from app.aggregator import AccountType, BankAccount as BankAccountDTO, Investment, SyncResult
+from app.aggregator import AccountType, Investment
+from app.aggregator import BankAccount as BankAccountDTO
 from app.auth.models import User
 from app.db.engine import async_session_factory
 from app.deps import get_user_wealth
-from app.repositories import bank_accounts as accounts_repo
 from app.repositories import account_holdings as holdings_repo
+from app.repositories import bank_accounts as accounts_repo
 
 
 async def _create_test_user() -> User:
@@ -72,7 +72,8 @@ async def test_wealth_classifies_checking_account():
     try:
         async with async_session_factory() as session:
             await accounts_repo.upsert_account(
-                session, user.id,
+                session,
+                user.id,
                 _bank_dto("c-1", AccountType.CHECKING, "Compte courant", 2000.0),
             )
             await session.commit()
@@ -95,7 +96,8 @@ async def test_wealth_treats_savings_as_checking():
     try:
         async with async_session_factory() as session:
             await accounts_repo.upsert_account(
-                session, user.id,
+                session,
+                user.id,
                 _bank_dto("s-1", AccountType.SAVINGS, "Hello! Plus", 5000.0),
             )
             await session.commit()
@@ -115,7 +117,8 @@ async def test_wealth_classifies_envelope_with_yaml_metadata():
     try:
         async with async_session_factory() as session:
             await accounts_repo.upsert_account(
-                session, user.id,
+                session,
+                user.id,
                 _bank_dto("la-1", AccountType.LIVRET_A, "Livret A", 15000.0),
             )
             await session.commit()
@@ -143,7 +146,9 @@ async def test_wealth_classifies_pea_with_holdings_as_investment():
             acc_dto = _bank_dto("pea-titres", AccountType.PEA, "PEA Titres", 5000.0)
             acc_db = await accounts_repo.upsert_account(session, user.id, acc_dto)
             await holdings_repo.replace_holdings(
-                session, user.id, acc_db.id,
+                session,
+                user.id,
+                acc_db.id,
                 [
                     Investment(
                         provider="powens",
@@ -181,7 +186,8 @@ async def test_wealth_classifies_pea_without_holdings_as_pea_cash():
     try:
         async with async_session_factory() as session:
             await accounts_repo.upsert_account(
-                session, user.id,
+                session,
+                user.id,
                 _bank_dto("pea-espece", AccountType.PEA, "PEA Espèces", 100.0),
             )
             await session.commit()
@@ -203,9 +209,12 @@ async def test_wealth_classifies_loan_normalized_positive():
     try:
         async with async_session_factory() as session:
             await accounts_repo.upsert_account(
-                session, user.id,
+                session,
+                user.id,
                 _bank_dto(
-                    "loan-1", AccountType.LOAN, "Prêt étudiant",
+                    "loan-1",
+                    AccountType.LOAN,
+                    "Prêt étudiant",
                     -30000.0,
                     raw_data={
                         "loan": {
@@ -241,18 +250,32 @@ async def test_wealth_full_scenario_matches_real_user():
     try:
         async with async_session_factory() as session:
             accounts = [
-                _bank_dto("c-bnp", AccountType.CHECKING, "Compte BNP", 2036.77,
-                          institution="BNP Paribas"),
-                _bank_dto("c-bp1", AccountType.CHECKING, "Compte BP 1", 16.99,
-                          institution="Banque Populaire"),
-                _bank_dto("c-bp2", AccountType.CHECKING, "Compte BP 2", 0.17,
-                          institution="Banque Populaire"),
-                _bank_dto("pea-cash", AccountType.PEA, "PEA Espèces", 3.69,
-                          institution="BNP Paribas"),
-                _bank_dto("pea-titres", AccountType.PEA, "PEA Titres", 598.12,
-                          institution="BNP Paribas"),
-                _bank_dto("loan-bnp", AccountType.LOAN, "Prêt BNP", -30618.77,
-                          institution="BNP Paribas"),
+                _bank_dto(
+                    "c-bnp", AccountType.CHECKING, "Compte BNP", 2036.77, institution="BNP Paribas"
+                ),
+                _bank_dto(
+                    "c-bp1",
+                    AccountType.CHECKING,
+                    "Compte BP 1",
+                    16.99,
+                    institution="Banque Populaire",
+                ),
+                _bank_dto(
+                    "c-bp2",
+                    AccountType.CHECKING,
+                    "Compte BP 2",
+                    0.17,
+                    institution="Banque Populaire",
+                ),
+                _bank_dto(
+                    "pea-cash", AccountType.PEA, "PEA Espèces", 3.69, institution="BNP Paribas"
+                ),
+                _bank_dto(
+                    "pea-titres", AccountType.PEA, "PEA Titres", 598.12, institution="BNP Paribas"
+                ),
+                _bank_dto(
+                    "loan-bnp", AccountType.LOAN, "Prêt BNP", -30618.77, institution="BNP Paribas"
+                ),
             ]
             account_ids = {}
             for dto in accounts:
@@ -261,7 +284,9 @@ async def test_wealth_full_scenario_matches_real_user():
 
             # PEA Titres has 1 holding
             await holdings_repo.replace_holdings(
-                session, user.id, account_ids["pea-titres"],
+                session,
+                user.id,
+                account_ids["pea-titres"],
                 [
                     Investment(
                         provider="powens",

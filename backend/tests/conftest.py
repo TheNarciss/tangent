@@ -21,7 +21,7 @@ os.environ.setdefault(
 os.environ.setdefault("COOKIE_SECURE", "false")
 # Test-only Fernet key — generated at session start to avoid hardcoded
 # secrets triggering gitleaks (cf ADR-014 §5).
-from cryptography.fernet import Fernet as _Fernet  # noqa: E402
+from cryptography.fernet import Fernet as _Fernet
 
 os.environ.setdefault("OAUTH_TOKEN_ENCRYPTION_KEY", _Fernet.generate_key().decode())
 os.environ.setdefault("OAUTH_STATE_SECRET", "test-oauth-state-secret-not-for-production")
