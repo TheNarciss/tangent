@@ -102,6 +102,7 @@ export interface ProjectionResponse {
   broker: string;
   gross_p50: number[]; // P50 without fees, for comparison
   cumulative_fees: number[]; // €, per-month cumulative
+  multi_broker_warning?: string | null;
 }
 
 export interface BengenRequest {

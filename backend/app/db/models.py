@@ -83,6 +83,7 @@ class Profile(Base):
     target_annual_return: Mapped[float | None] = mapped_column(Float, default=None)  # en %
     max_annual_volatility: Mapped[float | None] = mapped_column(Float, default=None)  # en %
     horizon_years: Mapped[int | None] = mapped_column(Integer, default=None)
+    default_broker: Mapped[str | None] = mapped_column(String(50), default=None)
 
     # Ceilings utilisés par enveloppe — stocké en JSONB pour flexibilité
     # Ex: {"livret_a": 5000, "ldds": 0, "lep": 0, "pel": 0, "livret_a_jeune": 1000}

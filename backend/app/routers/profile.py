@@ -25,6 +25,7 @@ class ProfileIn(BaseModel):
     target_annual_return: float | None = Field(default=None, ge=0, le=2)
     max_annual_volatility: float | None = Field(default=None, ge=0, le=1)
     horizon_years: int | None = Field(default=None, ge=1, le=80)
+    default_broker: str | None = Field(default=None, max_length=50)
     ceilings_used: dict[str, Any] | None = None
 
 

@@ -82,6 +82,22 @@ def build(
         goal_prob_by_month = analytics.goal_probability(paths, goal)
         goal_prob_at_end = goal_prob_by_month[-1]
 
+    # Detect multi-broker situation: investment wrappers at >1 distinct institutions
+    institutions = {
+        acc.institution_name for acc in wealth.investment_accounts if acc.institution_name
+    }
+    multi_broker_warning: str | None = None
+    if len(institutions) > 1:
+        from .fees import config as _fees_config
+
+        broker_name = broker_fees.name
+        multi_broker_warning = (
+            f"Tu as des investissements chez plusieurs courtiers ({', '.join(sorted(institutions))}). "
+            f"Les frais affichés sont ceux de {broker_name}. "
+            "Une projection multi-courtier viendra dans une prochaine version."
+        )
+        del _fees_config  # quiet linter if unused
+
     logger.info(
         "projection: broker=%s, %d months, initial=%.0f €, contrib=%.0f €/mo, fees@end=%.0f €",
         bid,
@@ -104,4 +120,5 @@ def build(
         broker=broker_fees.name,
         gross_p50=gross_p50,
         cumulative_fees=cumulative_fees,
+        multi_broker_warning=multi_broker_warning,
     )

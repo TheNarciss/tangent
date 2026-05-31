@@ -91,6 +91,7 @@ class ProjectionResponse(BaseModel):
     broker: str  # human-readable name
     gross_p50: list[float]  # P50 without fees, for comparison
     cumulative_fees: list[float]  # cumulative fee impact at each month (€)
+    multi_broker_warning: str | None = None
 
 
 class BrokerInfo(BaseModel):

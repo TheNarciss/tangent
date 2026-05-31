@@ -1,8 +1,10 @@
 """Analysis routes — optimizer, projection, scanner."""
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..deps import get_user_wealth
+from ..auth import User, current_active_user
+from ..deps import get_session, get_user_wealth
 from ..finance import optimizer, projection, scanner
 from ..models import (
     OptimizerRequest,
@@ -12,6 +14,7 @@ from ..models import (
     ScanResponse,
     Wealth,
 )
+from ..repositories import profile as profile_repo
 
 router = APIRouter(tags=["analysis"])
 
@@ -27,12 +30,19 @@ async def read_optimizer(
 @router.get("/projection", response_model=ProjectionResponse)
 async def read_projection(
     wealth: Wealth = Depends(get_user_wealth),
+    user: User = Depends(current_active_user),
+    session: AsyncSession = Depends(get_session),
     monthly: float = Query(200, ge=0, le=100_000, description="Monthly contribution (€)"),
     years: int = Query(10, ge=1, le=50, description="Projection horizon (years)"),
     goal: float | None = Query(None, ge=0, description="Optional target (€)"),
-    broker: str | None = Query(None, description="Broker ID (see /brokers)."),
+    broker: str | None = Query(None, description="Override broker (defaults to profile)."),
 ) -> ProjectionResponse:
-    return projection.build(monthly, years, goal, broker, wealth=wealth)
+    # Resolve broker_id: explicit query param > profile.default_broker > YAML default
+    effective_broker = broker
+    if effective_broker is None:
+        profile = await profile_repo.get_or_create(session, user.id)
+        effective_broker = profile.default_broker
+    return projection.build(monthly, years, goal, effective_broker, wealth=wealth)
 
 
 @router.post("/scan", response_model=ScanResponse)
