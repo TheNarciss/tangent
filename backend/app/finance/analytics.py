@@ -192,7 +192,12 @@ def efficient_frontier_cloud(
     ret = w @ mu
     vol = np.sqrt(np.einsum("ij,jk,ik->i", w, cov, w))
     sharpe = (ret - RISK_FREE) / np.where(vol > 0, vol, np.nan)
-    return {"vol": vol.tolist(), "ret": ret.tolist(), "sharpe": np.nan_to_num(sharpe).tolist()}
+    cloud: dict[str, list[float]] = {
+        "vol": vol.tolist(),
+        "ret": ret.tolist(),
+        "sharpe": np.nan_to_num(sharpe).tolist(),
+    }
+    return cloud
 
 
 def portfolio_value_series(prices: pd.DataFrame, quantities: dict[str, float]) -> pd.Series:
@@ -495,7 +500,7 @@ def efficient_frontier_curve(
 
     n = len(mu)
     if n < 2:
-        return {"vol": [], "ret": [], "sharpe": [], "reason": "need_two_assets"}
+        return FrontierResult(vol=[], ret=[], sharpe=[], reason="need_two_assets")
     bounds = bounds_override if bounds_override is not None else [(0.0, 1.0)] * n
 
     # Min-variance portfolio computed directly avec le cov passé (augmenté ou pas).
@@ -510,13 +515,13 @@ def efficient_frontier_curve(
         options={"ftol": 1e-10, "maxiter": 300},
     )
     if not res_minvar.success:
-        return {"vol": [], "ret": [], "sharpe": [], "reason": "solver_failed"}
+        return FrontierResult(vol=[], ret=[], sharpe=[], reason="solver_failed")
 
     mu_min = float(res_minvar.x @ mu)
     mu_max = float(mu.max())
 
     if mu_max <= mu_min:
-        return {"vol": [], "ret": [], "sharpe": [], "reason": "flat_returns"}
+        return FrontierResult(vol=[], ret=[], sharpe=[], reason="flat_returns")
 
     targets = np.linspace(mu_min, mu_max, n_points)
 
@@ -546,7 +551,7 @@ def efficient_frontier_curve(
         rets.append(ret)
         sharpes.append((ret - risk_free) / vol if vol > 0 else 0.0)
 
-    return {"vol": vols, "ret": rets, "sharpe": sharpes, "reason": None}
+    return FrontierResult(vol=vols, ret=rets, sharpe=sharpes, reason=None)
 
 
 def risk_contributions(returns: pd.DataFrame, weights: np.ndarray) -> dict[str, list[float]]:
