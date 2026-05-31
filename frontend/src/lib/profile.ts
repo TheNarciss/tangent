@@ -35,6 +35,7 @@ export interface UserProfile {
   monthly_dca: number; // €/mois
   target_annual_return: number; // raw %, e.g. 7 = 7 %
   max_annual_volatility: number; // raw %, e.g. 12 = 12 %
+  default_broker: string | null; // null = use YAML fallback (or autodetect at next sync)
 }
 
 export const EMPTY_PROFILE: UserProfile = {
@@ -44,6 +45,7 @@ export const EMPTY_PROFILE: UserProfile = {
   rfr_n_minus_2: 0,
   tmi_pct: 0.11,
   ceilings_used: { livret_a: 0, livret_a_jeune: 0, ldds: 0, lep: 0, pel: 0 },
+  default_broker: null,
   horizon_years: 10,
   monthly_dca: 250,
   target_annual_return: 7,

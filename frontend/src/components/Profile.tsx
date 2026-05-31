@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft, Calculator, Shield, Target, User } from "lucide-react";
-
+import { useBrokers } from "@/api";
 import { useEligibleEnvelopes, type EnvelopeEligibility } from "@/api";
 import { fmt } from "@/lib/format";
 import {
@@ -294,6 +294,7 @@ function FiscalTab({ draft, setDraft }: TabProps) {
 }
 
 function StrategyTab({ draft, setDraft }: TabProps) {
+  const brokersQuery = useBrokers();
   return (
     <Section
       title="Stratégie d'investissement"
@@ -358,6 +359,31 @@ function StrategyTab({ draft, setDraft }: TabProps) {
               setDraft({ ...draft, max_annual_volatility: Number(e.target.value) || 0 })
             }
           />
+        </Field>
+        <Field
+          label="Courtier principal"
+          htmlFor="default_broker"
+          hint="Auto-détecté à la 1re synchro selon ta banque. Sert au calcul des frais en Projection."
+        >
+          <Select
+            value={draft.default_broker ?? "__auto__"}
+            onValueChange={(v: string) =>
+              setDraft({ ...draft, default_broker: v === "__auto__" ? null : v })
+            }
+            disabled={brokersQuery.isLoading}
+          >
+            <SelectTrigger id="default_broker">
+              <SelectValue placeholder="Chargement…" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__auto__">Auto-détection (recommandé)</SelectItem>
+              {brokersQuery.data?.brokers.map((b: { id: string; name: string }) => (
+                <SelectItem key={b.id} value={b.id}>
+                  {b.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Field>
       </div>
     </Section>
