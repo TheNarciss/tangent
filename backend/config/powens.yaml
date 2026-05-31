@@ -2,6 +2,21 @@
 api_version: "2.0"
 request_timeout_seconds: 30
 
+# Mapping stock_market (label Powens) → suffixe yfinance ticker
+# Ex: "Euronext Paris" + symbol "DCAM" → "DCAM.PA"
+market_suffixes:
+  "Euronext Paris": ".PA"
+  "Euronext Amsterdam": ".AS"
+  "Euronext Brussels": ".BR"
+  "Euronext Lisbon": ".LS"
+  "Xetra": ".DE"
+  "Frankfurt": ".F"
+  "London Stock Exchange": ".L"
+  "Borsa Italiana": ".MI"
+  "Bolsa de Madrid": ".MC"
+  "SIX Swiss Exchange": ".SW"
+
+
 account_type_mapping:
   pea: "pea"
   savings: "livret"
