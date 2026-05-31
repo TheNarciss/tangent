@@ -282,7 +282,7 @@ def build(req: OptimizerRequest, wealth: "Wealth | None" = None) -> OptimizerRes
             vol=frontier["vol"],
             ret=frontier["ret"],
             sharpe=frontier["sharpe"],
-            unavailable_reason=_frontier_reason_message(frontier.get("reason")),
+            unavailable_reason=_frontier_reason_message(frontier["reason"]),
         ),
         envelope_points=[
             EnvelopePoint(label=e["name"], expected_return=e["rate"], volatility=0.0)

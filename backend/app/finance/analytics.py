@@ -26,6 +26,13 @@ class PortfolioStat(TypedDict):
     sharpe: float
 
 
+class FrontierResult(TypedDict):
+    vol: list[float]
+    ret: list[float]
+    sharpe: list[float]
+    reason: str | None
+
+
 def daily_log_returns(prices: pd.DataFrame) -> pd.DataFrame:
     """Log returns; first row dropped.
 
@@ -172,7 +179,7 @@ def efficient_frontier_cloud(
     returns: pd.DataFrame,
     n: int = 3000,
     seed: int = 42,
-) -> dict[str, list[float] | str | None]:
+) -> FrontierResult:
     """Sample `n` random long-only fully-invested portfolios on the simplex.
 
     Returns parallel arrays `vol`, `ret` (annualized) and `sharpe`. The upper-left
