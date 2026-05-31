@@ -3,15 +3,18 @@
 Applies broker fees (per `config/brokers.yaml`) at each simulated month so they
 compound correctly. Also computes a fees-free baseline (`gross_p50`) and the
 cumulative fee impact at each month for direct visualization.
+
+Phase 2 PR 4: consumes Wealth domain model. Scope unchanged — projection is
+on the investable titres only. A future PR may incorporate loan repayments
+and livret accrual into the projection to surface real net-worth trajectory.
 """
 
 import logging
 
 import numpy as np
 
-from .. import portfolio
 from ..errors import PortfolioEmptyError
-from ..models import ProjectionBands, ProjectionResponse
+from ..models import ProjectionBands, ProjectionResponse, Wealth
 from . import analytics, fees, market
 
 logger = logging.getLogger(__name__)
@@ -22,15 +25,21 @@ def build(
     years: int,
     goal: float | None,
     broker_id: str | None = None,
-    portfolio_data=None,
+    wealth: Wealth | None = None,
 ) -> ProjectionResponse:
-    pf = portfolio_data if portfolio_data is not None else portfolio.load()
-    if not pf.positions:
+    if wealth is None:
+        raise PortfolioEmptyError("Wealth required for projection.")
+    positions = wealth.all_positions
+    if not positions:
         raise PortfolioEmptyError("Aucune position enregistrée.")
 
-    tickers = [p.ticker for p in pf.positions]
+    # Aggregate quantities by ticker (same ticker may appear in PEA + CTO)
+    quantities: dict[str, float] = {}
+    for p in positions:
+        quantities[p.ticker] = quantities.get(p.ticker, 0.0) + p.quantity
+    tickers = list(quantities.keys())
+
     prices = market.fetch_prices(tickers, period="5y")
-    quantities = {p.ticker: p.quantity for p in pf.positions}
 
     value_series = analytics.portfolio_value_series(prices, quantities)
     initial = float(value_series.iloc[-1])
@@ -41,11 +50,11 @@ def build(
     mu_simple = float(np.exp(mu_annual) - 1)
     months = years * 12
 
-    # Resolve broker and build a value→monthly_fee closure (raises ConfigurationError if unknown)
+    # Resolve broker and build a value→monthly_fee closure
     bid, broker_fees = fees.get(broker_id)
     fee_fn = fees.monthly_fee_fn(
         broker_fees,
-        n_lines=len(pf.positions),
+        n_lines=len(quantities),
         monthly_contribution=monthly_contribution,
     )
 
