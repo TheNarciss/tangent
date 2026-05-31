@@ -77,6 +77,7 @@ export interface DashboardResponse {
   frontier: FrontierCloud;
   insights: Insight[];
   stress_tests: StressTestResult[];
+  wealth?: WealthSummary | null;
 }
 
 export interface TimeseriesResponse {
@@ -1053,4 +1054,43 @@ export async function unlinkBankConnection(connectionId: number): Promise<void> 
   await http<void>(`/accounts/connections/${connectionId}`, {
     method: "DELETE",
   });
+}
+
+/* ────────────────────────────────────────────────────────────────────── */
+/*  Wealth summary types (Phase 2)                                        */
+/* ────────────────────────────────────────────────────────────────────── */
+
+export interface EnvelopeSummary {
+  name: string;
+  institution_name: string | null;
+  envelope_type: string;
+  balance: number;
+  display_name: string | null;
+  rate_pct: number | null;
+  ceiling_eur: number | null;
+  headroom_eur: number | null;
+}
+
+export interface LoanSummary {
+  name: string;
+  institution_name: string | null;
+  outstanding_balance: number;
+  interest_rate_pct: number | null;
+  monthly_payment: number | null;
+  next_payment_date: string | null;
+  deferral_until: string | null;
+  is_in_deferral: boolean;
+}
+
+export interface WealthSummary {
+  net_worth: number;
+  total_assets: number;
+  total_liabilities: number;
+  checking_total: number;
+  pea_cash_total: number;
+  envelopes_total: number;
+  investments_total: number;
+  unrealized_pnl: number;
+  envelopes: EnvelopeSummary[];
+  loans: LoanSummary[];
 }

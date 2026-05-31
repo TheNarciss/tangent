@@ -67,6 +67,7 @@ class DashboardResponse(BaseModel):
     frontier: FrontierCloud
     insights: list[Insight]
     stress_tests: list["StressTestResult"] = Field(default_factory=list)
+    wealth: "WealthSummary | None" = None  # Phase 2 PR 2/6: patrimony context
 
 
 class TimeseriesResponse(BaseModel):
@@ -333,7 +334,6 @@ class StrategyRequest(BaseModel):
 
 
 # Forward-ref resolution: DashboardResponse references StressTestResult defined later
-DashboardResponse.model_rebuild()
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -530,3 +530,72 @@ class Wealth(BaseModel):
     @property
     def all_positions(self) -> list[WealthPosition]:
         return [p for acc in self.investment_accounts for p in acc.positions]
+
+
+# ════════════════════════════════════════════════════════════════════════════
+#  WealthSummary — patrimony context for DashboardResponse (Phase 2 PR 2/6)
+# ════════════════════════════════════════════════════════════════════════════
+#
+# Light DTO carrying the patrimony view alongside the existing PortfolioMetrics.
+# DashboardResponse gains an optional `wealth` field, which the frontend Aperçu
+# tab uses to render 3 new blocks (Net Worth / Envelopes / Loans).
+#
+# Sized for serialisation : we don't ship every individual position here, only
+# the aggregates the frontend needs.
+
+
+class EnvelopeSummary(BaseModel):
+    """One regulated savings envelope as displayed in the dashboard."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    institution_name: str | None = None
+    envelope_type: str
+    balance: float
+    display_name: str | None = None
+    rate_pct: float | None = None
+    ceiling_eur: float | None = None
+    headroom_eur: float | None = None
+
+
+class LoanSummary(BaseModel):
+    """One outstanding loan as displayed in the dashboard."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    institution_name: str | None = None
+    outstanding_balance: float
+    interest_rate_pct: float | None = None
+    monthly_payment: float | None = None
+    next_payment_date: _dt_date | None = None
+    deferral_until: _dt_date | None = None
+    is_in_deferral: bool = False
+
+
+class WealthSummary(BaseModel):
+    """Patrimony snapshot, ready for the Aperçu tab."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Headline figures
+    net_worth: float
+    total_assets: float
+    total_liabilities: float
+
+    # Per-category totals
+    checking_total: float
+    pea_cash_total: float
+    envelopes_total: float
+    investments_total: float
+    unrealized_pnl: float
+
+    # Detail for table rendering
+    envelopes: list[EnvelopeSummary] = []
+    loans: list[LoanSummary] = []
+
+
+# Re-resolve forward references now that StressTestResult AND WealthSummary
+# are both defined.
+DashboardResponse.model_rebuild()

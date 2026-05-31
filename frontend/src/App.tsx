@@ -25,6 +25,7 @@ import { Correlation } from "@/components/Correlation";
 import { Editor } from "@/components/Editor";
 import { Insights } from "@/components/Insights";
 import { Metrics } from "@/components/Metrics";
+import { Patrimony } from "@/components/Patrimony";
 import { StressTests } from "@/components/StressTests";
 import { Optimizer } from "@/components/Optimizer";
 import { Scanner } from "@/components/Scanner";
@@ -132,6 +133,7 @@ function Dashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
             {dashboard.isError && <DashboardErrorPanel error={dashboard.error} />}
             {dashboard.data && (
               <>
+                {dashboard.data.wealth && <Patrimony wealth={dashboard.data.wealth} />}
                 <Metrics metrics={dashboard.data.metrics} />
                 <Assets assets={dashboard.data.metrics.assets} />
                 <StressTests stressTests={dashboard.data.stress_tests} />
