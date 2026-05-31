@@ -172,7 +172,7 @@ def efficient_frontier_cloud(
     returns: pd.DataFrame,
     n: int = 3000,
     seed: int = 42,
-) -> dict[str, list[float]]:
+) -> dict[str, list[float] | str | None]:
     """Sample `n` random long-only fully-invested portfolios on the simplex.
 
     Returns parallel arrays `vol`, `ret` (annualized) and `sharpe`. The upper-left
@@ -487,6 +487,8 @@ def efficient_frontier_curve(
         cov = returns.cov().values * TRADING_DAYS
 
     n = len(mu)
+    if n < 2:
+        return {"vol": [], "ret": [], "sharpe": [], "reason": "need_two_assets"}
     bounds = bounds_override if bounds_override is not None else [(0.0, 1.0)] * n
 
     # Min-variance portfolio computed directly avec le cov passé (augmenté ou pas).
@@ -501,13 +503,13 @@ def efficient_frontier_curve(
         options={"ftol": 1e-10, "maxiter": 300},
     )
     if not res_minvar.success:
-        return {"vol": [], "ret": [], "sharpe": []}
+        return {"vol": [], "ret": [], "sharpe": [], "reason": "solver_failed"}
 
     mu_min = float(res_minvar.x @ mu)
     mu_max = float(mu.max())
 
     if mu_max <= mu_min:
-        return {"vol": [], "ret": [], "sharpe": []}
+        return {"vol": [], "ret": [], "sharpe": [], "reason": "flat_returns"}
 
     targets = np.linspace(mu_min, mu_max, n_points)
 
@@ -537,7 +539,7 @@ def efficient_frontier_curve(
         rets.append(ret)
         sharpes.append((ret - risk_free) / vol if vol > 0 else 0.0)
 
-    return {"vol": vols, "ret": rets, "sharpe": sharpes}
+    return {"vol": vols, "ret": rets, "sharpe": sharpes, "reason": None}
 
 
 def risk_contributions(returns: pd.DataFrame, weights: np.ndarray) -> dict[str, list[float]]:
