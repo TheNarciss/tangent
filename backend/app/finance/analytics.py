@@ -27,6 +27,12 @@ class PortfolioStat(TypedDict):
 
 
 class FrontierResult(TypedDict):
+    """Return type of efficient_frontier_curve.
+
+    `reason` is None when the frontier was computed successfully, otherwise
+    a machine-readable code: "need_two_assets" | "flat_returns" | "solver_failed".
+    """
+
     vol: list[float]
     ret: list[float]
     sharpe: list[float]
@@ -179,7 +185,7 @@ def efficient_frontier_cloud(
     returns: pd.DataFrame,
     n: int = 3000,
     seed: int = 42,
-) -> FrontierResult:
+) -> dict[str, list[float]]:
     """Sample `n` random long-only fully-invested portfolios on the simplex.
 
     Returns parallel arrays `vol`, `ret` (annualized) and `sharpe`. The upper-left
@@ -484,12 +490,16 @@ def efficient_frontier_curve(
     mu: np.ndarray | None = None,
     cov: np.ndarray | None = None,
     bounds_override: list[tuple[float, float]] | None = None,
-) -> dict[str, list[float]]:
+) -> FrontierResult:
     """Smooth efficient frontier as N (σ, μ) points from min-variance to max-return.
 
     Quand mu et cov sont fournis, ils définissent l'univers entier (ETFs seuls ou
     augmenté avec enveloppes). bounds_override permet de plafonner les poids des
     enveloppes par leur headroom (ceilings).
+
+    Returns a FrontierResult: vol/ret/sharpe parallel arrays, plus a machine-readable
+    `reason` set to one of "need_two_assets" | "flat_returns" | "solver_failed" when
+    the frontier could not be computed; `reason` is None on success.
     """
     from scipy.optimize import minimize
 
@@ -501,6 +511,7 @@ def efficient_frontier_curve(
     n = len(mu)
     if n < 2:
         return FrontierResult(vol=[], ret=[], sharpe=[], reason="need_two_assets")
+
     bounds = bounds_override if bounds_override is not None else [(0.0, 1.0)] * n
 
     # Min-variance portfolio computed directly avec le cov passé (augmenté ou pas).
