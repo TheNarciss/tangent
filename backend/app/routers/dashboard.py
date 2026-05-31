@@ -38,5 +38,8 @@ async def read_dashboard(
 
 
 @router.get("/timeseries", response_model=TimeseriesResponse)
-async def read_timeseries(pf: Portfolio = Depends(get_user_portfolio)) -> TimeseriesResponse:
-    return timeseries.build(portfolio_data=pf)
+async def read_timeseries(
+    wealth: Wealth = Depends(get_user_wealth),
+) -> TimeseriesResponse:
+    """Phase 2 PR 3: Historique consumes Wealth (was Portfolio legacy)."""
+    return timeseries.build(wealth=wealth)
