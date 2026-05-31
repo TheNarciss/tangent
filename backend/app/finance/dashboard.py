@@ -82,7 +82,9 @@ def build(
     total_cost = sum(cost_by_ticker.values())
     assets = [
         _asset_metric(
-            p,
+            t,
+            qty_by_ticker[t],
+            avg_cost_by_ticker[t],
             w,
             v,
             latest[t],
@@ -125,12 +127,20 @@ def build(
 
 
 def _asset_metric(
-    position, weight: float, value: float, price: float, stat, cvar: float, max_dd: float
+    ticker: str,
+    quantity: float,
+    avg_cost: float,
+    weight: float,
+    value: float,
+    price: float,
+    stat,
+    cvar: float,
+    max_dd: float,
 ) -> AssetMetrics:
-    cost = position.quantity * position.avg_cost
+    cost = quantity * avg_cost
     pnl = value - cost
     return AssetMetrics(
-        ticker=position.ticker,
+        ticker=ticker,
         price=price,
         weight=weight,
         value=value,
