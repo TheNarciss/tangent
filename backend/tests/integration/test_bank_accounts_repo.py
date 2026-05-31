@@ -241,3 +241,95 @@ async def test_upsert_transactions_skips_duplicates(client):
             assert len(listed) == 2
     finally:
         await _cleanup_user(user_id)
+
+
+@pytest.mark.integration
+async def test_replace_holdings_upserts_and_drops_orphans(client):
+    """Second snapshot updates existing rows + removes vanished ones."""
+    run_id = uuid.uuid4().hex[:8]
+    user_id = await _register_and_get_user_id(client, f"hold2-{run_id}@test.com", "TestPwd123!")
+
+    try:
+        async with async_session_factory() as session:
+            acc = await accounts_repo.upsert_account(
+                session,
+                user_id,
+                BankAccountDTO(
+                    provider="powens",
+                    provider_account_id="acc-H2",
+                    name="PEA Test 2",
+                    type=AccountType.PEA,
+                    currency="EUR",
+                    balance=10_000.0,
+                ),
+            )
+            account_id = acc.id
+
+            snap1 = [
+                Investment(
+                    provider="powens",
+                    provider_investment_id="inv-A",
+                    provider_account_id="acc-H2",
+                    ticker="DCAM.PA",
+                    label="Danone",
+                    quantity=10,
+                    unit_price=55.0,
+                    current_value=580.0,
+                    currency="EUR",
+                ),
+                Investment(
+                    provider="powens",
+                    provider_investment_id="inv-B",
+                    provider_account_id="acc-H2",
+                    ticker="PUST.PA",
+                    label="Amundi PEA S&P 500",
+                    quantity=5,
+                    unit_price=30.0,
+                    current_value=160.0,
+                    currency="EUR",
+                ),
+            ]
+            await holdings_repo.replace_holdings(session, user_id, account_id, snap1)
+            assert len(await holdings_repo.list_holdings(session, user_id, account_id)) == 2
+
+            # Second snapshot: inv-A's quantity bumps, inv-B disappears, inv-C added.
+            snap2 = [
+                Investment(
+                    provider="powens",
+                    provider_investment_id="inv-A",
+                    provider_account_id="acc-H2",
+                    ticker="DCAM.PA",
+                    label="Danone",
+                    quantity=12,
+                    unit_price=56.0,
+                    current_value=720.0,
+                    currency="EUR",
+                ),
+                Investment(
+                    provider="powens",
+                    provider_investment_id="inv-C",
+                    provider_account_id="acc-H2",
+                    ticker="ETZ.PA",
+                    label="Amundi Euro Stoxx",
+                    quantity=20,
+                    unit_price=25.0,
+                    current_value=510.0,
+                    currency="EUR",
+                ),
+            ]
+            await holdings_repo.replace_holdings(session, user_id, account_id, snap2)
+            after = await holdings_repo.list_holdings(session, user_id, account_id)
+
+            by_pid = {h.provider_investment_id: h for h in after}
+            assert set(by_pid.keys()) == {"inv-A", "inv-C"}, "orphan inv-B should be gone"
+            assert by_pid["inv-A"].quantity == 12.0, (
+                "inv-A should have been updated, not duplicated"
+            )
+            assert by_pid["inv-A"].unit_price == 56.0
+            assert by_pid["inv-C"].ticker == "ETZ.PA"
+
+            # Third snapshot: empty list → all rows removed.
+            await holdings_repo.replace_holdings(session, user_id, account_id, [])
+            assert await holdings_repo.list_holdings(session, user_id, account_id) == []
+    finally:
+        await _cleanup_user(user_id)
