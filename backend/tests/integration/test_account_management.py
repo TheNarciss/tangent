@@ -4,7 +4,6 @@ import secrets
 
 import pytest
 
-
 # ── Change password ───────────────────────────────────────────────────
 
 

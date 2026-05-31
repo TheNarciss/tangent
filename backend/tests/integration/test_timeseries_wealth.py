@@ -47,8 +47,11 @@ def test_timeseries_build_aggregates_quantities_across_wrappers():
                 account_type="pea",
                 positions=[
                     WealthPosition(
-                        ticker="WPEA.PA", label="WPEA", quantity=10,
-                        avg_cost=50, current_value=550,
+                        ticker="WPEA.PA",
+                        label="WPEA",
+                        quantity=10,
+                        avg_cost=50,
+                        current_value=550,
                     ),
                 ],
             ),
@@ -58,8 +61,11 @@ def test_timeseries_build_aggregates_quantities_across_wrappers():
                 account_type="cto",
                 positions=[
                     WealthPosition(
-                        ticker="WPEA.PA", label="WPEA", quantity=5,
-                        avg_cost=50, current_value=275,
+                        ticker="WPEA.PA",
+                        label="WPEA",
+                        quantity=5,
+                        avg_cost=50,
+                        current_value=275,
                     ),
                 ],
             ),
@@ -96,7 +102,9 @@ def test_timeseries_quantities_dict_sums_across_wrappers(monkeypatch):
                 name="PEA",
                 account_type="pea",
                 positions=[
-                    WealthPosition(ticker="X", label="X", quantity=10, avg_cost=1, current_value=15),
+                    WealthPosition(
+                        ticker="X", label="X", quantity=10, avg_cost=1, current_value=15
+                    ),
                 ],
             ),
             InvestmentAccount(
