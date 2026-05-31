@@ -22,7 +22,7 @@ def test_efficient_frontier_includes_risk_free_kink():
     rets = pd.DataFrame(rng.normal(0.0004, 0.012, (252, 2)), columns=["A", "B"])
     mu = np.array([0.08, 0.10, 0.03])  # 2 ETFs + livret @ 3%
     cov = np.diag([0.04, 0.05, 1e-9])  # σ_livret ≈ 0
-    bounds = [(0.0, 1.0), (0.0, 1.0), (0.0, 0.5)]  # livret capped at 50%
+    bounds = [(0.0, 1.0), (0.0, 1.0), (0.0, 1.0)]  # livret uncapped → frontier reaches σ≈0
     f = analytics.efficient_frontier_curve(rets, mu=mu, cov=cov, bounds_override=bounds)
     assert f["vol"], "frontier should not be empty"
     assert min(f["vol"]) < 0.01, "frontier must touch σ≈0 thanks to livret"
