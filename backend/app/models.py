@@ -5,20 +5,6 @@ from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-class Position(BaseModel):
-    ticker: str = Field(min_length=1)
-    quantity: float = Field(ge=0)  # 0 allowed for watchlist tickers (tracked without a transaction)
-    avg_cost: float = Field(ge=0)
-    # Optional fields enriched via Powens (None for legacy manual positions)
-    isin: str | None = None
-    label: str | None = None
-
-
-class Portfolio(BaseModel):
-    positions: list[Position]
-    cash: float = 0.0
-
-
 class AssetMetrics(BaseModel):
     ticker: str
     price: float
@@ -136,20 +122,6 @@ class EnvelopeEligibility(BaseModel):
 
 class EligibleEnvelopesResponse(BaseModel):
     envelopes: list[EnvelopeEligibility]
-
-
-class Transaction(BaseModel):
-    """A single dated cashflow or trade. Source of truth for portfolio state."""
-
-    date: str = Field(description="ISO date or datetime (YYYY-MM-DD or YYYY-MM-DDTHH:MM)")
-    type: str = Field(pattern="^(buy|sell|deposit|withdrawal|dividend)$")
-    ticker: str | None = None
-    qty: float = Field(default=0, ge=0)
-    unit_price: float = Field(default=0, ge=0)
-    fees: float = Field(default=0, ge=0)
-    amount_eur: float | None = Field(
-        default=None, description="For deposits, withdrawals, and dividends"
-    )
 
 
 class PortfolioPoint(BaseModel):

@@ -34,7 +34,6 @@ from .routers import (
     oauth_accounts,
     password_reset,
     planning,
-    portfolio,
     powens,
     profile,
     terms,
@@ -241,7 +240,6 @@ else:
 
 
 # ─── Business routers (all require auth via current_active_user) ──────────
-app.include_router(portfolio.router)
 app.include_router(accounts.router)
 app.include_router(password_reset.router)
 app.include_router(dashboard.router)

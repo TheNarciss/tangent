@@ -40,7 +40,6 @@ from ..powens.crypto import decrypt_token
 from ..repositories import account_holdings as holdings_repo
 from ..repositories import bank_accounts as accounts_repo
 from ..repositories import bank_transactions as bank_txs_repo
-from ..repositories import portfolio as portfolio_repo
 from ..sync_cache import sync_cache
 
 logger = logging.getLogger(__name__)
@@ -592,7 +591,6 @@ async def _do_sync(user: User, session: AsyncSession) -> SyncReport:
     # ── Legacy bridge: sync to portfolios/positions table ────────────────────
     # The legacy dashboard/historique/optimisation routes still read from this
     # table. Until we migrate them, derive legacy data from the new sync result.
-    legacy_positions_count = await _sync_to_legacy_portfolio(session, user.id, result)
 
     logger.info(
         "Sync user=%s: %d accounts, %d holdings, %d new txs, %d legacy positions",
@@ -600,7 +598,6 @@ async def _do_sync(user: User, session: AsyncSession) -> SyncReport:
         persisted_accounts,
         persisted_holdings,
         persisted_txs,
-        legacy_positions_count,
     )
 
     return SyncReport(
@@ -608,93 +605,6 @@ async def _do_sync(user: User, session: AsyncSession) -> SyncReport:
         accounts_persisted=persisted_accounts,
         holdings_persisted=persisted_holdings,
         transactions_persisted=persisted_txs,
-        legacy_positions_synced=legacy_positions_count,
         synced_at=result.synced_at,
         from_cache=False,
     )
-
-
-# ── Internal: legacy bridge ─────────────────────────────────────────────────
-
-
-_INVESTMENT_ACCOUNT_TYPES = {
-    AccountType.PEA,
-    AccountType.CTO,
-    AccountType.LIFE_INSURANCE,
-}
-
-
-def _is_liquid_cash(acc, holdings_count: int) -> bool:
-    """An account whose balance is investable cash for legacy analytics.
-
-    Detection is purely structural (agnostic of bank/locale):
-    - PEA sub-account with 0 holdings → cash sub-account (Powens does not
-      expose a sub-type, but a PEA cash account never has investments
-      attached. Brand-new PEAs with cash awaiting investment also count
-      here, which is semantically correct.)
-    - Checking accounts (cash available, can be DCA'd)
-
-    Excludes :
-    - Savings / Livrets : already modelled as separate envelopes
-      (cf envelopes.yaml + finance/envelopes.py) — must NOT be merged into
-      legacy cash or the optimiser will double-count them.
-    - Loans : liabilities, modelled separately in Wealth (Phase 2).
-    """
-    if acc.type == AccountType.PEA and holdings_count == 0:
-        return True
-    return acc.type == AccountType.CHECKING
-
-
-async def _sync_to_legacy_portfolio(
-    session: AsyncSession,
-    user_id: uuid.UUID,
-    result,
-) -> int:
-    """Derive legacy Position list from the multi-account sync result and persist."""
-    positions_by_ticker: dict[str, dict] = {}
-    for inv in result.investments:
-        if inv.quantity <= 0:
-            continue
-        if inv.ticker in positions_by_ticker:
-            existing = positions_by_ticker[inv.ticker]
-            total_qty = existing["quantity"] + inv.quantity
-            if total_qty > 0:
-                weighted_cost = (
-                    existing["quantity"] * existing["avg_cost"] + inv.quantity * inv.unit_price
-                ) / total_qty
-            else:
-                weighted_cost = 0.0
-            existing["quantity"] = total_qty
-            existing["avg_cost"] = weighted_cost
-        else:
-            positions_by_ticker[inv.ticker] = {
-                "ticker": inv.ticker,
-                "quantity": float(inv.quantity),
-                "avg_cost": float(inv.unit_price),
-                "isin": inv.isin,
-                "label": inv.label,
-            }
-
-    # Count holdings per account (structural discriminator for PEA cash vs titres)
-    holdings_per_account: dict[str, int] = {acc.provider_account_id: 0 for acc in result.accounts}
-    for inv in result.investments:
-        if inv.quantity > 0:
-            holdings_per_account[inv.provider_account_id] = (
-                holdings_per_account.get(inv.provider_account_id, 0) + 1
-            )
-
-    cash = 0.0
-    for acc in result.accounts:
-        holdings_count = holdings_per_account.get(acc.provider_account_id, 0)
-        if _is_liquid_cash(acc, holdings_count):
-            cash += float(acc.balance)
-
-    legacy_positions = list(positions_by_ticker.values())
-
-    await portfolio_repo.replace_positions(
-        session,
-        user_id,
-        new_positions=legacy_positions,
-        cash=cash,
-    )
-    return len(legacy_positions)

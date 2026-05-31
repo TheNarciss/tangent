@@ -5,7 +5,6 @@ import {
   useCurrentUser,
   useDashboard,
   useOptimizer,
-  usePortfolio,
   useTimeseries,
   type OptimizerObjective,
   type OptimizerRequest,
@@ -22,7 +21,6 @@ import { AuthScreen } from "@/components/auth/AuthScreen";
 import { useProfileSync } from "@/lib/profile-sync";
 import { UserMenu } from "@/components/auth/UserMenu";
 import { Correlation } from "@/components/Correlation";
-import { Editor } from "@/components/Editor";
 import { Insights } from "@/components/Insights";
 import { Metrics } from "@/components/Metrics";
 import { Patrimony } from "@/components/Patrimony";
@@ -87,7 +85,6 @@ export default function App() {
 function Dashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
   const { data: user } = useCurrentUser();
   const dashboard = useDashboard();
-  const portfolio = usePortfolio();
   const timeseries = useTimeseries();
   const [profile] = useProfile();
 
@@ -112,8 +109,6 @@ function Dashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
           </div>
           <div className="flex items-center gap-2">
             <AddBankButton />
-
-            {portfolio.data && <Editor portfolio={portfolio.data} />}
             <UserMenu onNavigate={onNavigate} />
           </div>
         </header>

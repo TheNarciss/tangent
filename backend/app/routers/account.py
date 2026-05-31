@@ -177,14 +177,6 @@ async def delete_my_account(
     except ImportError:
         pass
 
-    # Portfolios (cascade auto sur positions via FK)
-    try:
-        from ..db.models import Portfolio
-
-        await session.execute(delete(Portfolio).where(Portfolio.user_id == user_id))
-    except ImportError:
-        pass
-
     # Finally the user
     await session.delete(user)
     await session.commit()
