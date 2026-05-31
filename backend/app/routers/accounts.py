@@ -34,12 +34,14 @@ from ..aggregator import AccountType, Investment, Transaction
 from ..auth import User, current_active_user
 from ..db import get_session
 from ..db.models import BankAccount, PowensCredential
+from ..finance.fees import autodetect_broker
 from ..powens.aggregator import PowensAggregator
 from ..powens.client import PowensClient, PowensError
 from ..powens.crypto import decrypt_token
 from ..repositories import account_holdings as holdings_repo
 from ..repositories import bank_accounts as accounts_repo
 from ..repositories import bank_transactions as bank_txs_repo
+from ..repositories import profile as profile_repo
 from ..sync_cache import sync_cache
 
 logger = logging.getLogger(__name__)
@@ -587,6 +589,28 @@ async def _do_sync(user: User, session: AsyncSession) -> SyncReport:
                 session, user.id, account_id_map[prov_acc_id], txs
             )
             persisted_txs += inserted
+
+    # ── Autodetect default broker on first sync (if not yet set) ────────────
+    profile = await profile_repo.get_or_create(session, user.id)
+    if profile.default_broker is None:
+        # Pick the institution of the LARGEST investment wrapper (PEA / CTO / AV)
+        invest_types = {AccountType.PEA, AccountType.CTO, AccountType.LIFE_INSURANCE}
+        candidates = [
+            (acc.institution_name, float(acc.valuation or acc.balance or 0))
+            for acc in result.accounts
+            if acc.type in invest_types and acc.institution_name
+        ]
+        if candidates:
+            candidates.sort(key=lambda x: x[1], reverse=True)
+            broker_id = autodetect_broker(candidates[0][0])
+            if broker_id:
+                await profile_repo.update(session, user.id, {"default_broker": broker_id})
+                logger.info(
+                    "Autodetected broker=%s from institution=%r for user=%s",
+                    broker_id,
+                    candidates[0][0],
+                    user.id,
+                )
 
     # ── Legacy bridge: sync to portfolios/positions table ────────────────────
     # The legacy dashboard/historique/optimisation routes still read from this

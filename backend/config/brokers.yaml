@@ -12,6 +12,17 @@
 
 default_broker: bnp_start
 
+# Institution name (as returned by Powens) → broker_id
+# Used to autodetect a user's broker at first sync. Match is case-insensitive,
+# checks 'contains' (e.g. "BNP Paribas SA" matches "BNP Paribas").
+institution_to_broker:
+  "BNP Paribas": bnp_start
+  "Fortuneo": fortuneo
+  "Bourse Direct": bourse_direct
+  "Trade Republic": trade_republic
+  "Boursorama": boursorama
+  "Boursobank": boursorama
+
 brokers:
   bnp_start:
     name: "BNP Paribas — Offre Bourse Start"
