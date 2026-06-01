@@ -99,7 +99,7 @@ async def generate_review_stream(
         max_tokens=anthropic_client.MAX_TOKENS,
         system=prompt_builder.SYSTEM_PROMPT,
         messages=[{"role": "user", "content": user_prompt}],
-        tools=[_WEB_SEARCH_TOOL],
+        tools=[_WEB_SEARCH_TOOL],  # type: ignore[list-item]  # SDK strict TypedDict vs our dict
     ) as stream:
         async for chunk in stream.text_stream:
             collected_chunks.append(chunk)
