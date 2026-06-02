@@ -66,3 +66,6 @@ postgres_data/
 
 # ─── Repo nettoyage ─────────────────────────────────────
 .cache/
+
+# Local scratch files (audit, debug)
+.tmp-*
