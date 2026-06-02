@@ -39,6 +39,28 @@ class _SLSQPResult(TypedDict):
     success: bool
 
 
+_FRONTIER_REASON_MESSAGES: dict[str, str] = {
+    "need_two_assets": (
+        "Frontière non traçable : il faut au moins 2 actifs distincts. "
+        "Active les livrets ou ajoute une seconde position."
+    ),
+    "flat_returns": (
+        "Tous tes actifs ont le même rendement espéré — "
+        "aucune diversification n'apporte de gain attendu, donc pas de frontière à tracer."
+    ),
+    "solver_failed": (
+        "Le solveur n'a pas convergé. "
+        "Essaie une période historique plus longue dans les Paramètres expert."
+    ),
+}
+
+
+def _frontier_reason_message(code: str | None) -> str | None:
+    if not code:
+        return None
+    return _FRONTIER_REASON_MESSAGES.get(code, "Frontière indisponible.")
+
+
 def build(req: OptimizerRequest, wealth: "Wealth | None" = None) -> OptimizerResponse:
     if wealth is None:
         raise PortfolioEmptyError("Wealth required for optimizer.")
@@ -256,7 +278,12 @@ def build(req: OptimizerRequest, wealth: "Wealth | None" = None) -> OptimizerRes
         actions=actions,
         risk_contributions_current=RiskContribution(tickers=asset_ids, fraction=rc_current),
         risk_contributions_optimal=RiskContribution(tickers=asset_ids, fraction=rc_optimal),
-        frontier_curve=FrontierCurve(**frontier),
+        frontier_curve=FrontierCurve(
+            vol=frontier["vol"],
+            ret=frontier["ret"],
+            sharpe=frontier["sharpe"],
+            unavailable_reason=_frontier_reason_message(frontier["reason"]),
+        ),
         envelope_points=[
             EnvelopePoint(label=e["name"], expected_return=e["rate"], volatility=0.0)
             for e in envelope_assets
