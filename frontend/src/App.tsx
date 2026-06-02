@@ -34,6 +34,7 @@ import { Projection } from "@/components/Projection";
 import { BengenWidget } from "@/components/BengenWidget";
 import { RiskReturn } from "@/components/RiskReturn";
 import { Timeline } from "@/components/Timeline";
+import { AI } from "@/components/AI";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type View = "dashboard" | "profile" | "settings";
@@ -115,14 +116,19 @@ function Dashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
 
         {dashboard.isLoading && <p className="text-sm text-muted-foreground">Chargement…</p>}
 
-        <Tabs defaultValue={dashboard.data ? "overview" : "accounts"} className="space-y-6">
-          <TabsList className="grid grid-cols-2 sm:grid-cols-5 w-full max-w-3xl">
+        <Tabs defaultValue={dashboard.data ? "ai" : "accounts"} className="space-y-6">
+          <TabsList className="grid grid-cols-3 sm:grid-cols-6 w-full max-w-3xl">
+            <TabsTrigger value="ai">IA</TabsTrigger>
             <TabsTrigger value="overview">Aperçu</TabsTrigger>
             <TabsTrigger value="accounts">Comptes</TabsTrigger>
             <TabsTrigger value="history">Historique</TabsTrigger>
             <TabsTrigger value="projection">Projection</TabsTrigger>
             <TabsTrigger value="optimization">Optimisation</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="ai" className="space-y-6">
+            <AI />
+          </TabsContent>
 
           <TabsContent value="overview" className="space-y-6">
             {dashboard.isError && <DashboardErrorPanel error={dashboard.error} />}
