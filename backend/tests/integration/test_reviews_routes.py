@@ -22,7 +22,7 @@ async def _register(client, email, password):
 
 async def _login(client, email, password):
     resp = await client.post(
-        "/auth/jwt/login",
+        "/auth/login",
         data={"username": email, "password": password},
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
