@@ -1058,3 +1058,53 @@ export interface WealthSummary {
   envelopes: EnvelopeSummary[];
   loans: LoanSummary[];
 }
+
+/* ── Portfolio reviews (PR5-6) ─────────────────────────────────────── */
+
+export interface ReviewSource {
+  url: string;
+  title?: string;
+}
+
+export interface PortfolioReviewResponse {
+  id: string;
+  review_date: string;
+  content: string;
+  model_used: string;
+  input_tokens: number;
+  output_tokens: number;
+  web_searches_count: number;
+  cost_usd: number;
+  sources: ReviewSource[];
+  created_at: string;
+}
+
+async function fetchTodayReview(): Promise<PortfolioReviewResponse | null> {
+  const resp = await fetch(`${API_URL}/reviews/today`, { credentials: "include" });
+  if (!resp.ok)
+    throw new ApiError(resp.status, "http_error", `GET /reviews/today returned ${resp.status}`);
+  return resp.json();
+}
+
+async function fetchReviewsHistory(): Promise<PortfolioReviewResponse[]> {
+  const resp = await fetch(`${API_URL}/reviews?limit=90`, { credentials: "include" });
+  if (!resp.ok)
+    throw new ApiError(resp.status, "http_error", `GET /reviews returned ${resp.status}`);
+  return resp.json();
+}
+
+export function useTodayReview() {
+  return useQuery({
+    queryKey: ["reviews", "today"],
+    queryFn: fetchTodayReview,
+    staleTime: 1000 * 60 * 5, // 5 min
+  });
+}
+
+export function useReviewsHistory() {
+  return useQuery({
+    queryKey: ["reviews", "history"],
+    queryFn: fetchReviewsHistory,
+    staleTime: 1000 * 60 * 10,
+  });
+}

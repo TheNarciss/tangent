@@ -30,6 +30,8 @@ dependencies = [
     "passlib[argon2]>=1.7.4",
     "pyjwt>=2.8.0",
     "cryptography>=42.0",      # Fernet pour chiffrer les tokens Powens
+    # ─ LLM (Phase 3 - ADR-015) ─
+    "anthropic>=0.40",         # Claude SDK pour les portfolio reviews
 ]
 
 [build-system]
