@@ -149,6 +149,7 @@ class FrontierCurve(BaseModel):
     vol: list[float]
     ret: list[float]
     sharpe: list[float]
+    unavailable_reason: str | None = None
 
 
 class ExpertSettings(BaseModel):

@@ -14,6 +14,21 @@ def test_max_drawdown_zero_for_monotonic_series():
     assert result == 0.0
 
 
+def test_efficient_frontier_includes_risk_free_kink():
+    """Frontier with a 0-σ asset must extend down to σ=0 + start from μ_rf."""
+    import pandas as pd
+
+    rng = np.random.default_rng(42)
+    rets = pd.DataFrame(rng.normal(0.0004, 0.012, (252, 2)), columns=["A", "B"])
+    mu = np.array([0.08, 0.10, 0.03])  # 2 ETFs + livret @ 3%
+    cov = np.diag([0.04, 0.05, 1e-9])  # σ_livret ≈ 0
+    bounds = [(0.0, 1.0), (0.0, 1.0), (0.0, 1.0)]  # livret uncapped → frontier reaches σ≈0
+    f = analytics.efficient_frontier_curve(rets, mu=mu, cov=cov, bounds_override=bounds)
+    assert f["vol"], "frontier should not be empty"
+    assert min(f["vol"]) < 0.01, "frontier must touch σ≈0 thanks to livret"
+    assert min(f["ret"]) >= 0.029, "frontier μ_min ≈ μ_rf (3%)"
+
+
 def test_max_drawdown_negative_for_crashing_series():
     """A peak-then-crash returns the magnitude of the crash (negative)."""
     series = pd.Series([100, 150, 90, 95])
@@ -97,3 +112,40 @@ def test_log_returns_zero_for_flat_series():
     prices = pd.DataFrame({"AAA": [100.0, 100.0, 100.0]})
     result = analytics.daily_log_returns(prices)
     assert all(result["AAA"] == 0.0)
+
+
+# ── efficient_frontier_curve: edge cases with unavailable reason ─────────────
+
+
+def test_frontier_returns_need_two_assets_when_single_asset():
+    """A single-asset universe cannot have an efficient frontier — must flag it."""
+    rng = np.random.default_rng(7)
+    rets = pd.DataFrame(rng.normal(0.0004, 0.012, (252, 1)), columns=["ONLY"])
+    mu = np.array([0.08])
+    cov = np.array([[0.04]])
+    out = analytics.efficient_frontier_curve(rets, mu=mu, cov=cov)
+    assert out["vol"] == []
+    assert out["ret"] == []
+    assert out["reason"] == "need_two_assets"
+
+
+def test_frontier_returns_flat_returns_when_all_mu_equal():
+    """When all assets share the same expected return, frontier is degenerate."""
+    rng = np.random.default_rng(11)
+    rets = pd.DataFrame(rng.normal(0.0004, 0.012, (252, 2)), columns=["A", "B"])
+    mu = np.array([0.05, 0.05])
+    cov = np.array([[0.04, 0.0], [0.0, 0.06]])
+    out = analytics.efficient_frontier_curve(rets, mu=mu, cov=cov)
+    assert out["vol"] == []
+    assert out["reason"] == "flat_returns"
+
+
+def test_frontier_has_no_reason_when_well_posed():
+    """A normal 2-asset universe yields a non-empty frontier with reason=None."""
+    rng = np.random.default_rng(13)
+    rets = pd.DataFrame(rng.normal(0.0004, 0.012, (252, 2)), columns=["A", "B"])
+    mu = np.array([0.06, 0.10])
+    cov = np.array([[0.04, 0.01], [0.01, 0.06]])
+    out = analytics.efficient_frontier_curve(rets, mu=mu, cov=cov, n_points=10)
+    assert len(out["vol"]) > 0
+    assert out["reason"] is None
