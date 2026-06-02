@@ -333,3 +333,52 @@ async def test_replace_holdings_upserts_and_drops_orphans(client):
             assert await holdings_repo.list_holdings(session, user_id, account_id) == []
     finally:
         await _cleanup_user(user_id)
+
+
+@pytest.mark.integration
+async def test_list_and_get_account_exclude_soft_deleted(client):
+    """list_accounts and get_account must skip rows flagged with powens_deleted_at."""
+    from datetime import UTC, datetime
+
+    run_id = uuid.uuid4().hex[:8]
+    user_id = await _register_and_get_user_id(client, f"sd-{run_id}@test.com", "TestPwd123!")
+
+    try:
+        async with async_session_factory() as session:
+            kept = await accounts_repo.upsert_account(
+                session,
+                user_id,
+                BankAccountDTO(
+                    provider="powens",
+                    provider_account_id="acc-keep",
+                    name="Live account",
+                    type=AccountType.CHECKING,
+                    currency="EUR",
+                    balance=1000.0,
+                ),
+            )
+            soft_deleted = await accounts_repo.upsert_account(
+                session,
+                user_id,
+                BankAccountDTO(
+                    provider="powens",
+                    provider_account_id="acc-del",
+                    name="Closed account",
+                    type=AccountType.CHECKING,
+                    currency="EUR",
+                    balance=0.0,
+                    powens_deleted_at=datetime(2026, 5, 30, tzinfo=UTC),
+                ),
+            )
+
+            listed = await accounts_repo.list_accounts(session, user_id)
+            listed_ids = {a.id for a in listed}
+            assert kept.id in listed_ids, "live account should appear in list"
+            assert soft_deleted.id not in listed_ids, "soft-deleted account must be hidden"
+
+            assert await accounts_repo.get_account(session, user_id, kept.id) is not None
+            assert await accounts_repo.get_account(session, user_id, soft_deleted.id) is None, (
+                "get_account on a soft-deleted row must return None (→ route renders 404)"
+            )
+    finally:
+        await _cleanup_user(user_id)
