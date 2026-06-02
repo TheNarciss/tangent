@@ -5,7 +5,6 @@ import {
   useCurrentUser,
   useDashboard,
   useOptimizer,
-  usePortfolio,
   useTimeseries,
   type OptimizerObjective,
   type OptimizerRequest,
@@ -14,28 +13,45 @@ import { ageFromBirthDate, useProfile } from "@/lib/profile";
 import { Accounts } from "@/components/Accounts";
 import { Assets } from "@/components/Assets";
 import { PowensCallbackHandler } from "@/components/PowensCallback";
+import { OAuthCallbackHandler } from "@/components/OAuthCallback";
+import { TermsGate } from "@/components/TermsGate";
+import { fetchTermsVersion } from "@/api";
+import { useQuery } from "@tanstack/react-query";
 import { AuthScreen } from "@/components/auth/AuthScreen";
 import { useProfileSync } from "@/lib/profile-sync";
 import { UserMenu } from "@/components/auth/UserMenu";
 import { Correlation } from "@/components/Correlation";
-import { Editor } from "@/components/Editor";
 import { Insights } from "@/components/Insights";
 import { Metrics } from "@/components/Metrics";
+import { Patrimony } from "@/components/Patrimony";
 import { StressTests } from "@/components/StressTests";
 import { Optimizer } from "@/components/Optimizer";
 import { Scanner } from "@/components/Scanner";
-import { ProfileButton } from "@/components/Profile";
-import { SettingsButton } from "@/components/Settings";
-import { SyncButton } from "@/components/SyncButton";
+import { ProfilePage } from "@/components/Profile";
+import { SettingsPage } from "@/components/Settings";
+import { AddBankButton } from "@/components/AddBankButton";
 import { Projection } from "@/components/Projection";
 import { BengenWidget } from "@/components/BengenWidget";
 import { RiskReturn } from "@/components/RiskReturn";
 import { Timeline } from "@/components/Timeline";
+import { AI } from "@/components/AI";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+type View = "dashboard" | "profile" | "settings";
 
 export default function App() {
   const auth = useCurrentUser();
   useProfileSync(!!auth.data);
+  const [view, setView] = useState<View>("dashboard");
+
+  // CGU click-through gate (cf TermsGate). enabled uniquement
+  // quand loggé pour éviter un fetch inutile sur AuthScreen.
+  const termsVersionQuery = useQuery({
+    queryKey: ["terms-version"],
+    queryFn: fetchTermsVersion,
+    enabled: !!auth.data,
+    staleTime: Infinity,
+  });
 
   // Auth still loading — show empty shell to avoid login flash
   if (auth.isLoading) {
@@ -51,20 +67,32 @@ export default function App() {
     return <AuthScreen />;
   }
 
-  // Logged in → main dashboard
-  return <Dashboard />;
+  // CGU pas (encore) acceptées pour la version actuelle → gate
+  const currentTermsVersion = termsVersionQuery.data?.version;
+  if (currentTermsVersion && auth.data.terms_version_accepted !== currentTermsVersion) {
+    return <TermsGate user={auth.data} />;
+  }
+
+  // Logged in → route to selected view
+  if (view === "profile") {
+    return <ProfilePage onBack={() => setView("dashboard")} />;
+  }
+  if (view === "settings") {
+    return <SettingsPage onBack={() => setView("dashboard")} />;
+  }
+  return <Dashboard onNavigate={setView} />;
 }
 
-function Dashboard() {
+function Dashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
   const { data: user } = useCurrentUser();
   const dashboard = useDashboard();
-  const portfolio = usePortfolio();
   const timeseries = useTimeseries();
   const [profile] = useProfile();
 
   return (
     <div className="min-h-screen bg-background">
       <PowensCallbackHandler />
+      <OAuthCallbackHandler />
       <div className="container max-w-7xl py-10 space-y-8">
         <header className="flex items-baseline justify-between border-b pb-6">
           <div>
@@ -81,18 +109,16 @@ function Dashboard() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <SyncButton />
-            <ProfileButton />
-            <SettingsButton />
-            {portfolio.data && <Editor portfolio={portfolio.data} />}
-            <UserMenu />
+            <AddBankButton />
+            <UserMenu onNavigate={onNavigate} />
           </div>
         </header>
 
         {dashboard.isLoading && <p className="text-sm text-muted-foreground">Chargement…</p>}
 
-        <Tabs defaultValue={dashboard.data ? "overview" : "accounts"} className="space-y-6">
-          <TabsList className="grid grid-cols-2 sm:grid-cols-5 w-full max-w-3xl">
+        <Tabs defaultValue={dashboard.data ? "ai" : "accounts"} className="space-y-6">
+          <TabsList className="grid grid-cols-3 sm:grid-cols-6 w-full max-w-3xl">
+            <TabsTrigger value="ai">IA</TabsTrigger>
             <TabsTrigger value="overview">Aperçu</TabsTrigger>
             <TabsTrigger value="accounts">Comptes</TabsTrigger>
             <TabsTrigger value="history">Historique</TabsTrigger>
@@ -100,10 +126,15 @@ function Dashboard() {
             <TabsTrigger value="optimization">Optimisation</TabsTrigger>
           </TabsList>
 
+          <TabsContent value="ai" className="space-y-6">
+            <AI />
+          </TabsContent>
+
           <TabsContent value="overview" className="space-y-6">
             {dashboard.isError && <DashboardErrorPanel error={dashboard.error} />}
             {dashboard.data && (
               <>
+                {dashboard.data.wealth && <Patrimony wealth={dashboard.data.wealth} />}
                 <Metrics metrics={dashboard.data.metrics} />
                 <Assets assets={dashboard.data.metrics.assets} />
                 <StressTests stressTests={dashboard.data.stress_tests} />

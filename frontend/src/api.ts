@@ -4,19 +4,6 @@ const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? "http://
 
 /* ── Types (mirror backend Pydantic models) ─────────────────────────── */
 
-export interface Position {
-  ticker: string;
-  quantity: number;
-  avg_cost: number;
-  isin?: string | null;
-  label?: string | null;
-}
-
-export interface Portfolio {
-  positions: Position[];
-  cash: number;
-}
-
 export interface AssetMetrics {
   ticker: string;
   price: number;
@@ -77,6 +64,7 @@ export interface DashboardResponse {
   frontier: FrontierCloud;
   insights: Insight[];
   stress_tests: StressTestResult[];
+  wealth?: WealthSummary | null;
 }
 
 export interface TimeseriesResponse {
@@ -114,6 +102,7 @@ export interface ProjectionResponse {
   broker: string;
   gross_p50: number[]; // P50 without fees, for comparison
   cumulative_fees: number[]; // €, per-month cumulative
+  multi_broker_warning?: string | null;
 }
 
 export interface BengenRequest {
@@ -259,6 +248,9 @@ export interface OptimizerResponse {
 /* ── Auth types ─────────────────────────────────────────────────────── */
 
 export interface UserRead {
+  has_password?: boolean;
+  terms_version_accepted: string | null;
+  terms_accepted_at: string | null;
   id: string;
   email: string;
   is_active: boolean;
@@ -521,7 +513,6 @@ export function useWatchlistAdd() {
       http<string[]>(`/watchlist/${encodeURIComponent(ticker)}`, { method: "POST" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["watchlist"] });
-      qc.invalidateQueries({ queryKey: ["portfolio"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       qc.invalidateQueries({ queryKey: ["optimizer"] });
     },
@@ -535,30 +526,7 @@ export function useWatchlistRemove() {
       http<string[]>(`/watchlist/${encodeURIComponent(ticker)}`, { method: "DELETE" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["watchlist"] });
-      qc.invalidateQueries({ queryKey: ["portfolio"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
-      qc.invalidateQueries({ queryKey: ["optimizer"] });
-    },
-  });
-}
-
-export function usePortfolio() {
-  return useQuery({
-    queryKey: ["portfolio"],
-    queryFn: () => http<Portfolio>("/portfolio"),
-  });
-}
-
-export function useUpdatePortfolio() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (p: Portfolio) =>
-      http<Portfolio>("/portfolio", { method: "PUT", body: JSON.stringify(p) }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["portfolio"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-      qc.invalidateQueries({ queryKey: ["timeseries"] });
-      qc.invalidateQueries({ queryKey: ["projection"] });
       qc.invalidateQueries({ queryKey: ["optimizer"] });
     },
   });
@@ -620,7 +588,6 @@ export function useSyncPowens() {
     mutationFn: () => http<SyncResult>("/sync/powens", { method: "POST" }),
     onSuccess: (result) => {
       if (result.success) {
-        qc.invalidateQueries({ queryKey: ["portfolio"] });
         qc.invalidateQueries({ queryKey: ["dashboard"] });
         qc.invalidateQueries({ queryKey: ["timeseries"] });
         qc.invalidateQueries({ queryKey: ["projection"] });
@@ -902,4 +869,241 @@ export interface BankTransactionResponse {
   transaction_date: string;
   description: string;
   category: string | null;
+}
+
+/* ────────────────────────────────────────────────────────────────────── */
+/*  OAuth (Google, cf ADR-014)                                            */
+/* ────────────────────────────────────────────────────────────────────── */
+
+export interface OAuthAuthorizeResponse {
+  authorization_url: string;
+}
+
+export interface OAuthAccountPublic {
+  id: string;
+  oauth_name: "google";
+  account_email: string;
+}
+
+/**
+ * Initiates Google OAuth login/signup flow.
+ * Fetches the Google authorization URL, then navigates the browser to it.
+ * Google redirects back to backend's /auth/google/callback after consent;
+ * backend sets the auth cookie and redirects to /?oauth=success.
+ */
+export async function startGoogleLogin(): Promise<void> {
+  const res = await fetch(`${API_URL}/auth/google/authorize`, {
+    credentials: "include",
+  });
+  if (!res.ok) {
+    throw new ApiError(
+      res.status,
+      "OAuthStartFailed",
+      "Impossible de démarrer l'authentification Google.",
+    );
+  }
+  const data = (await res.json()) as OAuthAuthorizeResponse;
+  window.location.href = data.authorization_url;
+}
+
+/**
+ * Initiates Google OAuth account linking (user must already be logged in).
+ */
+export async function startGoogleAssociate(): Promise<void> {
+  const res = await fetch(`${API_URL}/auth/associate/google/authorize`, {
+    credentials: "include",
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, "OAuthAssociateFailed", "Impossible de lier le compte Google.");
+  }
+  const data = (await res.json()) as OAuthAuthorizeResponse;
+  window.location.href = data.authorization_url;
+}
+
+/** List OAuth accounts linked to the current user. */
+export function listOAuthAccounts(): Promise<OAuthAccountPublic[]> {
+  return http<OAuthAccountPublic[]>("/users/me/oauth-accounts");
+}
+
+/** Unlink an OAuth account by id. */
+export function deleteOAuthAccount(id: string): Promise<void> {
+  return http<void>(`/users/me/oauth-accounts/${id}`, { method: "DELETE" });
+}
+
+/* ────────────────────────────────────────────────────────────────────── */
+/*  Terms acceptance (CGU + Privacy click-through)                        */
+/* ────────────────────────────────────────────────────────────────────── */
+
+export interface TermsVersion {
+  version: string;
+}
+
+export interface TermsStatus {
+  version: string;
+  accepted_at: string;
+}
+
+/** Public endpoint — no auth required. */
+export async function fetchTermsVersion(): Promise<TermsVersion> {
+  const res = await fetch(`${API_URL}/auth/terms-version`);
+  if (!res.ok) {
+    throw new ApiError(
+      res.status,
+      "TermsVersionFetchFailed",
+      "Impossible de récupérer la version des CGU.",
+    );
+  }
+  return (await res.json()) as TermsVersion;
+}
+
+/** User accepts the current Terms + Privacy version. */
+export function acceptTerms(version: string): Promise<TermsStatus> {
+  return http<TermsStatus>("/users/me/accept-terms", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ version }),
+  });
+}
+
+/* ────────────────────────────────────────────────────────────────────── */
+/*  Account management                                                    */
+/* ────────────────────────────────────────────────────────────────────── */
+
+export interface BankConnection {
+  connection_id: number;
+  institution_name: string;
+  accounts_count: number;
+  last_update: string | null;
+  error: string | null;
+}
+
+export async function changePassword(
+  current_password: string,
+  new_password: string,
+): Promise<void> {
+  await http<void>("/users/me/change-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ current_password, new_password }),
+  });
+}
+
+export async function deleteMyAccount(payload: {
+  confirmation: string;
+  current_password: string | null;
+}): Promise<void> {
+  await http<void>("/users/me/delete-account", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchOAuthAccounts(): Promise<OAuthAccountPublic[]> {
+  return http<OAuthAccountPublic[]>("/users/me/oauth-accounts");
+}
+
+export async function unlinkOAuthAccount(accountId: string): Promise<void> {
+  await http<void>(`/users/me/oauth-accounts/${encodeURIComponent(accountId)}`, {
+    method: "DELETE",
+  });
+}
+
+export function fetchBankConnections(): Promise<BankConnection[]> {
+  return http<BankConnection[]>("/accounts/connections");
+}
+
+export async function unlinkBankConnection(connectionId: number): Promise<void> {
+  await http<void>(`/accounts/connections/${connectionId}`, {
+    method: "DELETE",
+  });
+}
+
+/* ────────────────────────────────────────────────────────────────────── */
+/*  Wealth summary types (Phase 2)                                        */
+/* ────────────────────────────────────────────────────────────────────── */
+
+export interface EnvelopeSummary {
+  name: string;
+  institution_name: string | null;
+  envelope_type: string;
+  balance: number;
+  display_name: string | null;
+  rate_pct: number | null;
+  ceiling_eur: number | null;
+  headroom_eur: number | null;
+}
+
+export interface LoanSummary {
+  name: string;
+  institution_name: string | null;
+  outstanding_balance: number;
+  interest_rate_pct: number | null;
+  monthly_payment: number | null;
+  next_payment_date: string | null;
+  deferral_until: string | null;
+  is_in_deferral: boolean;
+}
+
+export interface WealthSummary {
+  net_worth: number;
+  total_assets: number;
+  total_liabilities: number;
+  checking_total: number;
+  pea_cash_total: number;
+  envelopes_total: number;
+  investments_total: number;
+  unrealized_pnl: number;
+  envelopes: EnvelopeSummary[];
+  loans: LoanSummary[];
+}
+
+/* ── Portfolio reviews (PR5-6) ─────────────────────────────────────── */
+
+export interface ReviewSource {
+  url: string;
+  title?: string;
+}
+
+export interface PortfolioReviewResponse {
+  id: string;
+  review_date: string;
+  content: string;
+  model_used: string;
+  input_tokens: number;
+  output_tokens: number;
+  web_searches_count: number;
+  cost_usd: number;
+  sources: ReviewSource[];
+  created_at: string;
+}
+
+async function fetchTodayReview(): Promise<PortfolioReviewResponse | null> {
+  const resp = await fetch(`${API_URL}/reviews/today`, { credentials: "include" });
+  if (!resp.ok)
+    throw new ApiError(resp.status, "http_error", `GET /reviews/today returned ${resp.status}`);
+  return resp.json();
+}
+
+async function fetchReviewsHistory(): Promise<PortfolioReviewResponse[]> {
+  const resp = await fetch(`${API_URL}/reviews?limit=90`, { credentials: "include" });
+  if (!resp.ok)
+    throw new ApiError(resp.status, "http_error", `GET /reviews returned ${resp.status}`);
+  return resp.json();
+}
+
+export function useTodayReview() {
+  return useQuery({
+    queryKey: ["reviews", "today"],
+    queryFn: fetchTodayReview,
+    staleTime: 1000 * 60 * 5, // 5 min
+  });
+}
+
+export function useReviewsHistory() {
+  return useQuery({
+    queryKey: ["reviews", "history"],
+    queryFn: fetchReviewsHistory,
+    staleTime: 1000 * 60 * 10,
+  });
 }

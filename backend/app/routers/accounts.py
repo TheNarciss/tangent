@@ -34,13 +34,14 @@ from ..aggregator import AccountType, Investment, Transaction
 from ..auth import User, current_active_user
 from ..db import get_session
 from ..db.models import BankAccount, PowensCredential
+from ..finance.fees import autodetect_broker
 from ..powens.aggregator import PowensAggregator
 from ..powens.client import PowensClient, PowensError
 from ..powens.crypto import decrypt_token
 from ..repositories import account_holdings as holdings_repo
 from ..repositories import bank_accounts as accounts_repo
 from ..repositories import bank_transactions as bank_txs_repo
-from ..repositories import portfolio as portfolio_repo
+from ..repositories import profile as profile_repo
 from ..sync_cache import sync_cache
 
 logger = logging.getLogger(__name__)
@@ -239,6 +240,132 @@ async def list_accounts(
     """All bank accounts owned by the current user (with nested loan if any)."""
     rows = await accounts_repo.list_accounts(session, user.id)
     return [_bank_account_to_response(r) for r in rows]
+
+
+class BankConnectionResponse(BaseModel):
+    """Powens connection metadata + count of bank_accounts in Tangent for it."""
+
+    connection_id: int
+    institution_name: str
+    accounts_count: int
+    last_update: datetime | None = None
+    error: str | None = None
+
+
+@router.get("/connections", response_model=list[BankConnectionResponse])
+async def list_bank_connections(
+    user: User = Depends(current_active_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[BankConnectionResponse]:
+    """List Powens connections of the current user with bank_account counts.
+
+    Returns [] if the user has no Powens credential yet.
+    """
+    stmt = select(PowensCredential).where(PowensCredential.user_id == user.id)
+    cred = (await session.execute(stmt)).scalars().first()
+    if cred is None:
+        return []
+
+    token = decrypt_token(cred.encrypted_token)
+    try:
+        async with PowensClient(token=token) as client:
+            connections = await client.get_connections()
+    except PowensError as exc:
+        logger.warning("list_bank_connections user=%s: Powens error: %s", user.id, exc)
+        return []
+
+    out: list[BankConnectionResponse] = []
+    for conn in connections:
+        conn_id = conn.get("id")
+        if not isinstance(conn_id, int):
+            continue
+        bank = conn.get("bank") or {}
+        connector = conn.get("connector") or {}
+        institution_name = bank.get("name") or connector.get("name") or "Banque"
+
+        # Count Tangent bank_accounts whose raw_data.id_connection == conn_id
+        count_stmt = (
+            select(BankAccount)
+            .where(BankAccount.user_id == user.id)
+            .where(BankAccount.raw_data["id_connection"].astext == str(conn_id))
+        )
+        accounts = (await session.execute(count_stmt)).scalars().all()
+        out.append(
+            BankConnectionResponse(
+                connection_id=conn_id,
+                institution_name=institution_name,
+                accounts_count=len(accounts),
+                last_update=_parse_iso(conn.get("last_update")),
+                error=conn.get("error"),
+            )
+        )
+    return out
+
+
+@router.delete("/connections/{connection_id}", status_code=204)
+async def delete_bank_connection(
+    connection_id: int,
+    user: User = Depends(current_active_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Delete a Powens connection AND its bank_accounts in Tangent.
+
+    Order matters: we first try to delete in Powens (to revoke DSP2 access),
+    then clean up Tangent. If Powens errors (e.g. already deleted), we still
+    clean up locally to avoid orphan rows.
+    """
+    stmt = select(PowensCredential).where(PowensCredential.user_id == user.id)
+    cred = (await session.execute(stmt)).scalars().first()
+    if cred is None:
+        raise HTTPException(404, "No Powens credential.")
+
+    token = decrypt_token(cred.encrypted_token)
+
+    # 1. Delete côté Powens (revoke DSP2 + drop accounts upstream)
+    try:
+        async with PowensClient(token=token) as client:
+            await client.delete_connection(connection_id)
+        logger.info(
+            "delete_bank_connection user=%s conn=%s: deleted on Powens",
+            user.id,
+            connection_id,
+        )
+    except PowensError as exc:
+        logger.warning(
+            "delete_bank_connection user=%s conn=%s: Powens DELETE failed (%s) "
+            "— cleaning up Tangent anyway",
+            user.id,
+            connection_id,
+            exc,
+        )
+
+    # 2. Delete côté Tangent — bank_accounts matching id_connection
+    accounts_stmt = (
+        select(BankAccount)
+        .where(BankAccount.user_id == user.id)
+        .where(BankAccount.raw_data["id_connection"].astext == str(connection_id))
+    )
+    accounts = (await session.execute(accounts_stmt)).scalars().all()
+    for acc in accounts:
+        await session.delete(acc)  # cascade via FK on loan/holdings/transactions
+    await session.commit()
+
+    logger.info(
+        "delete_bank_connection user=%s conn=%s: %d Tangent accounts deleted",
+        user.id,
+        connection_id,
+        len(accounts),
+    )
+
+
+def _parse_iso(s: str | None) -> datetime | None:
+    """Parse an ISO datetime string from Powens (handles trailing Z)."""
+    if not s:
+        return None
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
 
 
 @router.get("/{account_id}", response_model=BankAccountResponse)
@@ -463,18 +590,38 @@ async def _do_sync(user: User, session: AsyncSession) -> SyncReport:
             )
             persisted_txs += inserted
 
+    # ── Autodetect default broker on first sync (if not yet set) ────────────
+    profile = await profile_repo.get_or_create(session, user.id)
+    if profile.default_broker is None:
+        # Pick the institution of the LARGEST investment wrapper (PEA / CTO / AV)
+        invest_types = {AccountType.PEA, AccountType.CTO, AccountType.LIFE_INSURANCE}
+        candidates = [
+            (acc.institution_name, float(acc.valuation or acc.balance or 0))
+            for acc in result.accounts
+            if acc.type in invest_types and acc.institution_name
+        ]
+        if candidates:
+            candidates.sort(key=lambda x: x[1], reverse=True)
+            broker_id = autodetect_broker(candidates[0][0])
+            if broker_id:
+                await profile_repo.update(session, user.id, {"default_broker": broker_id})
+                logger.info(
+                    "Autodetected broker=%s from institution=%r for user=%s",
+                    broker_id,
+                    candidates[0][0],
+                    user.id,
+                )
+
     # ── Legacy bridge: sync to portfolios/positions table ────────────────────
     # The legacy dashboard/historique/optimisation routes still read from this
     # table. Until we migrate them, derive legacy data from the new sync result.
-    legacy_positions_count = await _sync_to_legacy_portfolio(session, user.id, result)
 
     logger.info(
-        "Sync user=%s: %d accounts, %d holdings, %d new txs, %d legacy positions",
+        "Sync user=%s: %d accounts, %d holdings, %d new txs",
         user.id,
         persisted_accounts,
         persisted_holdings,
         persisted_txs,
-        legacy_positions_count,
     )
 
     return SyncReport(
@@ -482,73 +629,6 @@ async def _do_sync(user: User, session: AsyncSession) -> SyncReport:
         accounts_persisted=persisted_accounts,
         holdings_persisted=persisted_holdings,
         transactions_persisted=persisted_txs,
-        legacy_positions_synced=legacy_positions_count,
         synced_at=result.synced_at,
         from_cache=False,
     )
-
-
-# ── Internal: legacy bridge ─────────────────────────────────────────────────
-
-
-_INVESTMENT_ACCOUNT_TYPES = {
-    AccountType.PEA,
-    AccountType.CTO,
-    AccountType.LIFE_INSURANCE,
-}
-
-_CASH_NAME_HINTS = ("espèces", "especes", "cash", "liquidités", "liquidites")
-
-
-def _is_pea_cash_account(acc) -> bool:
-    """Heuristic: a PEA sub-account named 'Espèces' / 'Cash' holds cash, not titles."""
-    if acc.type != AccountType.PEA:
-        return False
-    name_lower = (acc.name or "").lower()
-    return any(hint in name_lower for hint in _CASH_NAME_HINTS)
-
-
-async def _sync_to_legacy_portfolio(
-    session: AsyncSession,
-    user_id: uuid.UUID,
-    result,
-) -> int:
-    """Derive legacy Position list from the multi-account sync result and persist."""
-    positions_by_ticker: dict[str, dict] = {}
-    for inv in result.investments:
-        if inv.quantity <= 0:
-            continue
-        if inv.ticker in positions_by_ticker:
-            existing = positions_by_ticker[inv.ticker]
-            total_qty = existing["quantity"] + inv.quantity
-            if total_qty > 0:
-                weighted_cost = (
-                    existing["quantity"] * existing["avg_cost"] + inv.quantity * inv.unit_price
-                ) / total_qty
-            else:
-                weighted_cost = 0.0
-            existing["quantity"] = total_qty
-            existing["avg_cost"] = weighted_cost
-        else:
-            positions_by_ticker[inv.ticker] = {
-                "ticker": inv.ticker,
-                "quantity": float(inv.quantity),
-                "avg_cost": float(inv.unit_price),
-                "isin": inv.isin,
-                "label": inv.label,
-            }
-
-    cash = 0.0
-    for acc in result.accounts:
-        if _is_pea_cash_account(acc):
-            cash += float(acc.balance)
-
-    legacy_positions = list(positions_by_ticker.values())
-
-    await portfolio_repo.replace_positions(
-        session,
-        user_id,
-        new_positions=legacy_positions,
-        cash=cash,
-    )
-    return len(legacy_positions)
