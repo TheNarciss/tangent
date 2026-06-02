@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Banknote,
   Building2,
@@ -252,6 +252,24 @@ export function Accounts() {
   const refresh = useRefreshBankAccounts();
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  // Synchronous in-flight guard — closes the race window between
+  // refresh.mutate() being called and React Query's isPending state
+  // propagating to the next render. Without it, two rapid sources
+  // (double-click, touchscreen, manual click while the auto-refresh
+  // useEffect is in flight) can both pass the disabled/isPending check
+  // and trigger two parallel POST /accounts/refresh. Cf Bug 2 of
+  // SESSION_RECAP_2026-05-31.md.
+  const syncInFlight = useRef(false);
+  const startSync = useCallback(() => {
+    if (syncInFlight.current) return;
+    syncInFlight.current = true;
+    refresh.mutate(undefined, {
+      onSettled: () => {
+        syncInFlight.current = false;
+      },
+    });
+  }, [refresh]);
+
   // AUTO-REFRESH au mount si stale (oldest last_synced_at > 5 min).
   // Garantit data fraîche à l'arrivée sans hammer Powens à chaque mount.
   const STALENESS_MINUTES = 5;
@@ -270,9 +288,9 @@ export function Accounts() {
 
     if (isStale) {
       didAutoRefresh.current = true;
-      refresh.mutate();
+      startSync();
     }
-  }, [accounts.data, refresh]);
+  }, [accounts.data, startSync]);
 
   const grouped = useMemo(() => {
     const out: Record<Category, BankAccountResponse[]> = {
@@ -315,7 +333,7 @@ export function Accounts() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => refresh.mutate()}
+            onClick={startSync}
             disabled={isSyncing || !accounts.data || accounts.data.length === 0}
             className="gap-2"
             title="Force la banque à renvoyer les dernières données (10-30s)"

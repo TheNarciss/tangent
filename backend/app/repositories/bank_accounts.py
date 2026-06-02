@@ -71,8 +71,20 @@ async def list_accounts(
     session: AsyncSession,
     user_id: uuid.UUID,
 ) -> list[BankAccount]:
-    """All bank accounts of a user, sorted by name."""
-    stmt = select(BankAccount).where(BankAccount.user_id == user_id).order_by(BankAccount.name)
+    """All non-soft-deleted bank accounts of a user, sorted by name.
+
+    Accounts flagged with `powens_deleted_at` (i.e. removed upstream in Powens)
+    are excluded — the user sees the same view as in Powens. Auditors/admins
+    needing the full set should query the table directly.
+    """
+    stmt = (
+        select(BankAccount)
+        .where(
+            BankAccount.user_id == user_id,
+            BankAccount.powens_deleted_at.is_(None),
+        )
+        .order_by(BankAccount.name)
+    )
     res = await session.execute(stmt)
     return list(res.scalars().all())
 
@@ -82,10 +94,15 @@ async def get_account(
     user_id: uuid.UUID,
     account_id: uuid.UUID,
 ) -> BankAccount | None:
-    """Single bank account, filtered by user_id (multi-tenant safety)."""
+    """Single non-soft-deleted bank account, filtered by user_id (multi-tenant safety).
+
+    Returns None when the account was soft-deleted upstream — routes built on
+    top of this naturally render 404, mirroring the user-visible view.
+    """
     stmt = select(BankAccount).where(
         BankAccount.id == account_id,
         BankAccount.user_id == user_id,
+        BankAccount.powens_deleted_at.is_(None),
     )
     res = await session.execute(stmt)
     return res.scalars().first()
