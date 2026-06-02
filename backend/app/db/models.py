@@ -451,3 +451,83 @@ class Loan(Base):
 
     # ── Relationships ──────────────────────────────────────────────────────
     bank_account: Mapped[BankAccount] = relationship(back_populates="loan")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Append this block to backend/app/db/models.py (after the Loan class).
+# See ADR-015 for context.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class PortfolioReview(Base):
+    """Generated LLM review of a user's complete patrimony.
+
+    Generated on demand (manual button), max 1 per (user × calendar day in
+    Europe/Paris). The UNIQUE constraint on `(user_id, review_date)` enforces
+    the cap at the DB level — concurrent generation attempts race on the
+    INSERT and one of them gets `IntegrityError`, surfaced to the user as
+    HTTP 409 by the route layer.
+
+    See ADR-015 §Frequency cap.
+    """
+
+    __tablename__ = "portfolio_reviews"
+    __table_args__ = (UniqueConstraint("user_id", "review_date", name="uq_review_user_date"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    review_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+
+    # ── Content (markdown) ────────────────────────────────────────────────
+    content: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+
+    # ── Generation metadata ───────────────────────────────────────────────
+    model_used: Mapped[str] = mapped_column(String(64), nullable=False)
+    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    web_searches_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cost_usd: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    # ── Citations (URLs returned by web_search tool) ──────────────────────
+    sources: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+
+    # ── Anonymized wealth snapshot at generation time (for audit) ─────────
+    # Note: anonymization happens at prompt_builder.py — no PII (names,
+    # account IDs) ever reaches this column.
+    wealth_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+    )
+
+
+class LLMDailyCost(Base):
+    """Daily aggregate of LLM spend — drives the global kill-switch.
+
+    1 row per calendar day (Europe/Paris). Incremented atomically via PG
+    UPSERT (`INSERT ... ON CONFLICT (cost_date) DO UPDATE SET
+    cumulative_cost_usd = cumulative_cost_usd + EXCLUDED.cumulative_cost_usd`)
+    after each successful generation.
+
+    No `user_id`: the kill-switch is global (ADR-015 §Cost cap). Per-user
+    caps are out of scope today.
+    """
+
+    __tablename__ = "llm_daily_cost"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    cost_date: Mapped[date] = mapped_column(Date, nullable=False, unique=True, index=True)
+    cumulative_cost_usd: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    reviews_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
