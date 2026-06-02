@@ -26,6 +26,19 @@ class PortfolioStat(TypedDict):
     sharpe: float
 
 
+class FrontierResult(TypedDict):
+    """Return type of efficient_frontier_curve.
+
+    `reason` is None when the frontier was computed successfully, otherwise
+    a machine-readable code: "need_two_assets" | "flat_returns" | "solver_failed".
+    """
+
+    vol: list[float]
+    ret: list[float]
+    sharpe: list[float]
+    reason: str | None
+
+
 def daily_log_returns(prices: pd.DataFrame) -> pd.DataFrame:
     """Log returns; first row dropped.
 
@@ -185,7 +198,12 @@ def efficient_frontier_cloud(
     ret = w @ mu
     vol = np.sqrt(np.einsum("ij,jk,ik->i", w, cov, w))
     sharpe = (ret - RISK_FREE) / np.where(vol > 0, vol, np.nan)
-    return {"vol": vol.tolist(), "ret": ret.tolist(), "sharpe": np.nan_to_num(sharpe).tolist()}
+    cloud: dict[str, list[float]] = {
+        "vol": vol.tolist(),
+        "ret": ret.tolist(),
+        "sharpe": np.nan_to_num(sharpe).tolist(),
+    }
+    return cloud
 
 
 def portfolio_value_series(prices: pd.DataFrame, quantities: dict[str, float]) -> pd.Series:
@@ -472,12 +490,16 @@ def efficient_frontier_curve(
     mu: np.ndarray | None = None,
     cov: np.ndarray | None = None,
     bounds_override: list[tuple[float, float]] | None = None,
-) -> dict[str, list[float]]:
+) -> FrontierResult:
     """Smooth efficient frontier as N (σ, μ) points from min-variance to max-return.
 
     Quand mu et cov sont fournis, ils définissent l'univers entier (ETFs seuls ou
     augmenté avec enveloppes). bounds_override permet de plafonner les poids des
     enveloppes par leur headroom (ceilings).
+
+    Returns a FrontierResult: vol/ret/sharpe parallel arrays, plus a machine-readable
+    `reason` set to one of "need_two_assets" | "flat_returns" | "solver_failed" when
+    the frontier could not be computed; `reason` is None on success.
     """
     from scipy.optimize import minimize
 
@@ -487,6 +509,9 @@ def efficient_frontier_curve(
         cov = returns.cov().values * TRADING_DAYS
 
     n = len(mu)
+    if n < 2:
+        return FrontierResult(vol=[], ret=[], sharpe=[], reason="need_two_assets")
+
     bounds = bounds_override if bounds_override is not None else [(0.0, 1.0)] * n
 
     # Min-variance portfolio computed directly avec le cov passé (augmenté ou pas).
@@ -501,13 +526,13 @@ def efficient_frontier_curve(
         options={"ftol": 1e-10, "maxiter": 300},
     )
     if not res_minvar.success:
-        return {"vol": [], "ret": [], "sharpe": []}
+        return FrontierResult(vol=[], ret=[], sharpe=[], reason="solver_failed")
 
     mu_min = float(res_minvar.x @ mu)
     mu_max = float(mu.max())
 
     if mu_max <= mu_min:
-        return {"vol": [], "ret": [], "sharpe": []}
+        return FrontierResult(vol=[], ret=[], sharpe=[], reason="flat_returns")
 
     targets = np.linspace(mu_min, mu_max, n_points)
 
@@ -537,7 +562,7 @@ def efficient_frontier_curve(
         rets.append(ret)
         sharpes.append((ret - risk_free) / vol if vol > 0 else 0.0)
 
-    return {"vol": vols, "ret": rets, "sharpe": sharpes}
+    return FrontierResult(vol=vols, ret=rets, sharpe=sharpes, reason=None)
 
 
 def risk_contributions(returns: pd.DataFrame, weights: np.ndarray) -> dict[str, list[float]]:
