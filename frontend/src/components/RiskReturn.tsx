@@ -110,6 +110,11 @@ export function RiskReturn({ metrics, smoothFrontier, optimal, envelopePoints }:
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {smoothFrontier?.unavailable_reason && (
+          <div className="mb-3 rounded-md border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-700 dark:text-yellow-400">
+            {smoothFrontier.unavailable_reason}
+          </div>
+        )}
         <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img">
           {/* Grid */}
           <g

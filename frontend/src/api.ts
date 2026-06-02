@@ -195,6 +195,7 @@ export interface FrontierCurve {
   vol: number[];
   ret: number[];
   sharpe: number[];
+  unavailable_reason?: string | null;
 }
 
 export interface EnvelopePoint {
