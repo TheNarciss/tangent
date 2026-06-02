@@ -184,6 +184,11 @@ function Stats({ data }: { data: ProjectionResponse }) {
 
   return (
     <div className="space-y-5">
+      {data.multi_broker_warning && (
+        <div className="rounded-md border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+          ⚠ {data.multi_broker_warning}
+        </div>
+      )}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
         <Stat
           label="μ, σ utilisés"

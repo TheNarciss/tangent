@@ -16,18 +16,7 @@ market_suffixes:
   "Bolsa de Madrid": ".MC"
   "SIX Swiss Exchange": ".SW"
 
-# Règles d'identification des comptes — heuristiques sur le type + nom
-# Powens renvoie type="pea" pour TOUS les sous-comptes PEA (espèces ET titres).
-# On les distingue par le nom.
-pea_titres:
-  type: "pea"
-  name_contains_any: ["Titres", "PEA Titres"]
 
-pea_cash:
-  type: "pea"
-  name_contains_any: ["Espèces", "Especes", "Cash"]
-
-# Types de comptes à mapper vers tes envelopes
 account_type_mapping:
   pea: "pea"
   savings: "livret"

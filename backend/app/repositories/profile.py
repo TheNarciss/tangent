@@ -37,6 +37,7 @@ async def update(session: AsyncSession, user_id: uuid.UUID, updates: dict) -> Pr
         "target_annual_return",
         "max_annual_volatility",
         "horizon_years",
+        "default_broker",
         "ceilings_used",
     }
     for key, value in updates.items():

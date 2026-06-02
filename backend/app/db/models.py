@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, date, datetime
-from enum import StrEnum
 
 from sqlalchemy import (
     Boolean,
@@ -29,113 +28,10 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy import (
-    Enum as SQLEnum,
-)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..auth.models import Base
-
-
-class TransactionKind(StrEnum):
-    """Type de transaction PEA / portefeuille."""
-
-    BUY = "buy"
-    SELL = "sell"
-    DIVIDEND = "dividend"
-    DEPOSIT = "deposit"  # virement entrant
-    WITHDRAWAL = "withdrawal"  # virement sortant
-    FEE = "fee"
-
-
-class Portfolio(Base):
-    """1 portfolio par user. Stocke uniquement le cash dispo + métadonnées.
-    Les positions sont dans une table séparée."""
-
-    __tablename__ = "portfolios"
-    __table_args__ = (UniqueConstraint("user_id", name="uq_portfolio_user"),)
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
-        unique=True,
-    )
-    cash: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
-
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(UTC),
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(UTC),
-        onupdate=lambda: datetime.now(UTC),
-    )
-
-    # Relations
-    positions: Mapped[list[Position]] = relationship(
-        back_populates="portfolio",
-        cascade="all, delete-orphan",
-        lazy="selectin",
-    )
-
-
-class Position(Base):
-    """N positions par portfolio. Un ticker = une ligne (PAMP = avg_cost)."""
-
-    __tablename__ = "positions"
-    __table_args__ = (
-        UniqueConstraint("portfolio_id", "ticker", name="uq_position_portfolio_ticker"),
-    )
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    portfolio_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("portfolios.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    ticker: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
-    quantity: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    avg_cost: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-
-    # Champs optionnels (enrichis via Powens en Phase 5)
-    isin: Mapped[str | None] = mapped_column(String(12), default=None)
-    label: Mapped[str | None] = mapped_column(String(128), default=None)
-
-    portfolio: Mapped[Portfolio] = relationship(back_populates="positions")
-
-
-class Transaction(Base):
-    """Historique des transactions du PEA — achat, vente, dividende, frais, etc.
-
-    Indépendant du Portfolio : si on supprime le portfolio, on garde l'historique
-    (utile pour audit / re-derivation).
-    """
-
-    __tablename__ = "transactions"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    occurred_on: Mapped[date] = mapped_column(Date, nullable=False, index=True)
-    kind: Mapped[TransactionKind] = mapped_column(SQLEnum(TransactionKind), nullable=False)
-    ticker: Mapped[str | None] = mapped_column(String(32), default=None, index=True)
-    quantity: Mapped[float] = mapped_column(Float, default=0.0)
-    price: Mapped[float] = mapped_column(Float, default=0.0)
-    fees: Mapped[float] = mapped_column(Float, default=0.0)
-    note: Mapped[str | None] = mapped_column(Text, default=None)
-
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(UTC),
-    )
 
 
 class WatchlistItem(Base):
@@ -187,6 +83,7 @@ class Profile(Base):
     target_annual_return: Mapped[float | None] = mapped_column(Float, default=None)  # en %
     max_annual_volatility: Mapped[float | None] = mapped_column(Float, default=None)  # en %
     horizon_years: Mapped[int | None] = mapped_column(Integer, default=None)
+    default_broker: Mapped[str | None] = mapped_column(String(50), default=None)
 
     # Ceilings utilisés par enveloppe — stocké en JSONB pour flexibilité
     # Ex: {"livret_a": 5000, "ldds": 0, "lep": 0, "pel": 0, "livret_a_jeune": 1000}
@@ -554,3 +451,83 @@ class Loan(Base):
 
     # ── Relationships ──────────────────────────────────────────────────────
     bank_account: Mapped[BankAccount] = relationship(back_populates="loan")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Append this block to backend/app/db/models.py (after the Loan class).
+# See ADR-015 for context.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class PortfolioReview(Base):
+    """Generated LLM review of a user's complete patrimony.
+
+    Generated on demand (manual button), max 1 per (user × calendar day in
+    Europe/Paris). The UNIQUE constraint on `(user_id, review_date)` enforces
+    the cap at the DB level — concurrent generation attempts race on the
+    INSERT and one of them gets `IntegrityError`, surfaced to the user as
+    HTTP 409 by the route layer.
+
+    See ADR-015 §Frequency cap.
+    """
+
+    __tablename__ = "portfolio_reviews"
+    __table_args__ = (UniqueConstraint("user_id", "review_date", name="uq_review_user_date"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    review_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+
+    # ── Content (markdown) ────────────────────────────────────────────────
+    content: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+
+    # ── Generation metadata ───────────────────────────────────────────────
+    model_used: Mapped[str] = mapped_column(String(64), nullable=False)
+    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    web_searches_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cost_usd: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    # ── Citations (URLs returned by web_search tool) ──────────────────────
+    sources: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+
+    # ── Anonymized wealth snapshot at generation time (for audit) ─────────
+    # Note: anonymization happens at prompt_builder.py — no PII (names,
+    # account IDs) ever reaches this column.
+    wealth_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+    )
+
+
+class LLMDailyCost(Base):
+    """Daily aggregate of LLM spend — drives the global kill-switch.
+
+    1 row per calendar day (Europe/Paris). Incremented atomically via PG
+    UPSERT (`INSERT ... ON CONFLICT (cost_date) DO UPDATE SET
+    cumulative_cost_usd = cumulative_cost_usd + EXCLUDED.cumulative_cost_usd`)
+    after each successful generation.
+
+    No `user_id`: the kill-switch is global (ADR-015 §Cost cap). Per-user
+    caps are out of scope today.
+    """
+
+    __tablename__ = "llm_daily_cost"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    cost_date: Mapped[date] = mapped_column(Date, nullable=False, unique=True, index=True)
+    cumulative_cost_usd: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    reviews_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )

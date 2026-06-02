@@ -10,7 +10,13 @@
     }
 
     handle @api {
-        reverse_proxy backend:8000
+        reverse_proxy backend:8000 {
+            # Cloudflare termine le TLS ; Caddy écoute en :80 et déduirait
+            # X-Forwarded-Proto: http. On force https car le client a TOUJOURS
+            # parlé en HTTPS à Cloudflare. Sans ça, backend génère du http://
+            # dans request.url_for (cassait OAuth redirect_uri, cf ADR-014).
+            header_up X-Forwarded-Proto https
+        }
     }
 
     # ── Static SPA (everything else) ────────────────────────────────────────

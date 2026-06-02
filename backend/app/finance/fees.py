@@ -34,6 +34,7 @@ class BrokerFees(BaseModel):
 
 class BrokerConfig(BaseModel):
     default_broker: str
+    institution_to_broker: dict[str, str] = {}
     brokers: dict[str, BrokerFees]
 
 
@@ -100,3 +101,19 @@ def monthly_fee_fn(
         return fixed_monthly + prop * value + courtage_monthly
 
     return fee_of
+
+
+def autodetect_broker(institution_name: str | None) -> str | None:
+    """Match a Powens institution_name against the YAML mapping (case-insensitive).
+
+    Returns the broker_id if a substring of the institution matches a key
+    in `institution_to_broker`. Returns None on no match.
+    """
+    if not institution_name:
+        return None
+    mapping = config().institution_to_broker
+    needle = institution_name.lower()
+    for institution, broker_id in mapping.items():
+        if institution.lower() in needle:
+            return broker_id
+    return None

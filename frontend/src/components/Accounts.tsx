@@ -9,14 +9,12 @@ import {
   RefreshCw,
   TrendingUp,
   Wallet,
-  Zap,
 } from "lucide-react";
 
 import {
   useBankAccounts,
   useAccountHoldings,
   useAccountTransactions,
-  useSyncBankAccounts,
   useRefreshBankAccounts,
   type BankAccountResponse,
   type BankAccountType,
@@ -251,17 +249,30 @@ function categoryTotal(accounts: BankAccountResponse[], category: Category): num
 
 export function Accounts() {
   const accounts = useBankAccounts();
-  const sync = useSyncBankAccounts();
   const refresh = useRefreshBankAccounts();
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const didAutoSync = useRef(false);
+  // AUTO-REFRESH au mount si stale (oldest last_synced_at > 5 min).
+  // Garantit data fraîche à l'arrivée sans hammer Powens à chaque mount.
+  const STALENESS_MINUTES = 5;
+  const didAutoRefresh = useRef(false);
   useEffect(() => {
-    if (!didAutoSync.current && accounts.data !== undefined) {
-      didAutoSync.current = true;
-      sync.mutate();
+    if (didAutoRefresh.current) return;
+    if (!accounts.data || accounts.data.length === 0) return;
+
+    const syncTimes = accounts.data
+      .map((a) => a.last_synced_at)
+      .filter((ts): ts is string => ts !== null)
+      .map((ts) => new Date(ts).getTime());
+
+    const isStale =
+      syncTimes.length === 0 || (Date.now() - Math.min(...syncTimes)) / 60_000 > STALENESS_MINUTES;
+
+    if (isStale) {
+      didAutoRefresh.current = true;
+      refresh.mutate();
     }
-  }, [accounts.data, sync]);
+  }, [accounts.data, refresh]);
 
   const grouped = useMemo(() => {
     const out: Record<Category, BankAccountResponse[]> = {
@@ -290,8 +301,8 @@ export function Accounts() {
     return { assets, debt, net: assets - debt };
   }, [grouped]);
 
-  const isSyncing = sync.isPending || refresh.isPending;
-  const lastReport = refresh.data ?? sync.data;
+  const isSyncing = refresh.isPending;
+  const lastReport = refresh.data;
 
   return (
     <div className="space-y-4">
@@ -301,39 +312,22 @@ export function Accounts() {
           <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
             Mes comptes
           </CardTitle>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => sync.mutate()}
-              disabled={isSyncing}
-              className="gap-2"
-            >
-              <RefreshCw className={cn("h-4 w-4", sync.isPending && "animate-spin")} />
-              Synchroniser
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => refresh.mutate()}
-              disabled={isSyncing}
-              className="gap-2"
-              title="Force la banque à renvoyer les dernières données (10-30s)"
-            >
-              <Zap className={cn("h-4 w-4", refresh.isPending && "animate-pulse")} />
-              Forcer banque
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refresh.mutate()}
+            disabled={isSyncing || !accounts.data || accounts.data.length === 0}
+            className="gap-2"
+            title="Force la banque à renvoyer les dernières données (10-30s)"
+          >
+            <RefreshCw className={cn("h-4 w-4", isSyncing && "animate-spin")} />
+            {isSyncing ? "Sync…" : "Sync"}
+          </Button>
         </CardHeader>
         <CardContent>
-          {sync.isError && (
-            <p className="text-sm text-[hsl(var(--loss))] mb-3">
-              Erreur sync : {sync.error instanceof Error ? sync.error.message : "inconnue"}
-            </p>
-          )}
           {refresh.isError && (
             <p className="text-sm text-[hsl(var(--loss))] mb-3">
-              Erreur refresh : {refresh.error instanceof Error ? refresh.error.message : "inconnue"}
+              Erreur sync : {refresh.error instanceof Error ? refresh.error.message : "inconnue"}
             </p>
           )}
           {lastReport && lastReport.success && (
@@ -362,7 +356,10 @@ export function Accounts() {
             <div className="text-center py-12 space-y-2">
               <Banknote className="h-8 w-8 mx-auto text-muted-foreground" />
               <p className="text-sm text-muted-foreground">
-                Aucun compte synchronisé. Connecte Powens et clique sur Synchroniser.
+                Aucune banque connectée pour l&apos;instant.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Clique sur <strong>+ Ajouter une banque</strong> en haut de la page pour commencer.
               </p>
             </div>
           )}

@@ -1,10 +1,13 @@
 """Historical time-series service: portfolio value, drawdown, rolling Sharpe.
 
-Mirrors `dashboard.py` orchestration style (portfolio + market + analytics →
-response model). The portfolio value is computed assuming positions held
-constant throughout the window — a counterfactual ("as-if-held") view, useful
-for trends and risk metrics but not for true PnL since we don't store a
-transaction log.
+Consumes the Wealth domain model (Phase 2). Computes an "as-if-held" view
+on the user's current positions — no transaction log is stored, so we cannot
+reconstruct the true historical net worth.
+
+Scope limitation: the timeseries covers titres only (positions held in
+investment wrappers). Livrets balances and loan outstanding amounts are
+not historised by Powens, so they are not included. A future PR may
+introduce a daily snapshot table to enable a full net-worth time-series.
 """
 
 import math
@@ -12,23 +15,31 @@ import math
 import numpy as np
 import pandas as pd
 
-from .. import portfolio
 from ..errors import PortfolioEmptyError
-from ..models import TimeseriesResponse
+from ..models import TimeseriesResponse, Wealth
 from . import analytics, market
 
 BENCHMARK_TICKER = "CW8.PA"  # Amundi MSCI World, 5y+ history, broad-market proxy
 ROLLING_WINDOW = 126  # trading days ≈ 6 months
 
 
-def build(portfolio_data=None) -> TimeseriesResponse:
-    pf = portfolio_data if portfolio_data is not None else portfolio.load()
-    if not pf.positions:
+def build(wealth: Wealth) -> TimeseriesResponse:
+    """Build the historical timeseries from the user's Wealth.
+
+    Aggregates quantities across ALL investment accounts (PEA, CTO, AV).
+    Positions of the same ticker held in different wrappers are summed.
+    """
+    positions = wealth.all_positions
+    if not positions:
         raise PortfolioEmptyError("Aucune position enregistrée.")
 
-    tickers = [p.ticker for p in pf.positions]
+    # Sum quantities by ticker (same ticker can appear in multiple wrappers)
+    quantities: dict[str, float] = {}
+    for p in positions:
+        quantities[p.ticker] = quantities.get(p.ticker, 0.0) + p.quantity
+
+    tickers = list(quantities.keys())
     prices = market.fetch_prices(tickers, period="5y")
-    quantities = {p.ticker: p.quantity for p in pf.positions}
 
     pf_value = analytics.portfolio_value_series(prices, quantities)
     pf_norm = analytics.normalize(pf_value)

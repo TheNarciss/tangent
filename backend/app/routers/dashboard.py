@@ -2,16 +2,17 @@
 
 from fastapi import APIRouter, Depends, Query
 
-from ..deps import get_user_portfolio
+from ..deps import get_user_wealth
 from ..finance import dashboard, timeseries
-from ..models import DashboardResponse, Portfolio, TimeseriesResponse
+from ..finance.wealth_summary import build_summary as build_wealth_summary
+from ..models import DashboardResponse, TimeseriesResponse, Wealth
 
 router = APIRouter(tags=["analytics"])
 
 
 @router.get("/dashboard", response_model=DashboardResponse)
 async def read_dashboard(
-    pf: Portfolio = Depends(get_user_portfolio),
+    wealth: Wealth = Depends(get_user_wealth),
     cma_shrinkage: float | None = Query(
         None, ge=0, le=1, description="0=pure historical, 1=pure CMA. Backend default: 0.7"
     ),
@@ -24,14 +25,18 @@ async def read_dashboard(
         None, ge=0, le=0.20, description="Risk-free rate (fraction). Default: 0.025"
     ),
 ) -> DashboardResponse:
-    return dashboard.build(
+    response = dashboard.build(
         cma_shrinkage=cma_shrinkage,
         historical_period=historical_period,
         risk_free=risk_free,
-        portfolio_data=pf,
+        wealth=wealth,
     )
+    response.wealth = build_wealth_summary(wealth)
+    return response
 
 
 @router.get("/timeseries", response_model=TimeseriesResponse)
-async def read_timeseries(pf: Portfolio = Depends(get_user_portfolio)) -> TimeseriesResponse:
-    return timeseries.build(portfolio_data=pf)
+async def read_timeseries(
+    wealth: Wealth = Depends(get_user_wealth),
+) -> TimeseriesResponse:
+    return timeseries.build(wealth=wealth)
