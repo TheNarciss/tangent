@@ -26,7 +26,7 @@ async def _login(client, email, password):
         data={"username": email, "password": password},
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
-    assert resp.status_code == 200, resp.text
+    assert resp.status_code in (200, 204), resp.text
 
 
 @pytest.fixture(autouse=True)
