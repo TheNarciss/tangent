@@ -560,42 +560,13 @@ export interface SyncStatus {
   is_stale: boolean;
 }
 
-export interface SyncResult {
-  success: boolean;
-  positions_count: number;
-  cash_balance: number;
-  total_valuation: number;
-  accounts_synced: string[];
-  skipped_accounts: string[];
-  error: string | null;
-  synced_at: string;
-}
-
-/** Reads the last Powens sync state. Polled every 30s to refresh the badge.
-    Currently superuser-only (deprecated mono-user code, Phase 5 will rewrite). */
+/** Reads the last Powens sync state for the current user. Polled every 30s. */
 export function useSyncStatus() {
   return useQuery({
     queryKey: ["sync", "status"],
     queryFn: () => http<SyncStatus>("/sync/status"),
     refetchInterval: 30 * 1000,
-    retry: false, // 403 for non-superusers — don't spam retries
-  });
-}
-
-/** Triggers a manual Powens sync. Invalidates portfolio-dependent queries. */
-export function useSyncPowens() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: () => http<SyncResult>("/sync/powens", { method: "POST" }),
-    onSuccess: (result) => {
-      if (result.success) {
-        qc.invalidateQueries({ queryKey: ["dashboard"] });
-        qc.invalidateQueries({ queryKey: ["timeseries"] });
-        qc.invalidateQueries({ queryKey: ["projection"] });
-        qc.invalidateQueries({ queryKey: ["optimizer"] });
-        qc.invalidateQueries({ queryKey: ["sync", "status"] });
-      }
-    },
+    retry: false, // 403 for non-superusers - don't spam retries
   });
 }
 
