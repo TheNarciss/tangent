@@ -49,14 +49,37 @@ def _powens_currency(value: Any) -> str:
     return "EUR"
 
 
-def _map_account_type(powens_type: str | None) -> AccountType:
-    """Map a Powens native type string to a neutral AccountType."""
+_LOAN_NAME_HINTS = ("prêt", "pret", "loan", "credit", "crédit")
+
+
+def _is_loan_by_name(name: str | None) -> bool:
+    """Heuristic: a Powens account whose name contains 'prêt'/'loan'/'credit'.
+
+    Used as a fallback when Powens classifies a loan as `other` (some
+    connectors do this for student loans, e.g. BPCE's "Vcc - Prêt Jeune").
+    """
+    if not name:
+        return False
+    lower = name.lower()
+    return any(hint in lower for hint in _LOAN_NAME_HINTS)
+
+
+def _map_account_type(powens_type: str | None, name: str | None = None) -> AccountType:
+    """Map a Powens native type string to a neutral AccountType.
+
+    Falls back to a name-based heuristic for loans misclassified as `other`.
+    """
     mapping: dict[str, str] = yaml_config.get("account_type_to_neutral", {})
     neutral_str = mapping.get((powens_type or "").lower(), "other")
     try:
-        return AccountType(neutral_str)
+        mapped = AccountType(neutral_str)
     except ValueError:
-        return AccountType.OTHER
+        mapped = AccountType.OTHER
+
+    # Heuristic fallback : promote OTHER → LOAN when the name looks like a loan
+    if mapped == AccountType.OTHER and _is_loan_by_name(name):
+        return AccountType.LOAN
+    return mapped
 
 
 def _build_ticker(inv: dict) -> str:
@@ -149,7 +172,7 @@ def _extract_bank_account_dto(
     synced_at: datetime,
 ) -> BankAccount:
     """Map a Powens account dict into a BankAccount DTO with all hot fields."""
-    acc_type = _map_account_type(acc.get("type"))
+    acc_type = _map_account_type(acc.get("type"), acc.get("name"))
 
     loan_dict = acc.get("loan")
     loan_dto: Loan | None = None

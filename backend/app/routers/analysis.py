@@ -1,17 +1,20 @@
 """Analysis routes — optimizer, projection, scanner."""
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..deps import get_user_portfolio
+from ..auth import User, current_active_user
+from ..deps import get_session, get_user_wealth
 from ..finance import optimizer, projection, scanner
 from ..models import (
     OptimizerRequest,
     OptimizerResponse,
-    Portfolio,
     ProjectionResponse,
     ScanRequest,
     ScanResponse,
+    Wealth,
 )
+from ..repositories import profile as profile_repo
 
 router = APIRouter(tags=["analysis"])
 
@@ -19,27 +22,34 @@ router = APIRouter(tags=["analysis"])
 @router.post("/optimizer", response_model=OptimizerResponse)
 async def read_optimizer(
     req: OptimizerRequest,
-    pf: Portfolio = Depends(get_user_portfolio),
+    wealth: Wealth = Depends(get_user_wealth),
 ) -> OptimizerResponse:
-    return optimizer.build(req, portfolio_data=pf)
+    return optimizer.build(req, wealth=wealth)
 
 
 @router.get("/projection", response_model=ProjectionResponse)
 async def read_projection(
-    pf: Portfolio = Depends(get_user_portfolio),
+    wealth: Wealth = Depends(get_user_wealth),
+    user: User = Depends(current_active_user),
+    session: AsyncSession = Depends(get_session),
     monthly: float = Query(200, ge=0, le=100_000, description="Monthly contribution (€)"),
     years: int = Query(10, ge=1, le=50, description="Projection horizon (years)"),
     goal: float | None = Query(None, ge=0, description="Optional target (€)"),
-    broker: str | None = Query(None, description="Broker ID (see /brokers)."),
+    broker: str | None = Query(None, description="Override broker (defaults to profile)."),
 ) -> ProjectionResponse:
-    return projection.build(monthly, years, goal, broker, portfolio_data=pf)
+    # Resolve broker_id: explicit query param > profile.default_broker > YAML default
+    effective_broker = broker
+    if effective_broker is None:
+        profile = await profile_repo.get_or_create(session, user.id)
+        effective_broker = profile.default_broker
+    return projection.build(monthly, years, goal, effective_broker, wealth=wealth)
 
 
 @router.post("/scan", response_model=ScanResponse)
 async def read_scan(
     req: ScanRequest,
-    pf: Portfolio = Depends(get_user_portfolio),
+    wealth: Wealth = Depends(get_user_wealth),
 ) -> ScanResponse:
     """Discovers PEA-eligible assets via dynamic yfinance screening,
     computes their marginal ΔSharpe against the current portfolio."""
-    return scanner.scan(req, portfolio_data=pf)
+    return scanner.scan(req, wealth=wealth)

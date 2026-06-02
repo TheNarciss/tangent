@@ -1,8 +1,15 @@
-"""AccountHolding repository — replace-all pattern per bank account.
+"""AccountHolding repository — UPSERT + orphan cleanup per bank account.
 
-Holdings are idempotent by design: each sync wipes existing rows and re-inserts
-the current snapshot. This avoids the complexity of diff-merge logic for what
-is effectively a point-in-time photograph of the portfolio.
+Holdings are idempotent by design: each sync upserts the current snapshot
+and deletes rows that are no longer present.
+
+Race-safety: a transaction-scoped advisory lock keyed on the bank_account_id
+serializes concurrent syncs on the *same* account (other accounts still run
+in parallel). This was added after observing UniqueViolationError on
+uq_holdings_account_provider_inv when two POST /accounts/refresh raced
+(React Strict Mode double-mount + auto-refresh useEffect, 2026-05-31).
+
+Cf ADR-002 (multi-tenancy: every read/write filters by user_id).
 """
 
 from __future__ import annotations
@@ -10,7 +17,8 @@ from __future__ import annotations
 import logging
 import uuid
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..aggregator import Investment
@@ -43,46 +51,74 @@ async def replace_holdings(
     bank_account_id: uuid.UUID,
     new_holdings: list[Investment],
 ) -> list[AccountHolding]:
-    """Wipe + insert all holdings of a bank account.
+    """Upsert holdings + delete orphans for one bank account.
 
-    Idempotent: running with the same Investment list twice yields the same
-    DB state. Used after every Powens sync.
+    After this call the rows for `bank_account_id` exactly mirror
+    `new_holdings`. Safe against concurrent runs on the same account
+    (see module docstring).
     """
-    # Bulk delete in 1 statement (perf) + flush so INSERT below doesn't hit
-    # the unique constraint on (bank_account_id, provider_investment_id)
-    delete_stmt = delete(AccountHolding).where(
+    # 1. Serialize concurrent syncs on the same bank_account.
+    #    pg_advisory_xact_lock(bigint) auto-releases at COMMIT/ROLLBACK.
+    #    hashtext() collapses the UUID to int4 → cast to bigint for the lock
+    #    key; collisions are statistically negligible and at worst introduce
+    #    a brief spurious wait (never data corruption).
+    await session.execute(
+        text("SELECT pg_advisory_xact_lock(hashtext(:k))"),
+        {"k": str(bank_account_id)},
+    )
+
+    # 2. UPSERT current snapshot — ON CONFLICT updates the mutable fields
+    #    (quantity, prices, label may all change between syncs).
+    if new_holdings:
+        rows = [
+            {
+                "user_id": user_id,
+                "bank_account_id": bank_account_id,
+                "provider_investment_id": inv.provider_investment_id,
+                "ticker": inv.ticker,
+                "isin": inv.isin,
+                "label": inv.label,
+                "quantity": inv.quantity,
+                "unit_price": inv.unit_price,
+                "current_value": inv.current_value,
+                "currency": inv.currency,
+            }
+            for inv in new_holdings
+        ]
+        stmt = pg_insert(AccountHolding).values(rows)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["bank_account_id", "provider_investment_id"],
+            set_={
+                "ticker": stmt.excluded.ticker,
+                "isin": stmt.excluded.isin,
+                "label": stmt.excluded.label,
+                "quantity": stmt.excluded.quantity,
+                "unit_price": stmt.excluded.unit_price,
+                "current_value": stmt.excluded.current_value,
+                "currency": stmt.excluded.currency,
+            },
+        )
+        await session.execute(stmt)
+
+    # 3. Remove orphans: rows for this account that vanished from the snapshot.
+    #    user_id filter is defense-in-depth (bank_account_id already scoped).
+    del_stmt = delete(AccountHolding).where(
         AccountHolding.user_id == user_id,
         AccountHolding.bank_account_id == bank_account_id,
     )
-    delete_result = await session.execute(delete_stmt)
-    await session.flush()
-    removed = delete_result.rowcount or 0  # type: ignore[attr-defined]
-
-    persisted: list[AccountHolding] = []
-    for inv in new_holdings:
-        row = AccountHolding(
-            user_id=user_id,
-            bank_account_id=bank_account_id,
-            provider_investment_id=inv.provider_investment_id,
-            ticker=inv.ticker,
-            isin=inv.isin,
-            label=inv.label,
-            quantity=inv.quantity,
-            unit_price=inv.unit_price,
-            current_value=inv.current_value,
-            currency=inv.currency,
-        )
-        session.add(row)
-        persisted.append(row)
+    if new_holdings:
+        keep_ids = [inv.provider_investment_id for inv in new_holdings]
+        del_stmt = del_stmt.where(AccountHolding.provider_investment_id.notin_(keep_ids))
+    del_res = await session.execute(del_stmt)
+    removed = del_res.rowcount or 0  # type: ignore[attr-defined]
 
     await session.commit()
-    for row in persisted:
-        await session.refresh(row)
 
+    refreshed = await list_holdings(session, user_id, bank_account_id)
     logger.info(
-        "Replaced holdings bank_account=%s: %d new rows (%d removed)",
+        "Replaced holdings bank_account=%s: %d rows (%d removed)",
         bank_account_id,
-        len(persisted),
+        len(refreshed),
         removed,
     )
-    return persisted
+    return refreshed

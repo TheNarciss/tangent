@@ -125,3 +125,24 @@ class PowensClient:
     async def force_sync(self, connection_id: int) -> dict:
         """Force une re-sync d'une connexion. Peut renvoyer 409 si une sync est en cours."""
         return await self._request("PUT", f"/users/me/connections/{connection_id}")
+
+    async def get_temporary_code(self) -> str:
+        """Generate a short-lived single-access code scoped to the current user.
+
+        Used to add a new connection (via webview) to THIS Powens user instead
+        of creating a fresh anonymous user. The code expires in 30 minutes.
+        Returns the raw code string (already URL-safe per Powens contract).
+        """
+        data = await self._request("GET", "/auth/token/code", params={"type": "singleAccess"})
+        code = data.get("code")
+        if not isinstance(code, str) or not code:
+            raise PowensError("Powens /auth/token/code returned no code")
+        return code
+
+    async def delete_connection(self, connection_id: int) -> None:
+        """Delete a Powens connection (revokes DSP2 access to that bank).
+
+        Powens-side, this also drops the associated accounts, transactions and
+        investments. Tangent-side cleanup is the caller's responsibility.
+        """
+        await self._request("DELETE", f"/users/me/connections/{connection_id}")

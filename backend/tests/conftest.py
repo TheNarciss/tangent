@@ -19,6 +19,15 @@ os.environ.setdefault(
     "postgresql+asyncpg://tangent:tangent_dev@localhost:5432/tangent",
 )
 os.environ.setdefault("COOKIE_SECURE", "false")
+# Test-only Fernet key — generated at session start to avoid hardcoded
+# secrets triggering gitleaks (cf ADR-014 §5).
+from cryptography.fernet import Fernet as _Fernet
+
+os.environ.setdefault("OAUTH_TOKEN_ENCRYPTION_KEY", _Fernet.generate_key().decode())
+os.environ.setdefault("OAUTH_STATE_SECRET", "test-oauth-state-secret-not-for-production")
+os.environ.setdefault("FRONTEND_URL", "http://localhost:5173")
+os.environ.setdefault("GOOGLE_OAUTH_CLIENT_ID", "test-google-client-id")
+os.environ.setdefault("GOOGLE_OAUTH_CLIENT_SECRET", "test-google-client-secret")
 os.environ.setdefault("CORS_ORIGINS", "http://localhost:3000")
 
 import pytest

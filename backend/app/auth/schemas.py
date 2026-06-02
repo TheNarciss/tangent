@@ -5,6 +5,7 @@ hashed_password n'est JAMAIS dans UserRead (output) — il reste interne.
 """
 
 import uuid
+from datetime import datetime
 
 from fastapi_users import schemas
 
@@ -13,6 +14,9 @@ class UserRead(schemas.BaseUser[uuid.UUID]):
     """Ce que le frontend reçoit. Ne contient PAS hashed_password."""
 
     display_name: str | None = None
+    terms_version_accepted: str | None = None
+    terms_accepted_at: datetime | None = None
+    has_password: bool = True  # computed property (cf User model)
 
 
 class UserCreate(schemas.BaseUserCreate):

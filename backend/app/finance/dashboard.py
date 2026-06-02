@@ -6,7 +6,6 @@ from datetime import date
 import numpy as np
 import pandas as pd
 
-from .. import portfolio
 from ..errors import InsufficientHistoryError, PortfolioEmptyError
 from ..models import (
     AssetMetrics,
@@ -14,6 +13,7 @@ from ..models import (
     FrontierCloud,
     PortfolioMetrics,
     StressTestResult,
+    Wealth,
 )
 from . import analytics, cma, diagnostic, market, stress
 
@@ -24,15 +24,27 @@ def build(
     cma_shrinkage: float | None = None,
     historical_period: str = "5y",
     risk_free: float | None = None,
-    portfolio_data=None,  # Portfolio | None — optional injection (Phase 3b multi-tenant)
+    wealth: "Wealth | None" = None,
 ) -> DashboardResponse:
-    pf = portfolio_data if portfolio_data is not None else portfolio.load()
-    if not pf.positions:
+    if wealth is None:
+        raise PortfolioEmptyError("Wealth required for dashboard.")
+    positions = wealth.all_positions
+    if not positions:
         raise PortfolioEmptyError(
             "Aucune position enregistrée. Ajoute des positions via PUT /portfolio."
         )
 
-    tickers = [p.ticker for p in pf.positions]
+    # Aggregate by ticker across wrappers (PEA + CTO + ...)
+    qty_by_ticker: dict[str, float] = {}
+    avg_cost_by_ticker: dict[str, float] = {}
+    cost_by_ticker: dict[str, float] = {}
+    for p in positions:
+        qty_by_ticker[p.ticker] = qty_by_ticker.get(p.ticker, 0.0) + p.quantity
+        cost_by_ticker[p.ticker] = cost_by_ticker.get(p.ticker, 0.0) + p.cost_basis
+    for t in qty_by_ticker:
+        avg_cost_by_ticker[t] = cost_by_ticker[t] / qty_by_ticker[t] if qty_by_ticker[t] else 0.0
+
+    tickers = list(qty_by_ticker.keys())
     prices = market.fetch_prices(tickers, period=historical_period)
     latest = {t: float(prices[t].dropna().iloc[-1]) for t in tickers}
 
@@ -49,14 +61,14 @@ def build(
 
     asset_stats = analytics.annualized_stats(returns, risk_free=rf, mu_override=mu_override)
 
-    values = np.array([p.quantity * latest[p.ticker] for p in pf.positions])
+    values = np.array([qty_by_ticker[t] * latest[t] for t in tickers])
     total_value = float(values.sum())
     weights = values / total_value
 
     pf_stats = analytics.portfolio_stats(returns, weights, risk_free=rf, mu_override=mu_override)
 
     # Risque de queue : CVaR 95 % et max drawdown observé sur la fenêtre choisie.
-    qty_per_ticker = pd.Series({p.ticker: p.quantity for p in pf.positions})
+    qty_per_ticker = pd.Series(qty_by_ticker)
     equity_curve = (prices[tickers] * qty_per_ticker).sum(axis=1)
     pf_returns = returns @ weights
     pf_cvar = analytics.cvar_95(pf_returns)
@@ -67,18 +79,20 @@ def build(
     stress_results_raw = stress.compute(long_prices, qty_per_ticker.to_dict())
     stress_results = [StressTestResult(**s) for s in stress_results_raw]
 
-    total_cost = sum(p.quantity * p.avg_cost for p in pf.positions)
+    total_cost = sum(cost_by_ticker.values())
     assets = [
         _asset_metric(
-            p,
+            t,
+            qty_by_ticker[t],
+            avg_cost_by_ticker[t],
             w,
             v,
-            latest[p.ticker],
-            asset_stats[p.ticker],
-            analytics.cvar_95(returns[p.ticker]),
-            analytics.max_drawdown(prices[p.ticker]),
+            latest[t],
+            asset_stats[t],
+            analytics.cvar_95(returns[t]),
+            analytics.max_drawdown(prices[t]),
         )
-        for p, w, v in zip(pf.positions, weights.tolist(), values.tolist(), strict=True)
+        for t, w, v in zip(tickers, weights.tolist(), values.tolist(), strict=True)
     ]
 
     metrics = PortfolioMetrics(
@@ -113,12 +127,20 @@ def build(
 
 
 def _asset_metric(
-    position, weight: float, value: float, price: float, stat, cvar: float, max_dd: float
+    ticker: str,
+    quantity: float,
+    avg_cost: float,
+    weight: float,
+    value: float,
+    price: float,
+    stat,
+    cvar: float,
+    max_dd: float,
 ) -> AssetMetrics:
-    cost = position.quantity * position.avg_cost
+    cost = quantity * avg_cost
     pnl = value - cost
     return AssetMetrics(
-        ticker=position.ticker,
+        ticker=ticker,
         price=price,
         weight=weight,
         value=value,

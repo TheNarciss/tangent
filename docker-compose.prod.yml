@@ -9,7 +9,7 @@ services:
       CORS_ORIGINS: "https://riskybusinesses.uk,https://www.riskybusinesses.uk"
       BACKEND_URL: "https://riskybusinesses.uk"
       FRONTEND_URL: "https://riskybusinesses.uk"
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips '*'
 
   # Frontend disabled in prod — Caddy now serves the static Vite build
   # (baked into the caddy image via Dockerfile.caddy).

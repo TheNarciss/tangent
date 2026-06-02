@@ -11,7 +11,6 @@ from typing import TypedDict, cast
 
 import numpy as np
 
-from .. import portfolio
 from ..errors import ConfigurationError, InfeasibleStrategyError, PortfolioEmptyError
 from ..models import (
     CeilingsUsed,
@@ -23,6 +22,7 @@ from ..models import (
     PortfolioPoint,
     RebalanceAction,
     RiskContribution,
+    Wealth,
 )
 from . import analytics, cma, envelopes, market
 
@@ -39,10 +39,17 @@ class _SLSQPResult(TypedDict):
     success: bool
 
 
-def build(req: OptimizerRequest, portfolio_data=None) -> OptimizerResponse:
-    pf = portfolio_data if portfolio_data is not None else portfolio.load()
-    if not pf.positions:
+def build(req: OptimizerRequest, wealth: "Wealth | None" = None) -> OptimizerResponse:
+    if wealth is None:
+        raise PortfolioEmptyError("Wealth required for optimizer.")
+    positions = wealth.all_positions
+    if not positions:
         raise PortfolioEmptyError("No position recorded.")
+
+    # Aggregate quantities by ticker (same ticker may appear in PEA + CTO)
+    qty_by_ticker: dict[str, float] = {}
+    for p in positions:
+        qty_by_ticker[p.ticker] = qty_by_ticker.get(p.ticker, 0.0) + p.quantity
 
     # Expert settings: all optional with smart defaults
     expert = req.expert
@@ -57,12 +64,12 @@ def build(req: OptimizerRequest, portfolio_data=None) -> OptimizerResponse:
     cov_estimator = expert.cov_estimator if expert else "sample"
     cov_shrinkage = expert.cov_shrinkage if expert else 0.20
 
-    tickers = [p.ticker for p in pf.positions]
+    tickers = list(qty_by_ticker.keys())
     prices = market.fetch_prices(tickers, period=period)
     returns = analytics.daily_log_returns(prices[tickers])
 
     latest = {t: float(prices[t].dropna().iloc[-1]) for t in tickers}
-    etf_values = np.array([p.quantity * latest[p.ticker] for p in pf.positions])
+    etf_values = np.array([qty_by_ticker[t] * latest[t] for t in tickers])
     portfolio_value = float(etf_values.sum())
 
     # Capital pool over which weights/euros are resolved
