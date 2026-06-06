@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Sparkles, RefreshCw, ExternalLink, Clock } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -18,6 +18,15 @@ export function AI() {
   const [streamedContent, setStreamedContent] = useState("");
   const [streamError, setStreamError] = useState<string | null>(null);
   const [openHistoryId, setOpenHistoryId] = useState<string | null>(null);
+
+  // Cleanup streamedContent once the persisted review arrives. Without this,
+  // the buffered content would persist in memory and re-display erroneously
+  // on subsequent renders.
+  useEffect(() => {
+    if (today.data && streamedContent) {
+      setStreamedContent("");
+    }
+  }, [today.data, streamedContent]);
 
   const start = async () => {
     setStreaming(true);
@@ -52,15 +61,15 @@ export function AI() {
     );
   }
 
-  // State 2: streaming in progress
-  if (streaming) {
+  // State 2: streaming in progress OR stream finished but persisted review not yet fetched
+  if (streaming || streamedContent) {
     return (
       <div className="space-y-6">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Sparkles className="size-4 animate-pulse" />
-              Génération en cours...
+              <Sparkles className={streaming ? "size-4 animate-pulse" : "size-4"} />
+              {streaming ? "Génération en cours..." : "Finalisation..."}
             </CardTitle>
             <CardDescription>
               Claude analyse ton patrimoine et consulte les sources marché. Quelques dizaines de
