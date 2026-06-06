@@ -5,7 +5,7 @@
         path /portfolio* /dashboard* /timeseries* /transactions*
         path /optimizer* /projection* /strategy* /bengen* /scan*
         path /brokers* /envelopes/* /profile*
-        path /watchlist* /powens* /sync/* /webhooks/* /accounts*
+        path /watchlist* /powens* /sync/* /webhooks/* /accounts* /reviews*
         path /admin* /health
     }
 
