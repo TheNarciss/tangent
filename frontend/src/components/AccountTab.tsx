@@ -20,6 +20,7 @@ import {
   unlinkOAuthAccount,
   useCurrentUser,
 } from "@/api";
+import { useProfile } from "@/lib/profile";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -45,6 +46,7 @@ export function AccountTab() {
       <PasswordSection />
       <OAuthSection />
       <BanksSection />
+      <AutoReviewSection />
       <DangerZone />
     </div>
   );
@@ -661,6 +663,45 @@ function DeleteAccountDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────────────── */
+/*  Auto-review opt-in (nightly LLM batch — ADR-018)                        */
+/* ──────────────────────────────────────────────────────────────────────── */
+
+function AutoReviewSection() {
+  const [profile, setProfile] = useProfile();
+  if (!profile) return null;
+
+  const enabled = profile.auto_review_enabled ?? false;
+  const toggle = () => {
+    setProfile({ ...profile, auto_review_enabled: !enabled });
+  };
+
+  return (
+    <Section
+      title="Reviews IA matinales"
+      description="Reçois chaque matin (entre 4 h et 9 h) une analyse personnalisée de ton patrimoine, générée par Claude avec recherche web. Activable / désactivable à tout moment."
+    >
+      <div className="flex items-start gap-3 rounded-md border bg-muted/30 px-3 py-3 hover:bg-muted/50 transition">
+        <input
+          id="auto-review-toggle"
+          type="checkbox"
+          checked={enabled}
+          onChange={toggle}
+          className="mt-0.5 h-4 w-4 rounded border-input accent-primary cursor-pointer"
+        />
+        <label htmlFor="auto-review-toggle" className="flex-1 cursor-pointer">
+          <p className="text-sm font-medium">Activer les reviews automatiques</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {enabled
+              ? "Activé — tu recevras une review chaque matin."
+              : "Désactivé — active pour recevoir ta première review demain matin."}
+          </p>
+        </label>
+      </div>
+    </Section>
   );
 }
 

@@ -3,7 +3,13 @@ import ReactMarkdown from "react-markdown";
 import { Sparkles, RefreshCw, ExternalLink, Clock } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { useTodayReview, useReviewsHistory, type PortfolioReviewResponse } from "@/api";
+import {
+  useTodayReview,
+  useReviewsHistory,
+  useCurrentUser,
+  type PortfolioReviewResponse,
+} from "@/api";
+import { useProfile } from "@/lib/profile";
 import { streamReview } from "@/lib/streaming";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +19,8 @@ export function AI() {
   const today = useTodayReview();
   const history = useReviewsHistory();
   const queryClient = useQueryClient();
+  const { data: user } = useCurrentUser();
+  const [profile] = useProfile();
 
   const [streaming, setStreaming] = useState(false);
   const [streamedContent, setStreamedContent] = useState("");
@@ -45,6 +53,21 @@ export function AI() {
       },
     });
   };
+
+  // Non-superuser path: read-only view backed by the nightly batch.
+  // The manual /reviews/generate endpoint is superuser-only.
+  if (user && !user.is_superuser) {
+    return (
+      <NonSuperuserAITab
+        todayData={today.data ?? null}
+        todayLoading={today.isLoading}
+        historyData={history.data ?? []}
+        optIn={profile?.auto_review_enabled ?? false}
+        openHistoryId={openHistoryId}
+        onToggleHistory={setOpenHistoryId}
+      />
+    );
+  }
 
   // State 1: review already generated today
   if (today.data && !streaming) {
@@ -142,6 +165,106 @@ function humanError(reason: string): string {
     return "Erreur technique pendant la génération. Réessaye dans un instant.";
   }
   return reason;
+}
+
+function NonSuperuserAITab({
+  todayData,
+  todayLoading,
+  historyData,
+  optIn,
+  openHistoryId,
+  onToggleHistory,
+}: {
+  todayData: PortfolioReviewResponse | null;
+  todayLoading: boolean;
+  historyData: PortfolioReviewResponse[];
+  optIn: boolean;
+  openHistoryId: string | null;
+  onToggleHistory: (id: string | null) => void;
+}) {
+  if (todayLoading) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-center text-sm text-muted-foreground">
+          Chargement…
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Case 1: today's review already received via the nightly batch
+  if (todayData) {
+    return (
+      <div className="space-y-6">
+        <ReviewCard review={todayData} title="Ta review du jour" />
+        <HistorySection
+          history={historyData}
+          excludeId={todayData.id}
+          openId={openHistoryId}
+          onToggle={onToggleHistory}
+        />
+      </div>
+    );
+  }
+
+  // Case 2: opt-in but review not yet arrived (batch still in flight)
+  if (optIn) {
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="size-4" />
+              Ta review arrive bientôt
+            </CardTitle>
+            <CardDescription>
+              Tu as activé les reviews automatiques. Une nouvelle analyse de ton patrimoine est
+              générée chaque matin entre 4 h et 9 h. Si tu viens d&apos;activer l&apos;option, la
+              première review arrivera demain matin.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+        <HistorySection
+          history={historyData}
+          excludeId={null}
+          openId={openHistoryId}
+          onToggle={onToggleHistory}
+        />
+      </div>
+    );
+  }
+
+  // Case 3: opt-out — CTA to activate via the profile page
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Sparkles className="size-4" />
+            Review IA quotidienne
+          </CardTitle>
+          <CardDescription>
+            Reçois chaque matin une analyse personnalisée de ton patrimoine par Claude (Sonnet 4.6),
+            avec recherche web sur les tendances marché actuelles.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Alert>
+            <AlertDescription>
+              Active les reviews automatiques dans <strong>Mon profil → Mon compte</strong> pour
+              recevoir ta première review demain matin.
+            </AlertDescription>
+          </Alert>
+        </CardContent>
+      </Card>
+      <HistorySection
+        history={historyData}
+        excludeId={null}
+        openId={openHistoryId}
+        onToggle={onToggleHistory}
+      />
+    </div>
+  );
 }
 
 function ReviewCard({ review, title }: { review: PortfolioReviewResponse; title: string }) {

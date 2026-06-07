@@ -36,6 +36,7 @@ export interface UserProfile {
   target_annual_return: number; // raw %, e.g. 7 = 7 %
   max_annual_volatility: number; // raw %, e.g. 12 = 12 %
   default_broker: string | null; // null = use YAML fallback (or autodetect at next sync)
+  auto_review_enabled: boolean; // opt-in to nightly LLM portfolio review (ADR-018)
 }
 
 export const EMPTY_PROFILE: UserProfile = {
@@ -46,6 +47,7 @@ export const EMPTY_PROFILE: UserProfile = {
   tmi_pct: 0.11,
   ceilings_used: { livret_a: 0, livret_a_jeune: 0, ldds: 0, lep: 0, pel: 0 },
   default_broker: null,
+  auto_review_enabled: false,
   horizon_years: 10,
   monthly_dca: 250,
   target_annual_return: 7,
