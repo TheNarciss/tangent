@@ -28,6 +28,7 @@ interface BackendProfileDTO {
   max_annual_volatility?: number | null; // fraction (0..1)
   horizon_years?: number | null;
   ceilings_used?: Record<string, number> | null;
+  auto_review_enabled?: boolean | null;
 }
 
 /** Frontend (raw %) → backend (fraction) — only the fields the backend knows. */
@@ -40,6 +41,7 @@ function toBackendDTO(p: UserProfile): BackendProfileDTO {
     max_annual_volatility: p.max_annual_volatility / 100,
     horizon_years: p.horizon_years,
     ceilings_used: p.ceilings_used as unknown as Record<string, number>,
+    auto_review_enabled: p.auto_review_enabled,
   };
 }
 
@@ -59,6 +61,8 @@ function fromBackendDTO(dto: BackendProfileDTO): Partial<UserProfile> {
     out.horizon_years = dto.horizon_years;
   if (dto.ceilings_used && Object.keys(dto.ceilings_used).length > 0)
     out.ceilings_used = dto.ceilings_used as unknown as UserProfile["ceilings_used"];
+  if (dto.auto_review_enabled !== null && dto.auto_review_enabled !== undefined)
+    out.auto_review_enabled = dto.auto_review_enabled;
   return out;
 }
 

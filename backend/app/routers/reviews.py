@@ -23,7 +23,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..auth import User, current_active_user
+from ..auth import User, current_active_user, fastapi_users
 from ..deps import get_session, get_user_wealth
 from ..llm import cost_tracker, review_generator
 from ..models import Wealth
@@ -67,7 +67,7 @@ def _to_response(row) -> PortfolioReviewResponse:
 @router.post("/generate")
 async def generate_review(
     wealth: Wealth = Depends(get_user_wealth),
-    user: User = Depends(current_active_user),
+    user: User = Depends(fastapi_users.current_user(active=True, superuser=True)),
     session: AsyncSession = Depends(get_session),
 ) -> StreamingResponse:
     """Stream a freshly generated review as SSE.
