@@ -49,8 +49,6 @@ async def _cleanup_far_future(request):
         await session.commit()
 
 
-
-
 async def _promote_to_superuser(email: str) -> None:
     """Test helper: flip is_superuser=true for the freshly registered user.
 
@@ -64,6 +62,7 @@ async def _promote_to_superuser(email: str) -> None:
             {"email": email},
         )
         await session.commit()
+
 
 @pytest.mark.integration
 async def test_generate_review_requires_auth(client):
