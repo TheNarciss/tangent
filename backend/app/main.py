@@ -40,6 +40,7 @@ from .routers import (
     terms,
     watchlist,
 )
+from .scheduler import setup_scheduler
 
 logging_config.configure()
 logger = logging.getLogger("app")
@@ -48,12 +49,21 @@ logger = logging.getLogger("app")
 # ─── Lifespan ─────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    """App lifespan: init DB schema at startup."""
+    """App lifespan: init DB schema + start nightly review scheduler."""
     try:
         await init_db()
     except Exception:
         logger.exception("Failed to initialize DB schema at startup")
-    yield
+
+    scheduler = setup_scheduler()
+    scheduler.start()
+    logger.info("APScheduler started (nightly reviews pipeline)")
+
+    try:
+        yield
+    finally:
+        scheduler.shutdown(wait=False)
+        logger.info("APScheduler stopped")
 
 
 app = FastAPI(title="Portfolio Dashboard", version="0.9.0", lifespan=lifespan)
