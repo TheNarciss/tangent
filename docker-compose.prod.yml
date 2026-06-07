@@ -9,18 +9,18 @@ services:
       CORS_ORIGINS: "https://riskybusinesses.uk,https://www.riskybusinesses.uk"
       BACKEND_URL: "https://riskybusinesses.uk"
       FRONTEND_URL: "https://riskybusinesses.uk"
+    ports: !reset []                       # ← override: no public port
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips '*'
 
   # Frontend disabled in prod — Caddy now serves the static Vite build
   # (baked into the caddy image via Dockerfile.caddy).
-  # `profiles: [never]` keeps the service definition for dev but prevents
-  # it from being started unless --profile never is explicitly passed.
   frontend:
     profiles: [never]
 
   postgres:
     container_name: tangent-postgres
     restart: unless-stopped
+    ports: !reset []                       # ← override: no public port, intra-Docker only
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -32,7 +32,7 @@ services:
     container_name: tangent-caddy
     restart: unless-stopped
     ports:
-      - "80:80"   # Bind localhost ONLY — cloudflared y accède en local
+      - "127.0.0.1:80:80"                  # ← bind localhost ONLY (cloudflared accède en local)
     volumes:
       - caddy_data:/data
       - caddy_config:/config
