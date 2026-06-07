@@ -196,25 +196,19 @@ def test_user_prompt_omits_empty_sections():
 
 
 def test_system_prompt_contains_required_structure():
-    """System prompt must instruct the model on the section structure."""
+    """System prompt must instruct the model on the daily-briefing section structure."""
     sp = prompt_builder.SYSTEM_PROMPT
     for section in (
-        "# Vue d'ensemble",
-        "# Forces du portefeuille",
-        "# Risques identifiés",
-        "# Opportunités à examiner",
-        "# Recommandations fiscales",
-        "# Action prioritaire ce mois-ci",
-        "# Avertissement",
+        "# Briefing du jour",
+        "# Actualités marché clés",
+        "# Impact sur tes positions",
+        "# À surveiller cette semaine",
+        "# Risques court terme",
         "# Sources",
+        "# Avertissement",
     ):
         assert section in sp, f"missing section header in system prompt: {section}"
 
 
 def test_system_prompt_mentions_web_search_requirement():
     assert "web_search" in prompt_builder.SYSTEM_PROMPT
-
-
-def test_system_prompt_mentions_ter_limitation():
-    """We told the model not to invent TER numbers (cf design discussion)."""
-    assert "TER" in prompt_builder.SYSTEM_PROMPT
