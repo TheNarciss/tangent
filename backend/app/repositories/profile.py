@@ -39,6 +39,7 @@ async def update(session: AsyncSession, user_id: uuid.UUID, updates: dict) -> Pr
         "horizon_years",
         "default_broker",
         "ceilings_used",
+        "auto_review_enabled",
     }
     for key, value in updates.items():
         if key in allowed_fields:
