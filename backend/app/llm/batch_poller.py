@@ -191,7 +191,7 @@ async def _process_one_batch(
         elif result_type == "canceled":
             logger.warning("Batch %s user %s canceled", batch.id, user_id)
             n_errored += 1
-        else:  # type: ignore[unreachable]
+        else:
             logger.error(  # type: ignore[unreachable]
                 "Batch %s user %s unknown result type=%r",
                 batch.id,
