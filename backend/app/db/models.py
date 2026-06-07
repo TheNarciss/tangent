@@ -89,6 +89,13 @@ class Profile(Base):
     # Ex: {"livret_a": 5000, "ldds": 0, "lep": 0, "pel": 0, "livret_a_jeune": 1000}
     ceilings_used: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
 
+    # ── Feature opt-ins ────────────────────────────────────────────────
+    auto_review_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
+
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
@@ -501,6 +508,20 @@ class PortfolioReview(Base):
     # account IDs) ever reaches this column.
     wealth_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
+    # ── Batch tracking (cf feat/nightly-reviews-db) ──────────────────────
+    # Nullable: manual reviews don't belong to a batch.
+    batch_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("review_batches.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    generation_mode: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="manual",
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
@@ -531,3 +552,44 @@ class LLMDailyCost(Base):
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
     )
+
+
+class ReviewBatch(Base):
+    """Anthropic Message Batches — one row per submitted nightly batch.
+
+    Submitted at 03h00 Europe/Paris by the APScheduler nightly job (cf
+    app/llm/batch_submitter.py). Polled every 15 min from 03h15 to 09h00
+    by batch_poller.py. Once `status` becomes 'ended', individual results
+    are persisted as portfolio_reviews rows referencing this batch via
+    portfolio_reviews.batch_id.
+    """
+
+    __tablename__ = "review_batches"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    # Anthropic-side identifier (e.g. "msgbatch_01XYZ..."), unique.
+    anthropic_batch_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+
+    submitted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        index=True,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+
+    # "in_progress" | "ended" | "errored" | "canceled"
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+
+    # Counts (filled progressively as the batch processes)
+    n_requests: Mapped[int] = mapped_column(Integer, nullable=False)
+    n_succeeded: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    n_errored: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    n_expired: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    # Cost estimate at submit time vs actual cost computed from results.
+    estimated_cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    actual_cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
