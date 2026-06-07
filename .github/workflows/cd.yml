@@ -12,7 +12,7 @@ concurrency:
 jobs:
   deploy:
     name: Deploy main to riskybusinesses.uk
-    runs-on: [self-hosted, macOS, tangent-prod]
+    runs-on: [self-hosted, Linux, oracle, prod]
     timeout-minutes: 30
 
     steps:
@@ -20,32 +20,31 @@ jobs:
         run: |
           set -euo pipefail
           echo "Disk before cleanup:"
-          df -h /Users/clementgardair/Library/Containers/com.docker.docker/ || true
+          df -h /var/lib/docker/ || true
           # Prune images/cache older than 7 days, keep volumes
           docker system prune -a --filter "until=168h" --force || true
           echo "Disk after cleanup:"
-          df -h /Users/clementgardair/Library/Containers/com.docker.docker/ || true
+          df -h /var/lib/docker/ || true
           docker system df
 
       - name: Show current state
         run: |
           echo "Runner: $(hostname)"
-          echo "Project: /Users/clementgardair/projet_finance"
-          cd "/Users/clementgardair/projet_finance"
+          echo "Project: /home/ubuntu/projet_finance"
+          cd "/home/ubuntu/projet_finance"
           echo "Current commit: $(git rev-parse --short HEAD)"
           echo "Current branch: $(git rev-parse --abbrev-ref HEAD)"
 
       - name: Pull latest main
-        working-directory: /Users/clementgardair/projet_finance
+        working-directory: /home/ubuntu/projet_finance
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           PREV_COMMIT=$(git rev-parse HEAD)
           echo "PREV_COMMIT=$PREV_COMMIT" >> $GITHUB_ENV
-          # Fetch with token embedded in URL (bypass macOS keychain entirely).
-          # The osxkeychain credential helper fails with error -25308 when
-          # invoked by launchd outside an interactive user session.
+          # Fetch via HTTPS with token embedded (avoids deploy key dependency
+          # and works uniformly across self-hosted runners).
           git fetch "https://x-access-token:${GH_TOKEN}@github.com/TheNarciss/tangent.git" \
               main:refs/remotes/origin/main
           git checkout main
@@ -53,7 +52,7 @@ jobs:
           echo "New commit: $(git rev-parse --short HEAD)"
 
       - name: Rebuild + restart containers
-        working-directory: /Users/clementgardair/projet_finance
+        working-directory: /home/ubuntu/projet_finance
         run: |
           set -euo pipefail
           # The caddy image now bundles the frontend Vite build (see Dockerfile.caddy),
@@ -74,13 +73,13 @@ jobs:
             sleep 2
           done
           echo "❌ Health check failed after 60s"
-          cd "/Users/clementgardair/projet_finance"
+          cd "/home/ubuntu/projet_finance"
           docker compose -f docker-compose.yml -f docker-compose.prod.yml logs --tail 50 backend
           exit 1
 
       - name: Rollback on failure
         if: failure()
-        working-directory: /Users/clementgardair/projet_finance
+        working-directory: /home/ubuntu/projet_finance
         run: |
           set -euo pipefail
           echo "::warning::Deployment failed, rolling back to $PREV_COMMIT"
