@@ -6,7 +6,7 @@ import uuid
 from datetime import date, timedelta
 
 import pytest
-from sqlalchemy import delete, text
+from sqlalchemy import delete
 
 from app.db.engine import async_session_factory
 from app.db.models import LLMDailyCost, PortfolioReview
@@ -49,21 +49,6 @@ async def _cleanup_far_future(request):
         await session.commit()
 
 
-async def _promote_to_superuser(email: str) -> None:
-    """Test helper: flip is_superuser=true for the freshly registered user.
-
-    Required since PR #58 made POST /reviews/generate superuser-only.
-    The endpoint is now considered an admin/debug surface; the user-facing
-    review delivery is via the nightly batch (PR #57).
-    """
-    async with async_session_factory() as session:
-        await session.execute(
-            text("UPDATE users SET is_superuser = true WHERE email = :email"),
-            {"email": email},
-        )
-        await session.commit()
-
-
 @pytest.mark.integration
 async def test_generate_review_requires_auth(client):
     resp = await client.post("/reviews/generate")
@@ -83,53 +68,24 @@ async def test_list_requires_auth(client):
 
 
 @pytest.mark.integration
-async def test_generate_returns_503_when_cap_reached(client, monkeypatch):
-    """When the daily cost cap is reached, POST /reviews/generate returns 503
-    BEFORE starting the SSE stream (kill-switch enforced at the edge)."""
-    run_id = uuid.uuid4().hex[:8]
-    email = f"cap-{run_id}@test.com"
+async def test_generate_returns_403_for_non_superuser(client):
+    """POST /reviews/generate is superuser-only since PR #58.
+
+    Regular users get their reviews via the nightly batch (PR #57);
+    the manual SSE generation is an admin/debug surface.
+
+    Note: 503 (cap reached) and 409 (duplicate day) are covered at
+    the unit level on review_generator directly — that codepath is
+    not reached by non-superusers anyway.
+    """
+    import uuid as _uuid
+
+    run_id = _uuid.uuid4().hex[:8]
+    email = f"reg-{run_id}@test.com"
     await _register(client, email, "TestPwd123!")
     await _login(client, email, "TestPwd123!")
-
-    test_day = date.today() + timedelta(days=365 * 10)
-    monkeypatch.setattr(cost_tracker, "today_paris", lambda: test_day)
-
-    async with async_session_factory() as session:
-        await cost_tracker.record_cost(session, cost_tracker.DAILY_CAP_USD + 0.01, test_day)
-
     resp = await client.post("/reviews/generate")
-    assert resp.status_code == 503
-    assert "budget" in resp.json()["detail"].lower()
-
-
-@pytest.mark.integration
-async def test_generate_returns_409_when_already_done_today(client, monkeypatch):
-    """A second generate for the same day returns 409."""
-    run_id = uuid.uuid4().hex[:8]
-    email = f"dup-{run_id}@test.com"
-    user_id = await _register(client, email, "TestPwd123!")
-    await _login(client, email, "TestPwd123!")
-
-    test_day = date.today() + timedelta(days=365 * 10)
-    monkeypatch.setattr(cost_tracker, "today_paris", lambda: test_day)
-
-    async with async_session_factory() as session:
-        await reviews_repo.create_review(
-            session,
-            user_id=user_id,
-            review_date=test_day,
-            content="already there",
-            model_used="claude-sonnet-4-6",
-            input_tokens=0,
-            output_tokens=0,
-            web_searches_count=0,
-            cost_usd=0.0,
-            sources=[],
-            wealth_snapshot={},
-        )
-
-    resp = await client.post("/reviews/generate")
-    assert resp.status_code == 409
+    assert resp.status_code == 403
 
 
 @pytest.mark.integration
