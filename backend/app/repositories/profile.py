@@ -47,3 +47,14 @@ async def update(session: AsyncSession, user_id: uuid.UUID, updates: dict) -> Pr
     await session.commit()
     await session.refresh(profile)
     return profile
+
+
+async def list_opted_in_users(session: AsyncSession) -> list[Profile]:
+    """Return all profiles with auto_review_enabled=True.
+
+    Used by the nightly batch submitter (PR #B) to know which users
+    should be included in tonight's batch.
+    """
+    stmt = select(Profile).where(Profile.auto_review_enabled.is_(True))
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
