@@ -148,6 +148,7 @@ async def generate_review_stream(
             cost_usd=cost_usd,
             sources=sources,
             wealth_snapshot=snapshot,
+            generation_mode="manual",
         )
     except Exception:
         # Rare race: another generation finished first (shouldn't happen

@@ -34,6 +34,8 @@ async def create_review(
     cost_usd: float,
     sources: list[dict[str, Any]],
     wealth_snapshot: dict[str, Any],
+    generation_mode: str = "manual",
+    batch_id: uuid.UUID | None = None,
 ) -> PortfolioReview:
     """Insert a new review for (user_id, review_date).
 
@@ -52,6 +54,8 @@ async def create_review(
         cost_usd=cost_usd,
         sources=sources,
         wealth_snapshot=wealth_snapshot,
+        generation_mode=generation_mode,
+        batch_id=batch_id,
     )
     session.add(row)
     await session.commit()
