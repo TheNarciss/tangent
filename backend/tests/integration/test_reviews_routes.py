@@ -6,7 +6,7 @@ import uuid
 from datetime import date, timedelta
 
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import delete, text
 
 from app.db.engine import async_session_factory
 from app.db.models import LLMDailyCost, PortfolioReview
@@ -48,6 +48,22 @@ async def _cleanup_far_future(request):
         await session.execute(delete(PortfolioReview).where(PortfolioReview.review_date >= cutoff))
         await session.commit()
 
+
+
+
+async def _promote_to_superuser(email: str) -> None:
+    """Test helper: flip is_superuser=true for the freshly registered user.
+
+    Required since PR #58 made POST /reviews/generate superuser-only.
+    The endpoint is now considered an admin/debug surface; the user-facing
+    review delivery is via the nightly batch (PR #57).
+    """
+    async with async_session_factory() as session:
+        await session.execute(
+            text("UPDATE users SET is_superuser = true WHERE email = :email"),
+            {"email": email},
+        )
+        await session.commit()
 
 @pytest.mark.integration
 async def test_generate_review_requires_auth(client):
