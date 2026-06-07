@@ -27,7 +27,6 @@ import uuid
 
 from anthropic.types.beta.message_create_params import MessageCreateParamsNonStreaming
 from anthropic.types.beta.messages.batch_create_params import Request
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import User
@@ -97,8 +96,7 @@ async def submit_nightly_batch(session: AsyncSession) -> ReviewBatch | None:
     for profile in opted_in_profiles:
         user_id = profile.user_id
         try:
-            user_stmt = select(User).where(User.id == user_id)
-            user = (await session.execute(user_stmt)).scalars().first()
+            user = await session.get(User, user_id)
             if user is None:
                 logger.warning(
                     "Opt-in profile %s references missing User row, skipping",

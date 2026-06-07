@@ -132,7 +132,7 @@ async def _process_one_batch(
         result_type = result.result.type
 
         if result_type == "succeeded":
-            message = result.result.message
+            message = result.result.message  # type: ignore[union-attr]
             try:
                 content, sources, in_tok, out_tok, ws_count = _parse_message(message)
                 cost = _compute_actual_cost(in_tok, out_tok, ws_count)
@@ -191,8 +191,8 @@ async def _process_one_batch(
         elif result_type == "canceled":
             logger.warning("Batch %s user %s canceled", batch.id, user_id)
             n_errored += 1
-        else:
-            logger.error(
+        else:  # type: ignore[unreachable]
+            logger.error(  # type: ignore[unreachable]
                 "Batch %s user %s unknown result type=%r",
                 batch.id,
                 user_id,
