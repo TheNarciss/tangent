@@ -27,7 +27,7 @@ from datetime import date, datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -653,7 +653,14 @@ class HoldingTerOverride(BaseModel):
 class TransactionCategoryOverride(BaseModel):
     """User override of the category on a bank transaction. ADR-021."""
 
-    category: Literal[tuple(CATEGORIES)]  # type: ignore[valid-type]
+    category: str
+
+    @field_validator("category")
+    @classmethod
+    def _validate_category(cls, v: str) -> str:
+        if v not in CATEGORIES:
+            raise ValueError(f"category must be one of {sorted(CATEGORIES)}")
+        return v
 
 
 class FieldOverrideResponse(BaseModel):
