@@ -22,6 +22,9 @@ import { UserMenu } from "@/components/auth/UserMenu";
 import { BengenWidget } from "@/components/BengenWidget";
 import { Correlation } from "@/components/Correlation";
 import { Dashboard } from "@/components/Dashboard";
+import { Assets } from "@/components/Assets";
+import { Insights } from "@/components/Insights";
+import { Metrics } from "@/components/Metrics";
 import { OAuthCallbackHandler } from "@/components/OAuthCallback";
 import { Optimizer } from "@/components/Optimizer";
 import { PowensCallbackHandler } from "@/components/PowensCallback";
@@ -96,13 +99,14 @@ function Shell({ view, onViewChange }: { view: NavView; onViewChange: (v: NavVie
           </div>
         )}
 
-        {view === "optimization" && (
+        {view === "investments" && (
           <>
             {dashboard.data ? (
-              <OptimizationTab dashboard={dashboard.data} />
+              <InvestmentsTab dashboard={dashboard.data} />
             ) : (
               <p className="text-sm text-muted-foreground">
-                Optimisation indisponible — ajoute des positions ou synchronise un compte d'abord.
+                Analyse d'investissements indisponible — ajoute des positions ou synchronise un
+                compte d'abord.
               </p>
             )}
           </>
@@ -140,8 +144,11 @@ function getViewConfig(view: NavView, inputs: ViewConfigInputs): ViewConfig {
       };
     case "projection":
       return { title: "Projection", subtitle: "Monte-Carlo, frais et indépendance financière" };
-    case "optimization":
-      return { title: "Optimisation", subtitle: "Frontière efficiente, scanner, corrélations" };
+    case "investments":
+      return {
+        title: "Investissements",
+        subtitle: "Holdings, scanner, frontière efficiente, corrélations",
+      };
     case "profile":
       return { title: "Profil", subtitle: "Informations personnelles et stratégie" };
     case "settings":
@@ -149,7 +156,7 @@ function getViewConfig(view: NavView, inputs: ViewConfigInputs): ViewConfig {
   }
 }
 
-function OptimizationTab({
+function InvestmentsTab({
   dashboard,
 }: {
   dashboard: NonNullable<ReturnType<typeof useDashboard>["data"]>;
@@ -234,6 +241,9 @@ function OptimizationTab({
 
   return (
     <div className="space-y-6">
+      <Metrics metrics={dashboard.metrics} />
+      <Assets assets={dashboard.metrics.assets} />
+      <Insights insights={dashboard.insights} />
       <RiskReturn
         metrics={dashboard.metrics}
         frontier={dashboard.frontier}

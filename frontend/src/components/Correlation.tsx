@@ -27,7 +27,6 @@ function cellStyle(rho: number): React.CSSProperties {
 
 export function Correlation({ matrix }: Props) {
   const tickers = Object.keys(matrix);
-
   return (
     <Card>
       <CardHeader>
@@ -40,9 +39,14 @@ export function Correlation({ matrix }: Props) {
           <table className="w-full border-separate border-spacing-1">
             <thead>
               <tr>
-                <th />
+                {/* Corner: top + left sticky */}
+                <th className="sticky left-0 top-0 z-20 bg-card" />
                 {tickers.map((t) => (
-                  <th key={t} className="font-mono text-xs text-muted-foreground px-2 pb-1">
+                  <th
+                    key={t}
+                    scope="col"
+                    className="sticky top-0 z-10 bg-card font-mono text-xs text-muted-foreground px-2 pb-1"
+                  >
                     {t}
                   </th>
                 ))}
@@ -51,14 +55,19 @@ export function Correlation({ matrix }: Props) {
             <tbody>
               {tickers.map((row) => (
                 <tr key={row}>
-                  <th className="font-mono text-xs text-muted-foreground pr-2 text-right">{row}</th>
+                  <th
+                    scope="row"
+                    className="sticky left-0 z-10 bg-card font-mono text-xs text-muted-foreground pr-2 text-right"
+                  >
+                    {row}
+                  </th>
                   {tickers.map((col) => {
                     const rho = matrix[row][col];
                     const interp = interpRho(rho);
                     return (
                       <td
                         key={col}
-                        className="font-mono text-xs tabular rounded px-3 py-2 text-center min-w-[64px] cursor-help"
+                        className="font-mono text-xs tabular rounded px-2 py-1.5 md:px-3 md:py-2 text-center min-w-[56px] md:min-w-[64px] cursor-help"
                         style={cellStyle(rho)}
                         title={`Corrélation ${row} ↔ ${col} : ρ = ${rho.toFixed(2)}\n${interp}\n\nρ ∈ [-1, 1]. ≈ 1 : actifs liés (peu de diversification). ≈ 0 : indépendants. ≈ -1 : se hedgent.`}
                       >
@@ -71,7 +80,6 @@ export function Correlation({ matrix }: Props) {
             </tbody>
           </table>
         </div>
-
         {/* Légende graduée */}
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <span className="font-mono">−1</span>
