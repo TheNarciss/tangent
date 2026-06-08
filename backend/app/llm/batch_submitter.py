@@ -63,7 +63,7 @@ def estimate_cost_per_gap_fill() -> float:
     api_cost = cost_tracker.compute_cost_usd(
         input_tokens=250,
         output_tokens=100,
-        web_searches=1,
+        web_searches_count=1,
     )
     return api_cost * _BATCH_DISCOUNT
 

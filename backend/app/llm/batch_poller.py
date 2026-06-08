@@ -118,7 +118,7 @@ async def _process_gap_fill_result(
         return 0, 1
 
     try:
-        message = result.result.message  # type: ignore[union-attr]
+        message = result.result.message
         ok = await gap_filler_engine.apply_gap_fill_response(session, custom_id, message)
         if ok:
             await session.commit()

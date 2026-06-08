@@ -20,7 +20,8 @@ from __future__ import annotations
 import re
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from dataclasses import field as _field
 from typing import Any
 
 # Pattern for a valid field name: alphanumeric only, no underscores
@@ -56,7 +57,7 @@ class GappableField:
     response_schema: dict[str, Any]
     tool_name: str
     validate_value: Callable[[Any], bool]
-    coerce_value: Callable[[Any], Any] = field(default=lambda v: v)
+    coerce_value: Callable[[Any], Any] = _field(default=lambda v: v)
 
 
 @dataclass(frozen=True)
@@ -65,7 +66,7 @@ class Gap:
 
     field: GappableField
     row_id: Any  # UUID, but kept Any to avoid heavy import here
-    context: dict[str, Any] = field(default_factory=dict)
+    context: dict[str, Any] = _field(default_factory=dict)
     """Optional extra context (e.g. for transactions, the description + amount)."""
 
 
