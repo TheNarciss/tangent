@@ -47,3 +47,5 @@ Template : [`TEMPLATE.md`](./TEMPLATE.md).
 - Court (1 page max), pas un dossier d'architecture complet
 - Présent simple, voix active, ton décisif
 - Pas de "il faudrait" / "on pourrait" → décide ou ne décide pas
+
+- [ADR-021](021-universal-gap-filler.md) — Universal Gap-Filler for nullable provider fields
