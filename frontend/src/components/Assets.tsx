@@ -63,19 +63,19 @@ export function Assets({ assets }: Props) {
                       {fmt.signedPct(a.pnl_pct)}
                     </span>
                   </TableCell>
-                  <TableCell className="text-right font-mono tabular">
+                  <TableCell className="hidden text-right font-mono tabular md:table-cell">
                     {fmt.pct(a.annual_return)}
                   </TableCell>
-                  <TableCell className="text-right font-mono tabular">
+                  <TableCell className="hidden text-right font-mono tabular md:table-cell">
                     {fmt.pct(a.annual_vol)}
                   </TableCell>
-                  <TableCell className="text-right font-mono tabular text-[hsl(var(--loss))]">
+                  <TableCell className="hidden text-right font-mono tabular text-[hsl(var(--loss))] md:table-cell">
                     {fmt.signedPct(a.cvar_95)}
                   </TableCell>
-                  <TableCell className="text-right font-mono tabular text-[hsl(var(--loss))]">
+                  <TableCell className="hidden text-right font-mono tabular text-[hsl(var(--loss))] md:table-cell">
                     {fmt.signedPct(a.max_drawdown_observed)}
                   </TableCell>
-                  <TableCell className="text-right font-mono tabular">
+                  <TableCell className="hidden text-right font-mono tabular md:table-cell">
                     {fmt.num(a.sharpe)}
                   </TableCell>
                 </TableRow>
