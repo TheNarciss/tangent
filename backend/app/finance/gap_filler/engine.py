@@ -167,7 +167,7 @@ def build_gap_fill_requests(gaps: Sequence[Gap]) -> list[Request]:
                 "que d'inventer."
             ),
             messages=[{"role": "user", "content": user_prompt}],
-            tools=tools_list,  # type: ignore[arg-type]
+            tools=tools_list,  # type: ignore[typeddict-item]
             tool_choice={"type": "any"}
             if gf.requires_web_search
             else {"type": "tool", "name": gf.tool_name},
