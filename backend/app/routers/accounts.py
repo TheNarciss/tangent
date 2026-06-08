@@ -408,6 +408,48 @@ async def list_holdings(
     ]
 
 
+class RecentTransactionResponse(TransactionResponse):
+    """A transaction enriched with its bank account name + type.
+
+    Used by the Dashboard 'Mouvements récents' tile, where context like
+    'Carrefour · BoursoBank Compte courant' is more useful than just
+    'Carrefour'. Inherits all fields from TransactionResponse.
+    """
+
+    bank_account_name: str
+    bank_account_type: str
+
+
+@router.get("/transactions/recent", response_model=list[RecentTransactionResponse])
+async def list_recent_transactions(
+    limit: int = Query(20, ge=1, le=100),
+    user: User = Depends(current_active_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[RecentTransactionResponse]:
+    """Latest N transactions across ALL bank accounts of the current user.
+
+    Powers the 'Mouvements récents' tile of the Dashboard view. Returns
+    the most recent transactions ordered by date desc, with bank account
+    name/type joined so the UI can show context without N+1 fetches.
+    """
+    rows = await bank_txs_repo.list_recent_all_accounts(session, user.id, limit=limit)
+    return [
+        RecentTransactionResponse(
+            id=tx.id,
+            bank_account_id=tx.bank_account_id,
+            provider_transaction_id=tx.provider_transaction_id,
+            amount=tx.amount,
+            currency=tx.currency,
+            transaction_date=tx.transaction_date,
+            description=tx.description,
+            category=tx.category,
+            bank_account_name=acc.name,
+            bank_account_type=acc.type,
+        )
+        for tx, acc in rows
+    ]
+
+
 @router.get("/{account_id}/transactions", response_model=list[TransactionResponse])
 async def list_transactions(
     account_id: uuid.UUID,

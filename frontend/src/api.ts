@@ -772,6 +772,16 @@ export interface BankTransactionResponse {
   category: string | null;
 }
 
+/**
+ * A transaction enriched with its bank account name + type — what the
+ * Dashboard 'Mouvements récents' tile needs to show context like
+ * "Carrefour · BoursoBank Compte courant".
+ */
+export interface RecentTransactionResponse extends BankTransactionResponse {
+  bank_account_name: string;
+  bank_account_type: string;
+}
+
 export interface SyncReport {
   success: boolean;
   accounts_persisted: number;
@@ -805,6 +815,19 @@ export function useAccountTransactions(accountId: string | null, limit = 50) {
     queryFn: () =>
       http<BankTransactionResponse[]>(`/accounts/${accountId}/transactions?limit=${limit}`),
     enabled: !!accountId,
+  });
+}
+
+/**
+ * Latest N transactions across ALL bank accounts of the current user.
+ * Powers the Dashboard 'Mouvements récents' tile (limit defaults to 5).
+ */
+export function useRecentTransactions(limit = 5) {
+  return useQuery({
+    queryKey: ["transactions", "recent", limit],
+    queryFn: () =>
+      http<RecentTransactionResponse[]>(`/accounts/transactions/recent?limit=${limit}`),
+    staleTime: 60_000,
   });
 }
 
