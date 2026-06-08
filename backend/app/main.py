@@ -258,7 +258,12 @@ app.include_router(analysis.router, prefix="/api")
 app.include_router(planning.router, prefix="/api")
 app.include_router(watchlist.router, prefix="/api")
 app.include_router(envelopes.router, prefix="/api")
-app.include_router(powens.router)  # ADR-020 exception: Powens sandbox = single redirect URI
+# Powens has TWO routers (cf ADR-020):
+# - legacy_router: /auth/powens/*, /webhooks/powens (no /api prefix due to Powens
+#   sandbox dashboard limit of one redirect URI)
+# - router: /sync/* (normal namespace under /api/)
+app.include_router(powens.legacy_router)
+app.include_router(powens.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(profile.router, prefix="/api")
 app.include_router(account.router, prefix="/api")

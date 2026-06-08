@@ -22,10 +22,17 @@ from ..powens.oauth import exchange_code_for_token
 from ..powens.webhooks import handle_webhook as powens_handle_webhook
 
 logger = logging.getLogger(__name__)
-router = APIRouter(tags=["powens"])
+# Router for /sync/* — namespaced under /api/* via main.py include_router(..., prefix="/api")
+router = APIRouter(tags=["sync"])
+
+# Legacy router for Powens-specific external callbacks (ADR-020 exception):
+# - /auth/powens/initiate, /auth/powens/callback (Powens sandbox = single redirect URI)
+# - /webhooks/powens (external Powens POST, currently disabled per ADR-019)
+# Mounted WITHOUT /api prefix in main.py to match Powens dashboard config.
+legacy_router = APIRouter(tags=["powens-legacy"])
 
 
-@router.get("/auth/powens/initiate")
+@legacy_router.get("/auth/powens/initiate")
 async def get_powens_webview(
     user: User = Depends(current_active_user),
     session: AsyncSession = Depends(get_session),
@@ -77,7 +84,7 @@ async def get_powens_webview(
     return {"webview_url": f"{base_url}&code={temp_code}"}
 
 
-@router.get("/auth/powens/callback")
+@legacy_router.get("/auth/powens/callback")
 async def powens_auth_callback(
     user: User = Depends(current_active_user),
     code: str | None = None,
@@ -183,7 +190,7 @@ async def get_sync_status(
     }
 
 
-@router.post("/webhooks/powens")
+@legacy_router.post("/webhooks/powens")
 async def post_webhook_powens(payload: dict):
     """Powens webhooks — handler disabled until Phase A per-user mapping."""
     return await powens_handle_webhook(payload)

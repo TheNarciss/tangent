@@ -91,7 +91,15 @@ Caddyfile autorise ces 2-3 paths explicites en plus de `/api/*`:
     }
 
 Cette exception est **bornee a Powens uniquement** et **documentee dans le
-Caddyfile**. Quand on passera en compte Powens production (qui supporte des
+Caddyfile**.
+
+**Implementation cote backend**: `backend/app/routers/powens.py` definit
+DEUX routers:
+- `legacy_router` (sans prefix `/api`): `/auth/powens/initiate`,
+  `/auth/powens/callback`, `/webhooks/powens` — routes appelees par Powens
+  ou par leur dashboard config
+- `router` (sous `/api` via include_router): `/sync/*` — routes appelees
+  par notre frontend uniquement, namespace normal Quand on passera en compte Powens production (qui supporte des
 multi-URI), on migrera proprement vers `/api/auth/powens/*` dans une PR
 dediee.
 
