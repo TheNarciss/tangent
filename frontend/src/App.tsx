@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import {
   ApiError,
+  fetchTermsVersion,
   useCurrentUser,
   useDashboard,
   useOptimizer,
@@ -10,42 +12,39 @@ import {
   type OptimizerRequest,
 } from "@/api";
 import { ageFromBirthDate, useProfile } from "@/lib/profile";
-import { Accounts } from "@/components/Accounts";
-import { Assets } from "@/components/Assets";
-import { PowensCallbackHandler } from "@/components/PowensCallback";
-import { OAuthCallbackHandler } from "@/components/OAuthCallback";
-import { TermsGate } from "@/components/TermsGate";
-import { fetchTermsVersion } from "@/api";
-import { useQuery } from "@tanstack/react-query";
-import { AuthScreen } from "@/components/auth/AuthScreen";
 import { useProfileSync } from "@/lib/profile-sync";
+
+import { AppShell } from "@/components/AppShell";
+import { type NavView } from "@/components/Sidebar";
+
+import { Accounts } from "@/components/Accounts";
+import { AddBankButton } from "@/components/AddBankButton";
+import { AI } from "@/components/AI";
+import { Assets } from "@/components/Assets";
+import { AuthScreen } from "@/components/auth/AuthScreen";
 import { UserMenu } from "@/components/auth/UserMenu";
+import { BengenWidget } from "@/components/BengenWidget";
 import { Correlation } from "@/components/Correlation";
 import { Insights } from "@/components/Insights";
 import { Metrics } from "@/components/Metrics";
-import { Patrimony } from "@/components/Patrimony";
-import { StressTests } from "@/components/StressTests";
+import { OAuthCallbackHandler } from "@/components/OAuthCallback";
 import { Optimizer } from "@/components/Optimizer";
-import { Scanner } from "@/components/Scanner";
+import { Patrimony } from "@/components/Patrimony";
+import { PowensCallbackHandler } from "@/components/PowensCallback";
 import { ProfilePage } from "@/components/Profile";
-import { SettingsPage } from "@/components/Settings";
-import { AddBankButton } from "@/components/AddBankButton";
 import { Projection } from "@/components/Projection";
-import { BengenWidget } from "@/components/BengenWidget";
 import { RiskReturn } from "@/components/RiskReturn";
+import { Scanner } from "@/components/Scanner";
+import { SettingsPage } from "@/components/Settings";
+import { StressTests } from "@/components/StressTests";
+import { TermsGate } from "@/components/TermsGate";
 import { Timeline } from "@/components/Timeline";
-import { AI } from "@/components/AI";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
-type View = "dashboard" | "profile" | "settings";
 
 export default function App() {
   const auth = useCurrentUser();
   useProfileSync(!!auth.data);
-  const [view, setView] = useState<View>("dashboard");
+  const [view, setView] = useState<NavView>("ai");
 
-  // CGU click-through gate (cf TermsGate). enabled uniquement
-  // quand loggé pour éviter un fetch inutile sur AuthScreen.
   const termsVersionQuery = useQuery({
     queryKey: ["terms-version"],
     queryFn: fetchTermsVersion,
@@ -53,84 +52,56 @@ export default function App() {
     staleTime: Infinity,
   });
 
-  // Auth still loading — show empty shell to avoid login flash
   if (auth.isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="flex min-h-screen items-center justify-center bg-background">
         <p className="text-sm text-muted-foreground">Chargement…</p>
       </div>
     );
   }
 
-  // Not logged in → AuthScreen
   if (!auth.data) {
     return <AuthScreen />;
   }
 
-  // CGU pas (encore) acceptées pour la version actuelle → gate
   const currentTermsVersion = termsVersionQuery.data?.version;
   if (currentTermsVersion && auth.data.terms_version_accepted !== currentTermsVersion) {
     return <TermsGate user={auth.data} />;
   }
 
-  // Logged in → route to selected view
-  if (view === "profile") {
-    return <ProfilePage onBack={() => setView("dashboard")} />;
-  }
-  if (view === "settings") {
-    return <SettingsPage onBack={() => setView("dashboard")} />;
-  }
-  return <Dashboard onNavigate={setView} />;
+  return <Shell view={view} onViewChange={setView} />;
 }
 
-function Dashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
+function Shell({ view, onViewChange }: { view: NavView; onViewChange: (v: NavView) => void }) {
   const { data: user } = useCurrentUser();
   const dashboard = useDashboard();
   const timeseries = useTimeseries();
   const [profile] = useProfile();
 
+  // Title + actions vary per view
+  const config = getViewConfig(view, {
+    user,
+    dashboard,
+    headerActions: view === "accounts" || view === "overview" ? <AddBankButton /> : null,
+  });
+
   return (
-    <div className="min-h-screen bg-background">
+    <>
       <PowensCallbackHandler />
       <OAuthCallbackHandler />
-      <div className="container max-w-7xl py-10 space-y-8">
-        <header className="flex items-baseline justify-between border-b pb-6">
-          <div>
-            <h1 className="text-3xl font-semibold tracking-tight">Portfolio</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              {dashboard.data ? (
-                <>
-                  Au {new Date(dashboard.data.as_of).toLocaleDateString("fr-FR")} ·{" "}
-                  {dashboard.data.metrics.assets.length} positions
-                </>
-              ) : (
-                <>Bienvenue {user?.display_name || user?.email}</>
-              )}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <AddBankButton />
-            <UserMenu onNavigate={onNavigate} />
-          </div>
-        </header>
+      <AppShell
+        currentView={view}
+        onViewChange={onViewChange}
+        pageTitle={config.title}
+        pageSubtitle={config.subtitle}
+        headerActions={config.headerActions}
+        sidebarFooter={<UserMenu onNavigate={(v) => onViewChange(v as NavView)} />}
+      >
+        {view === "ai" && <AI />}
 
-        {dashboard.isLoading && <p className="text-sm text-muted-foreground">Chargement…</p>}
-
-        <Tabs defaultValue={dashboard.data ? "ai" : "accounts"} className="space-y-6">
-          <TabsList className="grid grid-cols-3 sm:grid-cols-6 w-full max-w-3xl">
-            <TabsTrigger value="ai">IA</TabsTrigger>
-            <TabsTrigger value="overview">Aperçu</TabsTrigger>
-            <TabsTrigger value="accounts">Comptes</TabsTrigger>
-            <TabsTrigger value="history">Historique</TabsTrigger>
-            <TabsTrigger value="projection">Projection</TabsTrigger>
-            <TabsTrigger value="optimization">Optimisation</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="ai" className="space-y-6">
-            <AI />
-          </TabsContent>
-
-          <TabsContent value="overview" className="space-y-6">
+        {view === "overview" && (
+          <div className="space-y-6">
+            {dashboard.isLoading && <p className="text-sm text-muted-foreground">Chargement…</p>}
             {dashboard.isError && <DashboardErrorPanel error={dashboard.error} />}
             {dashboard.data && (
               <>
@@ -141,13 +112,13 @@ function Dashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
                 <Insights insights={dashboard.data.insights} />
               </>
             )}
-          </TabsContent>
+          </div>
+        )}
 
-          <TabsContent value="accounts" className="space-y-6">
-            <Accounts />
-          </TabsContent>
+        {view === "accounts" && <Accounts />}
 
-          <TabsContent value="history" className="space-y-6">
+        {view === "history" && (
+          <div className="space-y-6">
             {timeseries.isLoading && (
               <p className="text-sm text-muted-foreground">Chargement de l'historique…</p>
             )}
@@ -157,14 +128,18 @@ function Dashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
                 Historique indisponible — ajoute des positions ou synchronise un compte d'abord.
               </p>
             )}
-          </TabsContent>
+          </div>
+        )}
 
-          <TabsContent value="projection" className="space-y-6">
+        {view === "projection" && (
+          <div className="space-y-6">
             <Projection />
             {profile && <BengenWidget profile={profile} />}
-          </TabsContent>
+          </div>
+        )}
 
-          <TabsContent value="optimization" className="space-y-6">
+        {view === "optimization" && (
+          <>
             {dashboard.data ? (
               <OptimizationTab dashboard={dashboard.data} />
             ) : (
@@ -172,11 +147,63 @@ function Dashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
                 Optimisation indisponible — ajoute des positions ou synchronise un compte d'abord.
               </p>
             )}
-          </TabsContent>
-        </Tabs>
-      </div>
-    </div>
+          </>
+        )}
+
+        {view === "profile" && <ProfilePage onBack={() => onViewChange("ai")} />}
+
+        {view === "settings" && <SettingsPage onBack={() => onViewChange("ai")} />}
+      </AppShell>
+    </>
   );
+}
+
+interface ViewConfigInputs {
+  user: ReturnType<typeof useCurrentUser>["data"];
+  dashboard: ReturnType<typeof useDashboard>;
+  headerActions: React.ReactNode;
+}
+
+interface ViewConfig {
+  title: string;
+  subtitle?: React.ReactNode;
+  headerActions?: React.ReactNode;
+}
+
+function getViewConfig(view: NavView, inputs: ViewConfigInputs): ViewConfig {
+  const { user, dashboard, headerActions } = inputs;
+
+  const subtitleOverview = dashboard.data ? (
+    <>
+      Au {new Date(dashboard.data.as_of).toLocaleDateString("fr-FR")} ·{" "}
+      {dashboard.data.metrics.assets.length} positions
+    </>
+  ) : (
+    <>Bienvenue {user?.display_name || user?.email}</>
+  );
+
+  switch (view) {
+    case "ai":
+      return { title: "IA", subtitle: "Revues quotidiennes et conversations" };
+    case "overview":
+      return { title: "Aperçu", subtitle: subtitleOverview, headerActions };
+    case "accounts":
+      return {
+        title: "Comptes",
+        subtitle: "Comptes bancaires, positions, transactions",
+        headerActions,
+      };
+    case "history":
+      return { title: "Historique", subtitle: "Évolution du patrimoine dans le temps" };
+    case "projection":
+      return { title: "Projection", subtitle: "Monte-Carlo, frais et indépendance financière" };
+    case "optimization":
+      return { title: "Optimisation", subtitle: "Frontière efficiente, scanner, corrélations" };
+    case "profile":
+      return { title: "Profil", subtitle: "Informations personnelles et stratégie" };
+    case "settings":
+      return { title: "Paramètres", subtitle: "Compte, banques, sécurité" };
+  }
 }
 
 function OptimizationTab({
@@ -188,7 +215,6 @@ function OptimizationTab({
   const age = profile ? ageFromBirthDate(profile.birth_date) : null;
   const hasProfile = !!profile && age !== null && profile.fiscal_shares > 0;
 
-  // Strategy: profile = explicit σ max + μ target (concrete fields, instead of an abstract slider)
   const profileMaxVol = hasProfile && profile ? profile.max_annual_volatility : 10;
   const profileTargetReturn = hasProfile && profile ? profile.target_annual_return : 7;
 
@@ -206,7 +232,6 @@ function OptimizationTab({
   const [totalCapital, setTotalCapital] = useState<number | "">("");
   const [maxVolatility, setMaxVolatility] = useState<number | "">(profileMaxVol);
 
-  // Persist toggles in localStorage so they survive refresh
   useEffect(() => {
     if (typeof window !== "undefined") {
       window.localStorage.setItem("tangent.optimizer.objective", objective);
@@ -249,8 +274,6 @@ function OptimizationTab({
 
   const optimizer = useOptimizer(req);
 
-  // Frontier curve = ETF-only frontier. Kept even with envelopes (savings shown on the
-  // right panel). Still informative: it's the Pareto-optimal ceiling on the ETF side.
   const optimalPoint = optimizer.data
     ? {
         sigma: optimizer.data.optimal.volatility,
@@ -295,7 +318,6 @@ function OptimizationTab({
   );
 }
 
-/* Friendly error panel: maps known AppError types from the backend to actionable messages. */
 function DashboardErrorPanel({ error }: { error: unknown }) {
   if (!(error instanceof ApiError)) {
     return (
@@ -306,10 +328,10 @@ function DashboardErrorPanel({ error }: { error: unknown }) {
   }
   const advice = errorAdvice(error.type);
   return (
-    <div className="rounded-md border border-[hsl(var(--loss))] bg-card/40 p-4 space-y-1.5">
+    <div className="space-y-1.5 rounded-md border border-[hsl(var(--loss))] bg-card/40 p-4">
       <div className="text-sm font-medium text-[hsl(var(--loss))]">{humanType(error.type)}</div>
       <div className="text-sm text-muted-foreground">{error.message}</div>
-      {advice && <div className="text-xs text-muted-foreground italic">{advice}</div>}
+      {advice && <div className="text-xs italic text-muted-foreground">{advice}</div>}
     </div>
   );
 }
