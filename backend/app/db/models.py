@@ -321,6 +321,16 @@ class AccountHolding(Base):
     current_value: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="EUR")
 
+    # ── Gap-fill tracking (ADR-021 Universal Gap-Filler) ──────────────────
+    ter: Mapped[float | None] = mapped_column(Float, default=None)
+    """Resolved TER as a ratio (0.0025 = 0.25%/an). Source tracked separately."""
+    ter_source: Mapped[str | None] = mapped_column(String(16), default=None)
+    """Source of the TER: 'api' | 'llm' | 'user' | None (legacy/unknown)."""
+    ter_resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    isin_source: Mapped[str | None] = mapped_column(String(16), default=None)
+    """Source of the ISIN: 'api' | 'llm' | 'user' | None."""
+    isin_resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
@@ -369,6 +379,13 @@ class BankTransaction(Base):
     transaction_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     description: Mapped[str] = mapped_column(String(512), nullable=False, default="")
     category: Mapped[str | None] = mapped_column(String(64), default=None, index=True)
+
+    # ── Gap-fill tracking (ADR-021 Universal Gap-Filler) ──────────────────
+    category_source: Mapped[str | None] = mapped_column(String(16), default=None)
+    """Source of the category: 'api' | 'llm' | 'user' | None (legacy/unknown)."""
+    category_resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
