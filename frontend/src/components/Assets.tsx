@@ -28,15 +28,15 @@ export function Assets({ assets }: Props) {
           <TableHeader>
             <TableRow>
               <TableHead>Ticker</TableHead>
-              <TableHead className="text-right">Cours</TableHead>
+              <TableHead className="hidden text-right md:table-cell">Cours</TableHead>
               <TableHead className="text-right">Poids</TableHead>
               <TableHead className="text-right">Valeur</TableHead>
               <TableHead className="text-right">P/L</TableHead>
-              <TableHead className="text-right">μ</TableHead>
-              <TableHead className="text-right">σ</TableHead>
-              <TableHead className="text-right">CVaR 95 %</TableHead>
-              <TableHead className="text-right">Max DD</TableHead>
-              <TableHead className="text-right">Sharpe</TableHead>
+              <TableHead className="hidden text-right md:table-cell">μ</TableHead>
+              <TableHead className="hidden text-right md:table-cell">σ</TableHead>
+              <TableHead className="hidden text-right md:table-cell">CVaR 95 %</TableHead>
+              <TableHead className="hidden text-right md:table-cell">Max DD</TableHead>
+              <TableHead className="hidden text-right md:table-cell">Sharpe</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -45,7 +45,9 @@ export function Assets({ assets }: Props) {
               return (
                 <TableRow key={a.ticker}>
                   <TableCell className="font-mono font-medium">{a.ticker}</TableCell>
-                  <TableCell className="text-right font-mono tabular">{fmt.eur(a.price)}</TableCell>
+                  <TableCell className="hidden text-right font-mono tabular md:table-cell">
+                    {fmt.eur(a.price)}
+                  </TableCell>
                   <TableCell className="text-right font-mono tabular">
                     {fmt.pct(a.weight)}
                   </TableCell>
