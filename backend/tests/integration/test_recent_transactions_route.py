@@ -29,13 +29,13 @@ async def _register_login_and_get_id(client, email: str, password: str) -> tuple
 
     client.cookies.clear()
     resp = await client.post(
-        "/auth/register",
+        "/api/auth/register",
         json={"email": email, "password": password, "display_name": email.split("@")[0]},
     )
     assert resp.status_code in (200, 201)
 
     resp = await client.post(
-        "/auth/login",
+        "/api/auth/login",
         data={"username": email, "password": password},
     )
     assert resp.status_code == 204
@@ -121,7 +121,7 @@ async def test_recent_transactions_across_accounts_and_ordered(client):
 
         client.cookies.clear()
         resp = await client.get(
-            "/accounts/transactions/recent?limit=10",
+            "/api/accounts/transactions/recent?limit=10",
             cookies={"tangent_auth": cookie},
         )
         assert resp.status_code == 200
@@ -155,7 +155,7 @@ async def test_recent_transactions_respects_limit(client):
 
         client.cookies.clear()
         resp = await client.get(
-            "/accounts/transactions/recent?limit=3",
+            "/api/accounts/transactions/recent?limit=3",
             cookies={"tangent_auth": cookie},
         )
         assert resp.status_code == 200
@@ -184,7 +184,7 @@ async def test_recent_transactions_multi_tenant_isolation(client):
         # Bob fetches: should see only their own
         client.cookies.clear()
         resp = await client.get(
-            "/accounts/transactions/recent?limit=10",
+            "/api/accounts/transactions/recent?limit=10",
             cookies={"tangent_auth": cookie_b},
         )
         assert resp.status_code == 200
