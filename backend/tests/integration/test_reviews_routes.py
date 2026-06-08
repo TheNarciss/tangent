@@ -15,14 +15,14 @@ from app.repositories import reviews as reviews_repo
 
 
 async def _register(client, email, password):
-    resp = await client.post("/auth/register", json={"email": email, "password": password})
+    resp = await client.post("/api/auth/register", json={"email": email, "password": password})
     assert resp.status_code in (200, 201), resp.text
     return uuid.UUID(resp.json()["id"])
 
 
 async def _login(client, email, password):
     resp = await client.post(
-        "/auth/login",
+        "/api/auth/login",
         data={"username": email, "password": password},
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
@@ -51,19 +51,19 @@ async def _cleanup_far_future(request):
 
 @pytest.mark.integration
 async def test_generate_review_requires_auth(client):
-    resp = await client.post("/reviews/generate")
+    resp = await client.post("/api/reviews/generate")
     assert resp.status_code == 401
 
 
 @pytest.mark.integration
 async def test_today_requires_auth(client):
-    resp = await client.get("/reviews/today")
+    resp = await client.get("/api/reviews/today")
     assert resp.status_code == 401
 
 
 @pytest.mark.integration
 async def test_list_requires_auth(client):
-    resp = await client.get("/reviews")
+    resp = await client.get("/api/reviews")
     assert resp.status_code == 401
 
 
@@ -84,7 +84,7 @@ async def test_generate_returns_403_for_non_superuser(client):
     email = f"reg-{run_id}@test.com"
     await _register(client, email, "TestPwd123!")
     await _login(client, email, "TestPwd123!")
-    resp = await client.post("/reviews/generate")
+    resp = await client.post("/api/reviews/generate")
     assert resp.status_code == 403
 
 
@@ -95,7 +95,7 @@ async def test_today_returns_null_when_no_review(client):
     await _register(client, email, "TestPwd123!")
     await _login(client, email, "TestPwd123!")
 
-    resp = await client.get("/reviews/today")
+    resp = await client.get("/api/reviews/today")
     assert resp.status_code == 200
     assert resp.json() is None
 
@@ -125,7 +125,7 @@ async def test_today_returns_existing_review(client, monkeypatch):
             wealth_snapshot={},
         )
 
-    resp = await client.get("/reviews/today")
+    resp = await client.get("/api/reviews/today")
     assert resp.status_code == 200
     body = resp.json()
     assert body is not None
@@ -162,7 +162,7 @@ async def test_list_returns_only_user_own_reviews(client, monkeypatch):
             )
 
     await _login(client, email_a, "TestPwd123!")
-    resp = await client.get("/reviews")
+    resp = await client.get("/api/reviews")
     assert resp.status_code == 200
     body = resp.json()
     assert len(body) == 1

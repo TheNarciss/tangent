@@ -122,8 +122,8 @@ async def oauth_callback_to_redirect(request: Request, call_next):
     response = await call_next(request)
 
     if request.url.path not in {
-        "/auth/google/callback",
-        "/auth/associate/google/callback",
+        "/api/auth/google/callback",
+        "/api/auth/associate/google/callback",
     }:
         return response
 
@@ -212,7 +212,7 @@ async def log_requests(request: Request, call_next):
 
 
 # ─── Health check ─────────────────────────────────────────────────────────
-@app.get("/health", tags=["health"])
+@app.get("/api/health", tags=["health"])
 async def health():
     """Health endpoint — checked by Docker."""
     db_ok = await db_ping()
@@ -220,25 +220,25 @@ async def health():
 
 
 # ─── Auth routes (FastAPI-Users) ──────────────────────────────────────────
-app.include_router(fastapi_users.get_auth_router(auth_backend), prefix="/auth", tags=["auth"])
+app.include_router(fastapi_users.get_auth_router(auth_backend), prefix="/api/auth", tags=["auth"])
 app.include_router(
-    fastapi_users.get_register_router(UserRead, UserCreate), prefix="/auth", tags=["auth"]
+    fastapi_users.get_register_router(UserRead, UserCreate), prefix="/api/auth", tags=["auth"]
 )
-app.include_router(fastapi_users.get_reset_password_router(), prefix="/auth", tags=["auth"])
+app.include_router(fastapi_users.get_reset_password_router(), prefix="/api/auth", tags=["auth"])
 app.include_router(
-    fastapi_users.get_users_router(UserRead, UserUpdate), prefix="/users", tags=["users"]
+    fastapi_users.get_users_router(UserRead, UserUpdate), prefix="/api/users", tags=["users"]
 )
 
 # ─── OAuth routes (Google, cf ADR-014) ────────────────────────────────────
 if is_oauth_configured():
     app.include_router(
         build_google_login_router(),
-        prefix="/auth/google",
+        prefix="/api/auth/google",
         tags=["auth"],
     )
     app.include_router(
         build_google_associate_router(),
-        prefix="/auth/associate/google",
+        prefix="/api/auth/associate/google",
         tags=["auth"],
     )
     logger.info("OAuth Google routers mounted (ADR-014)")
@@ -251,20 +251,20 @@ else:
 
 
 # ─── Business routers (all require auth via current_active_user) ──────────
-app.include_router(accounts.router)
-app.include_router(password_reset.router)
-app.include_router(dashboard.router)
-app.include_router(analysis.router)
-app.include_router(planning.router)
-app.include_router(watchlist.router)
-app.include_router(envelopes.router)
-app.include_router(powens.router)
-app.include_router(admin.router)
-app.include_router(profile.router)
-app.include_router(account.router)
-app.include_router(terms.router)
-app.include_router(oauth_accounts.router)
-app.include_router(reviews.router)
+app.include_router(accounts.router, prefix="/api")
+app.include_router(password_reset.router, prefix="/api")
+app.include_router(dashboard.router, prefix="/api")
+app.include_router(analysis.router, prefix="/api")
+app.include_router(planning.router, prefix="/api")
+app.include_router(watchlist.router, prefix="/api")
+app.include_router(envelopes.router, prefix="/api")
+app.include_router(powens.router)  # ADR-020 exception: Powens sandbox = single redirect URI
+app.include_router(admin.router, prefix="/api")
+app.include_router(profile.router, prefix="/api")
+app.include_router(account.router, prefix="/api")
+app.include_router(terms.router, prefix="/api")
+app.include_router(oauth_accounts.router, prefix="/api")
+app.include_router(reviews.router, prefix="/api")
 
 
 # ─── Exception handlers ───────────────────────────────────────────────────

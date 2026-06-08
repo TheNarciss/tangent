@@ -19,7 +19,7 @@ import pytest
 @pytest.mark.integration
 async def test_google_authorize_returns_url(client):
     """L'endpoint /authorize doit renvoyer une URL Google valide."""
-    resp = await client.get("/auth/google/authorize")
+    resp = await client.get("/api/auth/google/authorize")
     assert resp.status_code == 200
     body = resp.json()
     assert "authorization_url" in body
@@ -33,8 +33,8 @@ async def test_google_authorize_returns_url(client):
 async def test_google_associate_authorize_requires_auth(client):
     """L'associate /authorize doit refuser les requêtes non authentifiées."""
     # S'assurer qu'on n'a pas de cookie d'une session précédente
-    await client.post("/auth/logout")
-    resp = await client.get("/auth/associate/google/authorize")
+    await client.post("/api/auth/logout")
+    resp = await client.get("/api/auth/associate/google/authorize")
     assert resp.status_code == 401
 
 
@@ -47,13 +47,13 @@ async def test_existing_password_user_can_still_login(client):
     password = "legacy-password-12345"
 
     reg = await client.post(
-        "/auth/register",
+        "/api/auth/register",
         json={"email": email, "password": password},
     )
     assert reg.status_code in (201, 200), reg.text
 
     login = await client.post(
-        "/auth/login",
+        "/api/auth/login",
         data={"username": email, "password": password},
     )
     assert login.status_code in (200, 204), login.text
@@ -66,10 +66,10 @@ async def test_oauth_accounts_list_empty_for_new_user(client):
     email = f"oauth-list-{suffix}@example.com"
     password = "test-password-12345"
 
-    await client.post("/auth/register", json={"email": email, "password": password})
-    await client.post("/auth/login", data={"username": email, "password": password})
+    await client.post("/api/auth/register", json={"email": email, "password": password})
+    await client.post("/api/auth/login", data={"username": email, "password": password})
 
-    resp = await client.get("/users/me/oauth-accounts")
+    resp = await client.get("/api/users/me/oauth-accounts")
     assert resp.status_code == 200
     assert resp.json() == []
 
@@ -77,8 +77,8 @@ async def test_oauth_accounts_list_empty_for_new_user(client):
 @pytest.mark.integration
 async def test_oauth_accounts_list_requires_auth(client):
     """L'endpoint oauth-accounts est protégé."""
-    await client.post("/auth/logout")
-    resp = await client.get("/users/me/oauth-accounts")
+    await client.post("/api/auth/logout")
+    resp = await client.get("/api/users/me/oauth-accounts")
     assert resp.status_code == 401
 
 
@@ -148,21 +148,21 @@ async def test_oauth_accounts_isolated_between_users(client):
     pwd = "test-password-12345"
 
     # Crée user A et user B
-    await client.post("/auth/register", json={"email": email_a, "password": pwd})
-    await client.post("/auth/register", json={"email": email_b, "password": pwd})
+    await client.post("/api/auth/register", json={"email": email_a, "password": pwd})
+    await client.post("/api/auth/register", json={"email": email_b, "password": pwd})
 
     # Login user A — il ne doit voir aucun oauth_account (le sien comme celui de B)
-    await client.post("/auth/login", data={"username": email_a, "password": pwd})
-    resp_a = await client.get("/users/me/oauth-accounts")
+    await client.post("/api/auth/login", data={"username": email_a, "password": pwd})
+    resp_a = await client.get("/api/users/me/oauth-accounts")
     assert resp_a.status_code == 200
     accounts_a = resp_a.json()
     # User A n'a pas linké Google → liste vide
     assert accounts_a == [], f"User A devrait avoir 0 oauth_account, a {accounts_a}"
 
     # Switch vers user B
-    await client.post("/auth/logout")
-    await client.post("/auth/login", data={"username": email_b, "password": pwd})
-    resp_b = await client.get("/users/me/oauth-accounts")
+    await client.post("/api/auth/logout")
+    await client.post("/api/auth/login", data={"username": email_b, "password": pwd})
+    resp_b = await client.get("/api/users/me/oauth-accounts")
     assert resp_b.status_code == 200
     accounts_b = resp_b.json()
     assert accounts_b == [], f"User B devrait avoir 0 oauth_account, a {accounts_b}"
@@ -173,5 +173,5 @@ async def test_oauth_accounts_isolated_between_users(client):
     import uuid
 
     fake_id = uuid.uuid4()
-    resp_delete = await client.delete(f"/users/me/oauth-accounts/{fake_id}")
+    resp_delete = await client.delete(f"/api/users/me/oauth-accounts/{fake_id}")
     assert resp_delete.status_code == 404

@@ -10,8 +10,8 @@ from app.auth.terms_version import CURRENT_TERMS_VERSION
 @pytest.mark.integration
 async def test_terms_version_endpoint_is_public(client):
     """GET /auth/terms-version doit fonctionner sans auth."""
-    await client.post("/auth/logout")
-    resp = await client.get("/auth/terms-version")
+    await client.post("/api/auth/logout")
+    resp = await client.get("/api/auth/terms-version")
     assert resp.status_code == 200
     body = resp.json()
     assert body["version"] == CURRENT_TERMS_VERSION
@@ -24,10 +24,10 @@ async def test_new_user_has_no_terms_accepted(client):
     email = f"new-terms-{suffix}@example.com"
     pwd = "test-password-12345"
 
-    await client.post("/auth/register", json={"email": email, "password": pwd})
-    await client.post("/auth/login", data={"username": email, "password": pwd})
+    await client.post("/api/auth/register", json={"email": email, "password": pwd})
+    await client.post("/api/auth/login", data={"username": email, "password": pwd})
 
-    me = await client.get("/users/me")
+    me = await client.get("/api/users/me")
     assert me.status_code == 200
     data = me.json()
     assert data.get("terms_version_accepted") is None
@@ -41,11 +41,11 @@ async def test_accept_terms_sets_version_and_date(client):
     email = f"accept-{suffix}@example.com"
     pwd = "test-password-12345"
 
-    await client.post("/auth/register", json={"email": email, "password": pwd})
-    await client.post("/auth/login", data={"username": email, "password": pwd})
+    await client.post("/api/auth/register", json={"email": email, "password": pwd})
+    await client.post("/api/auth/login", data={"username": email, "password": pwd})
 
     resp = await client.post(
-        "/users/me/accept-terms",
+        "/api/users/me/accept-terms",
         json={"version": CURRENT_TERMS_VERSION},
     )
     assert resp.status_code == 200
@@ -54,7 +54,7 @@ async def test_accept_terms_sets_version_and_date(client):
     assert body["accepted_at"] is not None
 
     # Vérifie persistance via /users/me
-    me = await client.get("/users/me")
+    me = await client.get("/api/users/me")
     assert me.json()["terms_version_accepted"] == CURRENT_TERMS_VERSION
 
 
@@ -65,11 +65,11 @@ async def test_accept_wrong_version_returns_409(client):
     email = f"wrongver-{suffix}@example.com"
     pwd = "test-password-12345"
 
-    await client.post("/auth/register", json={"email": email, "password": pwd})
-    await client.post("/auth/login", data={"username": email, "password": pwd})
+    await client.post("/api/auth/register", json={"email": email, "password": pwd})
+    await client.post("/api/auth/login", data={"username": email, "password": pwd})
 
     resp = await client.post(
-        "/users/me/accept-terms",
+        "/api/users/me/accept-terms",
         json={"version": "1999-01-01"},
     )
     assert resp.status_code == 409
@@ -78,9 +78,9 @@ async def test_accept_wrong_version_returns_409(client):
 @pytest.mark.integration
 async def test_accept_terms_requires_auth(client):
     """POST /users/me/accept-terms sans cookie → 401."""
-    await client.post("/auth/logout")
+    await client.post("/api/auth/logout")
     resp = await client.post(
-        "/users/me/accept-terms",
+        "/api/users/me/accept-terms",
         json={"version": CURRENT_TERMS_VERSION},
     )
     assert resp.status_code == 401
@@ -95,18 +95,18 @@ async def test_terms_acceptance_isolated_between_users(client):
     email_b = f"iso-b-{suffix_b}@example.com"
     pwd = "test-password-12345"
 
-    await client.post("/auth/register", json={"email": email_a, "password": pwd})
-    await client.post("/auth/register", json={"email": email_b, "password": pwd})
+    await client.post("/api/auth/register", json={"email": email_a, "password": pwd})
+    await client.post("/api/auth/register", json={"email": email_b, "password": pwd})
 
     # User A accepte
-    await client.post("/auth/login", data={"username": email_a, "password": pwd})
+    await client.post("/api/auth/login", data={"username": email_a, "password": pwd})
     await client.post(
-        "/users/me/accept-terms",
+        "/api/users/me/accept-terms",
         json={"version": CURRENT_TERMS_VERSION},
     )
 
     # User B regarde son état — ne doit PAS être impacté
-    await client.post("/auth/logout")
-    await client.post("/auth/login", data={"username": email_b, "password": pwd})
-    me_b = await client.get("/users/me")
+    await client.post("/api/auth/logout")
+    await client.post("/api/auth/login", data={"username": email_b, "password": pwd})
+    me_b = await client.get("/api/users/me")
     assert me_b.json()["terms_version_accepted"] is None

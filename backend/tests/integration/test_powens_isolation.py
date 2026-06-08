@@ -20,13 +20,13 @@ async def _register_and_login(client, email: str, password: str) -> str:
     client.cookies.clear()  # avoid stale cookies from previous logins
 
     resp = await client.post(
-        "/auth/register",
+        "/api/auth/register",
         json={"email": email, "password": password, "display_name": email.split("@")[0]},
     )
     assert resp.status_code in (200, 201), f"Register failed: {resp.text}"
 
     resp = await client.post(
-        "/auth/login",
+        "/api/auth/login",
         data={"username": email, "password": password},
     )
     assert resp.status_code == 204, f"Login failed: {resp.text}"
@@ -94,7 +94,7 @@ async def test_sync_status_isolation_between_users(client):
     try:
         # ── User A sees only their state ───────────────────────────────────
         client.cookies.clear()
-        resp_a = await client.get("/sync/status", cookies={"tangent_auth": token_a})
+        resp_a = await client.get("/api/sync/status", cookies={"tangent_auth": token_a})
         assert resp_a.status_code == 200, f"User A /sync/status: {resp_a.text}"
         data_a = resp_a.json()
         assert data_a["user_connected"] is True
@@ -106,7 +106,7 @@ async def test_sync_status_isolation_between_users(client):
 
         # ── User B sees only their state ───────────────────────────────────
         client.cookies.clear()
-        resp_b = await client.get("/sync/status", cookies={"tangent_auth": token_b})
+        resp_b = await client.get("/api/sync/status", cookies={"tangent_auth": token_b})
         assert resp_b.status_code == 200, f"User B /sync/status: {resp_b.text}"
         data_b = resp_b.json()
         assert data_b["user_connected"] is True
@@ -131,5 +131,5 @@ async def test_sync_status_isolation_between_users(client):
 async def test_unauthenticated_sync_status_returns_401(client):
     """Sanity check: /sync/status without auth must be 401, not leak data."""
     client.cookies.clear()
-    resp = await client.get("/sync/status")
+    resp = await client.get("/api/sync/status")
     assert resp.status_code == 401

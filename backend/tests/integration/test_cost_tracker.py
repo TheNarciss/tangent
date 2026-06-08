@@ -27,7 +27,6 @@ from app.db.engine import async_session_factory
 from app.db.models import LLMDailyCost
 from app.llm import cost_tracker
 
-
 # -- Pure math --------------------------------------------------------------
 
 

@@ -13,7 +13,7 @@ RUN --mount=type=cache,target=/root/.npm \
 
 # Build the bundle
 COPY frontend/ ./
-ENV VITE_API_URL=https://riskybusinesses.uk
+ENV VITE_API_URL=https://riskybusinesses.uk/api
 RUN npm run build
 # → /app/dist contains the production bundle (index.html + hashed assets)
 
