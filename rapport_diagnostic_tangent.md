@@ -80,7 +80,7 @@ Cependant, plusieurs points bloquants empêchent d’atteindre une « perfection
 ### 8) Dette frontend dans `api.ts` (duplication de types + commentaire de remplacement laissé)
 - **Preuves**:
   - `frontend/src/api.ts:629` (commentaire “Replace the existing ...”)
-  - `frontend/src/api.ts:699` et `frontend/src/api.ts:827` (`BankAccountResponse` défini 2 fois)
+  - `frontend/src/api.ts:699` et `frontend/src/api.ts:827` (`BankAccountResponse` définie 2 fois)
 - Impact: maintenance fragile, risque d’incohérences silencieuses via fusion d’interfaces TypeScript.
 - Recommandation:
   - Nettoyer les doublons et ne garder qu’une définition canonique par type.
