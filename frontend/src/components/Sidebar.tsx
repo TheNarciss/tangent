@@ -1,16 +1,8 @@
-import { Clock, LayoutGrid, Sparkles, Target, TrendingUp, Wallet, X } from "lucide-react";
+import { Sparkles, Target, TrendingUp, Wallet, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-export type NavView =
-  | "ai"
-  | "overview"
-  | "accounts"
-  | "history"
-  | "projection"
-  | "optimization"
-  | "profile"
-  | "settings";
+export type NavView = "ai" | "accounts" | "projection" | "optimization" | "profile" | "settings";
 
 interface NavItem {
   view: NavView;
@@ -20,9 +12,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { view: "ai", label: "IA", icon: Sparkles },
-  { view: "overview", label: "Aperçu", icon: LayoutGrid },
   { view: "accounts", label: "Comptes", icon: Wallet },
-  { view: "history", label: "Historique", icon: Clock },
   { view: "projection", label: "Projection", icon: TrendingUp },
   { view: "optimization", label: "Optimisation", icon: Target },
 ];
