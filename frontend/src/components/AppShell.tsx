@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from "react";
-import { Menu } from "lucide-react";
 
 import { Sidebar, type NavView } from "./Sidebar";
+import { BottomNav } from "./BottomNav";
+import { MoreSheet } from "./MoreSheet";
 
 interface AppShellProps {
   currentView: NavView;
@@ -32,30 +33,14 @@ export function AppShell({
   sidebarFooter,
   children,
 }: AppShellProps) {
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
-      <Sidebar
-        currentView={currentView}
-        onViewChange={onViewChange}
-        footer={sidebarFooter}
-        isMobileOpen={mobileOpen}
-        onMobileClose={() => setMobileOpen(false)}
-      />
+      <Sidebar currentView={currentView} onViewChange={onViewChange} footer={sidebarFooter} />
 
       <div className="flex flex-1 flex-col overflow-hidden">
         <header className="flex items-center gap-3 border-b border-border bg-background px-4 py-3 md:gap-4 md:px-8 md:py-4">
-          {/* Hamburger — mobile only */}
-          <button
-            type="button"
-            aria-label="Ouvrir le menu"
-            onClick={() => setMobileOpen(true)}
-            className="-ml-1 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground md:hidden"
-          >
-            <Menu className="h-5 w-5" />
-          </button>
-
           {/* Title block — grows to fill */}
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-base font-semibold tracking-tight md:text-xl">
@@ -74,8 +59,19 @@ export function AppShell({
           )}
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">{children}</main>
+        <main className="flex-1 overflow-y-auto p-4 pb-20 md:p-6 md:pb-6 lg:p-8 lg:pb-8">
+          {children}
+        </main>
       </div>
+
+      <BottomNav
+        currentView={currentView}
+        onViewChange={onViewChange}
+        onOpenMore={() => setMoreOpen(true)}
+        isMoreOpen={moreOpen}
+      />
+
+      <MoreSheet open={moreOpen} onOpenChange={setMoreOpen} onNavigate={onViewChange} />
     </div>
   );
 }
