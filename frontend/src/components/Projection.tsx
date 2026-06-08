@@ -89,6 +89,14 @@ export function Projection() {
             allowEmpty
           />
           <BrokerField value={broker} onChange={setBroker} brokers={brokers.data} />
+          {q.data?.weighted_ter !== undefined && q.data.weighted_ter > 0 && (
+            <span
+              title="Total Expense Ratio pondéré, appliqué comme frais mensuels sur la projection"
+              className="ml-2 inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400"
+            >
+              Net de frais ETF · {(q.data.weighted_ter * 100).toFixed(2)} %/an
+            </span>
+          )}
         </div>
 
         {q.isLoading && <p className="text-sm text-muted-foreground">Calcul…</p>}

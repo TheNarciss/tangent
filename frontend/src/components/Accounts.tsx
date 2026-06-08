@@ -15,6 +15,7 @@ import {
   useBankAccounts,
   useAccountHoldings,
   useAccountTransactions,
+  useUpdateHoldingTer,
   useRefreshBankAccounts,
   type BankAccountResponse,
   type BankAccountType,
@@ -32,6 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { DataField } from "@/components/ui/data-field";
 
 /* ── Categories & labels ──────────────────────────────────────────────────── */
 
@@ -707,9 +709,15 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 function HoldingsInline({ accountId }: { accountId: string }) {
   const holdings = useAccountHoldings(accountId);
+  const updateTer = useUpdateHoldingTer(accountId);
+
   if (holdings.isLoading) return <p className="p-4 text-sm text-muted-foreground">Chargement…</p>;
   if (!holdings.data || holdings.data.length === 0)
     return <p className="p-4 text-sm text-muted-foreground">Aucune position.</p>;
+
+  const formatTer = (v: number | string) =>
+    typeof v === "number" ? (v * 100).toFixed(2) + " %" : String(v);
+
   return (
     <div className="p-2">
       <Table>
@@ -720,6 +728,7 @@ function HoldingsInline({ accountId }: { accountId: string }) {
             <TableHead className="text-right">Quantité</TableHead>
             <TableHead className="text-right">PRU</TableHead>
             <TableHead className="text-right">Valorisation</TableHead>
+            <TableHead className="text-right">TER</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -733,6 +742,19 @@ function HoldingsInline({ accountId }: { accountId: string }) {
               </TableCell>
               <TableCell className="text-right font-mono tabular">
                 {fmt.eur(h.current_value)}
+              </TableCell>
+              <TableCell className="text-right">
+                <DataField
+                  value={h.ter}
+                  source={h.ter_source}
+                  formatValue={formatTer}
+                  editable
+                  inputStep="0.0001"
+                  inputMin="0"
+                  inputMax="0.02"
+                  validate={(v) => v >= 0 && v <= 0.02}
+                  onEdit={(ter) => updateTer.mutate({ holdingId: h.id, ter })}
+                />
               </TableCell>
             </TableRow>
           ))}
