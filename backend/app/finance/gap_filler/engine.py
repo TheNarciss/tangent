@@ -136,13 +136,25 @@ def build_gap_fill_requests(gaps: Sequence[Gap]) -> list[Request]:
         row = gap.context["row"]
         user_prompt = gf.build_prompt(row)
 
-        tool: dict[str, Any] = {
+        resolve_tool: dict[str, Any] = {
             "name": gf.tool_name,
             "description": gf.response_schema.get(
                 "description", f"Resolve {gf.name} for this row."
             ),
             "input_schema": gf.response_schema,
         }
+
+        # Conditionally include web_search for fields that need sourcing
+        # from official documents (e.g. ETF KIDs, factsheets).
+        tools_list: list[dict[str, Any]] = [resolve_tool]
+        if gf.requires_web_search:
+            tools_list.append(
+                {
+                    "type": "web_search_20250305",
+                    "name": "web_search",
+                    "max_uses": 2,
+                }
+            )
 
         params = MessageCreateParamsNonStreaming(
             model=anthropic_client.MODEL,
@@ -155,8 +167,10 @@ def build_gap_fill_requests(gaps: Sequence[Gap]) -> list[Request]:
                 "que d'inventer."
             ),
             messages=[{"role": "user", "content": user_prompt}],
-            tools=[tool],  # type: ignore[list-item]
-            tool_choice={"type": "tool", "name": gf.tool_name},  # force this tool
+            tools=tools_list,  # type: ignore[arg-type]
+            tool_choice={"type": "any"}
+            if gf.requires_web_search
+            else {"type": "tool", "name": gf.tool_name},
         )
 
         requests.append(

@@ -23,9 +23,13 @@ On a une position dans un compte titres avec ISIN manquant:
 - Currency: {currency}
 
 Trouve l'ISIN officiel de ce produit (12 caractères, format
-[A-Z]{{2}}[A-Z0-9]{{9}}[0-9]). Tu peux utiliser web_search.
+[A-Z]{{2}}[A-Z0-9]{{9}}[0-9]). Utilise **impérativement** web_search
+pour vérifier sur une source publique (boursorama, justetf, isin.org,
+site officiel de l'émetteur).
 
-Si tu n'es pas SÛR à 100%, appelle resolve_isin avec isin=null.
+Ne te fie pas à ta mémoire — les ISINs sont déterministes et la source
+publique fait foi. Si tu n'es pas SÛR à 100% après vérification,
+appelle resolve_isin avec isin=null.
 """
 
 
@@ -72,5 +76,6 @@ FIELD_ISIN = register_field(
         response_schema=RESPONSE_SCHEMA_ISIN,
         tool_name="resolve_isin",
         validate_value=validate_isin,
+        requires_web_search=True,
     )
 )

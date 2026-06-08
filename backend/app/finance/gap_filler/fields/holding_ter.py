@@ -21,9 +21,13 @@ On a une position ETF dans un compte titres français avec ces infos:
 - Label: {label}
 - Currency: {currency}
 
-Trouve le TER (Total Expense Ratio) ANNUEL de ce produit. Si possible,
-vérifie la valeur sur le KID (Document d'Information Clé) ou la factsheet
-officielle de l'émetteur. Tu peux utiliser web_search.
+Trouve le TER (Total Expense Ratio) ANNUEL de ce produit. Utilise
+**impérativement** web_search pour vérifier la valeur sur le KID
+(Document d'Information Clé) ou la factsheet officielle de l'émetteur
+(Amundi, iShares, Lyxor, BNP, Xtrackers, Invesco, etc.).
+
+Ne te fie pas à ta mémoire — les TER changent dans le temps et la
+source officielle prime. Cite l'URL dans source_url.
 
 IMPORTANT — Format de la réponse:
 - Le TER doit être retourné comme un RATIO, pas un pourcentage:
@@ -98,5 +102,6 @@ FIELD_TER = register_field(
         tool_name="resolve_ter",
         validate_value=validate_ter,
         coerce_value=coerce_ter,
+        requires_web_search=True,
     )
 )
