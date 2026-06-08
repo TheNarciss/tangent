@@ -1,4 +1,14 @@
-import { Clock, LayoutGrid, Sparkles, Target, TrendingUp, Wallet, X } from "lucide-react";
+import {
+  ChevronsLeft,
+  ChevronsRight,
+  Clock,
+  LayoutGrid,
+  Sparkles,
+  Target,
+  TrendingUp,
+  Wallet,
+  X,
+} from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -30,12 +40,13 @@ const NAV_ITEMS: NavItem[] = [
 interface SidebarProps {
   currentView: NavView;
   onViewChange: (v: NavView) => void;
-  /** Renders below the nav (typically a UserMenu). */
   footer?: React.ReactNode;
-  /** Drawer state on mobile (md:hidden). Desktop always-visible. */
+  /** Drawer state on mobile. */
   isMobileOpen?: boolean;
-  /** Called when the user taps the overlay or close button on mobile. */
   onMobileClose?: () => void;
+  /** Collapsed state on desktop (icons only, narrow). */
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 export function Sidebar({
@@ -44,10 +55,12 @@ export function Sidebar({
   footer,
   isMobileOpen = false,
   onMobileClose,
+  isCollapsed = false,
+  onToggleCollapse,
 }: SidebarProps) {
   const handleNavClick = (v: NavView) => {
     onViewChange(v);
-    onMobileClose?.(); // auto-close drawer on mobile after nav
+    onMobileClose?.();
   };
 
   return (
@@ -62,17 +75,26 @@ export function Sidebar({
         />
       )}
 
-      {/* Sidebar — fixed drawer on mobile, static column on desktop */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 flex w-60 transform flex-col border-r border-border bg-card transition-transform duration-200 ease-out",
+          "fixed inset-y-0 left-0 z-40 flex transform flex-col border-r border-border bg-card transition-[width,transform] duration-200 ease-out",
+          // Width depends on collapsed state (desktop) — drawer always opens at full width on mobile
+          isCollapsed ? "w-14 md:w-14" : "w-56 md:w-56",
+          // Mobile : always full width when open
+          isMobileOpen ? "w-56 translate-x-0" : "-translate-x-full",
+          // Desktop : static layout, always translated to 0
           "md:static md:translate-x-0",
-          isMobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
         )}
       >
-        {/* Logo + mobile close button */}
-        <div className="flex items-center justify-between border-b border-border px-6 py-5">
-          <span className="text-lg font-semibold tracking-tight">Tangent</span>
+        {/* Logo + close button (mobile) / collapse toggle (desktop) */}
+        <div
+          className={cn(
+            "flex items-center border-b border-border",
+            isCollapsed ? "justify-center px-2 py-3" : "justify-between px-4 py-3",
+          )}
+        >
+          {!isCollapsed && <span className="text-base font-semibold tracking-tight">Tangent</span>}
+          {/* Mobile close button */}
           {onMobileClose && (
             <button
               type="button"
@@ -80,13 +102,29 @@ export function Sidebar({
               onClick={onMobileClose}
               className="md:hidden"
             >
-              <X className="h-5 w-5 text-muted-foreground hover:text-foreground" />
+              <X className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+            </button>
+          )}
+          {/* Desktop collapse toggle */}
+          {onToggleCollapse && (
+            <button
+              type="button"
+              aria-label={isCollapsed ? "Déplier le menu" : "Replier le menu"}
+              onClick={onToggleCollapse}
+              className="hidden text-muted-foreground hover:text-foreground md:block"
+              title={isCollapsed ? "Déplier" : "Replier"}
+            >
+              {isCollapsed ? (
+                <ChevronsRight className="h-4 w-4" />
+              ) : (
+                <ChevronsLeft className="h-4 w-4" />
+              )}
             </button>
           )}
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+        <nav className="flex-1 space-y-0.5 overflow-y-auto p-2">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const active = currentView === item.view;
@@ -95,22 +133,26 @@ export function Sidebar({
                 key={item.view}
                 type="button"
                 onClick={() => handleNavClick(item.view)}
+                title={isCollapsed ? item.label : undefined}
                 className={cn(
-                  "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                  "flex w-full items-center gap-2.5 rounded-md text-sm transition-colors",
+                  isCollapsed ? "justify-center p-2" : "px-2.5 py-1.5",
                   active
                     ? "bg-accent font-medium text-accent-foreground"
                     : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
                 )}
               >
-                <Icon className="h-4 w-4" />
-                {item.label}
+                <Icon className="h-4 w-4 flex-shrink-0" />
+                {!isCollapsed && <span className="truncate">{item.label}</span>}
               </button>
             );
           })}
         </nav>
 
-        {/* Footer (user menu, etc.) */}
-        {footer && <div className="border-t border-border px-3 py-3">{footer}</div>}
+        {/* Footer */}
+        {footer && (
+          <div className={cn("border-t border-border", isCollapsed ? "p-2" : "p-2")}>{footer}</div>
+        )}
       </aside>
     </>
   );
