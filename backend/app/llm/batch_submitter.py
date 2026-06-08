@@ -33,6 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..auth import User
 from ..db.models import ReviewBatch
 from ..deps import get_user_wealth
+from ..finance.gap_filler import engine as gap_filler_engine
 from ..repositories import profile as profile_repo
 from ..repositories import review_batches as batches_repo
 from . import anthropic_client, cost_tracker
@@ -47,6 +48,24 @@ _ESTIMATED_INPUT_TOKENS_PER_REVIEW = 16_000
 _ESTIMATED_OUTPUT_TOKENS_PER_REVIEW = 3_000
 _ESTIMATED_WEB_SEARCHES_PER_REVIEW = 4
 _BATCH_DISCOUNT = 0.5
+
+
+def estimate_cost_per_gap_fill() -> float:
+    """Estimate one gap-fill request's batched cost in USD (conservative).
+
+    Typical gap-fill request: ~250 input tokens (compact context + tool schema),
+    ~100 output tokens (tool_use structured response). Most TER/ISIN resolutions
+    will trigger a web_search (which is NOT discounted by the batch API).
+
+    Conservatively assumes 1 web_search per request. Real cost is recorded by
+    the poller from each message's actual usage. ADR-021.
+    """
+    api_cost = cost_tracker.compute_cost_usd(
+        input_tokens=250,
+        output_tokens=100,
+        web_searches=1,
+    )
+    return api_cost * _BATCH_DISCOUNT
 
 
 def estimate_cost_per_review() -> float:
@@ -146,6 +165,25 @@ async def submit_nightly_batch(session: AsyncSession) -> ReviewBatch | None:
             )
             skipped.append(user_id)
 
+    n_reviews = len(requests)
+
+    # ── 3.5. Collect gap-fill requests (ADR-021 Universal Gap-Filler) ──────
+    try:
+        gaps = await gap_filler_engine.collect_gaps(session)
+        gap_requests = gap_filler_engine.build_gap_fill_requests(gaps)
+        requests.extend(gap_requests)
+        logger.info(
+            "Gap-fill collected: %d gaps across %d field type(s)",
+            len(gap_requests),
+            len({g.field.name for g in gaps}),
+        )
+    except Exception:
+        # Gap-fill must NEVER break the review pipeline. Log and skip.
+        logger.exception("Gap-fill collection failed — submitting reviews only")
+        gap_requests = []
+
+    n_gap_fills = len(gap_requests)
+
     if not requests:
         logger.warning("No valid requests built — aborting batch submit")
         return None
@@ -162,9 +200,11 @@ async def submit_nightly_batch(session: AsyncSession) -> ReviewBatch | None:
     client = anthropic_client.get_client()
     anthropic_batch = await _create_batch_with_retry(client, requests)
     logger.info(
-        "Anthropic batch submitted: anthropic_id=%s n_requests=%d",
+        "Anthropic batch submitted: anthropic_id=%s n_requests=%d (%d reviews + %d gap-fills)",
         anthropic_batch.id,
         len(requests),
+        n_reviews,
+        n_gap_fills,
     )
 
     # 5. Persist
@@ -173,6 +213,8 @@ async def submit_nightly_batch(session: AsyncSession) -> ReviewBatch | None:
         anthropic_batch_id=anthropic_batch.id,
         status="in_progress",
         n_requests=len(requests),
-        estimated_cost_usd=len(requests) * estimate_cost_per_review(),
+        estimated_cost_usd=(
+            n_reviews * estimate_cost_per_review() + n_gap_fills * estimate_cost_per_gap_fill()
+        ),
     )
     return batch
