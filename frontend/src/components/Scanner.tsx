@@ -150,12 +150,12 @@ function ScanResults({ data, elapsed, universe, onAdd, isAdding }: ResultsProps)
             <TableRow>
               <TableHead>Ticker</TableHead>
               <TableHead>Nom</TableHead>
-              <TableHead>Catégorie</TableHead>
+              <TableHead className="hidden md:table-cell">Catégorie</TableHead>
               <TableHead className="text-right">ΔSharpe</TableHead>
-              <TableHead className="text-right">ρ</TableHead>
-              <TableHead className="text-right">μ</TableHead>
-              <TableHead className="text-right">σ</TableHead>
-              <TableHead className="text-right">Sharpe propre</TableHead>
+              <TableHead className="hidden text-right md:table-cell">ρ</TableHead>
+              <TableHead className="hidden text-right md:table-cell">μ</TableHead>
+              <TableHead className="hidden text-right md:table-cell">σ</TableHead>
+              <TableHead className="hidden text-right md:table-cell">Sharpe propre</TableHead>
               <TableHead></TableHead>
             </TableRow>
           </TableHeader>
@@ -167,20 +167,24 @@ function ScanResults({ data, elapsed, universe, onAdd, isAdding }: ResultsProps)
                   <div>{c.name}</div>
                   <div className="text-xs text-muted-foreground italic">{c.rationale}</div>
                 </TableCell>
-                <TableCell className="text-xs text-muted-foreground">{c.sector}</TableCell>
+                <TableCell className="hidden text-xs text-muted-foreground md:table-cell">
+                  {c.sector}
+                </TableCell>
                 <TableCell className="text-right font-mono tabular text-[hsl(var(--gain))]">
                   {c.delta_sharpe > 0 ? "+" : ""}
                   {c.delta_sharpe.toFixed(3)}
                 </TableCell>
-                <TableCell className="text-right font-mono tabular">
+                <TableCell className="hidden text-right font-mono tabular md:table-cell">
                   {c.correlation_with_portfolio > 0 ? "+" : ""}
                   {c.correlation_with_portfolio.toFixed(2)}
                 </TableCell>
-                <TableCell className="text-right font-mono tabular">{fmt.pct(c.own_mu)}</TableCell>
-                <TableCell className="text-right font-mono tabular">
+                <TableCell className="hidden text-right font-mono tabular md:table-cell">
+                  {fmt.pct(c.own_mu)}
+                </TableCell>
+                <TableCell className="hidden text-right font-mono tabular md:table-cell">
                   {fmt.pct(c.own_sigma)}
                 </TableCell>
-                <TableCell className="text-right font-mono tabular">
+                <TableCell className="hidden text-right font-mono tabular md:table-cell">
                   {c.own_sharpe.toFixed(2)}
                 </TableCell>
                 <TableCell>
