@@ -17,7 +17,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..aggregator import Transaction
-from ..db.models import BankTransaction
+from ..db.models import BankAccount, BankTransaction
 
 logger = logging.getLogger(__name__)
 
@@ -125,3 +125,29 @@ async def update_category(
     )
     result = await session.execute(stmt)
     return result.scalar_one_or_none()
+
+
+async def list_recent_all_accounts(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    *,
+    limit: int = 20,
+) -> list[tuple[BankTransaction, BankAccount]]:
+    """Latest N transactions across ALL bank accounts of the user.
+
+    Joined with BankAccount so the response can include the account name
+    (used by the Dashboard 'Mouvements récents' tile for context).
+    Ordered by transaction_date desc, with id as tiebreaker for stability.
+    """
+    stmt = (
+        select(BankTransaction, BankAccount)
+        .join(BankAccount, BankTransaction.bank_account_id == BankAccount.id)
+        .where(BankTransaction.user_id == user_id)
+        .order_by(
+            BankTransaction.transaction_date.desc(),
+            BankTransaction.id.desc(),
+        )
+        .limit(limit)
+    )
+    res = await session.execute(stmt)
+    return [(tx, acc) for tx, acc in res.all()]
