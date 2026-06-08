@@ -107,6 +107,7 @@ export interface ProjectionResponse {
   gross_p50: number[]; // P50 without fees, for comparison
   cumulative_fees: number[]; // €, per-month cumulative
   multi_broker_warning?: string | null;
+  weighted_ter?: number; // ADR-021: weighted average TER, ratio (0.0025 = 0.25%/an)
 }
 
 export interface BengenRequest {
@@ -752,6 +753,12 @@ export interface HoldingResponse {
   unit_price: number;
   current_value: number;
   currency: string;
+  // ADR-021 gap-fill tracking
+  ter: number | null;
+  ter_source: "api" | "llm" | "user" | null;
+  ter_resolved_at: string | null;
+  isin_source: "api" | "llm" | "user" | null;
+  isin_resolved_at: string | null;
 }
 
 export interface BankTransactionResponse {
@@ -848,6 +855,12 @@ export interface HoldingResponse {
   unit_price: number;
   current_value: number;
   currency: string;
+  // ADR-021 gap-fill tracking
+  ter: number | null;
+  ter_source: "api" | "llm" | "user" | null;
+  ter_resolved_at: string | null;
+  isin_source: "api" | "llm" | "user" | null;
+  isin_resolved_at: string | null;
 }
 
 export interface BankTransactionResponse {
@@ -1095,5 +1108,42 @@ export function useReviewsHistory() {
     queryKey: ["reviews", "history"],
     queryFn: fetchReviewsHistory,
     staleTime: 1000 * 60 * 10,
+  });
+}
+
+// ── ADR-021 Universal Gap-Filler ───────────────────────────────────────────
+
+export interface FieldOverrideResponse {
+  field: string;
+  value: number | string;
+  source: "user";
+  resolved_at: string;
+}
+
+/**
+ * Override the TER of a holding. Sets source='user' which beats LLM/API values
+ * forever. Auto-invalidates the holdings query so the UI refetches.
+ */
+export function useUpdateHoldingTer(accountId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ holdingId, ter }: { holdingId: string; ter: number }) => {
+      const res = await fetch(`${API_URL}/accounts/holdings/${holdingId}/ter`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ter }),
+      });
+      if (!res.ok) {
+        const detail = await res.json().catch(() => ({}));
+        throw new Error(typeof detail?.detail === "string" ? detail.detail : `HTTP ${res.status}`);
+      }
+      return (await res.json()) as FieldOverrideResponse;
+    },
+    onSuccess: () => {
+      if (accountId) {
+        qc.invalidateQueries({ queryKey: ["bank-accounts", accountId, "holdings"] });
+      }
+    },
   });
 }
