@@ -1,6 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8000";
+const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8000/api";
+// Backend root (without /api). Used for the Powens initiate/callback flow,
+// which keeps the legacy /auth/powens/* path due to the Powens sandbox
+// dashboard accepting only a single redirect URI (cf ADR-020 exception).
+const BACKEND_BASE = API_URL.replace(/\/api$/, "");
 
 /* ── Types (mirror backend Pydantic models) ─────────────────────────── */
 
@@ -571,7 +575,21 @@ export function useSyncStatus() {
 }
 
 export async function getPowensWebviewUrl(): Promise<string> {
-  const result = await http<{ webview_url: string }>("/auth/powens/initiate");
+  // Powens initiate is on /auth/powens/* (ADR-020 Powens exception, not /api/*)
+  const powensRes = await fetch(`${BACKEND_BASE}/auth/powens/initiate`, {
+    credentials: "include",
+  });
+  if (!powensRes.ok) {
+    let detail = "Powens initiation failed";
+    try {
+      const data = (await powensRes.json()) as { detail?: string };
+      if (data.detail) detail = data.detail;
+    } catch {
+      // body not JSON, keep default
+    }
+    throw new ApiError(powensRes.status, "powens_initiate_failed", detail);
+  }
+  const result = (await powensRes.json()) as { webview_url: string };
   return result.webview_url;
 }
 

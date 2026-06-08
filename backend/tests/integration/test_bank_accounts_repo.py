@@ -32,7 +32,7 @@ async def _register_and_get_user_id(client, email: str, password: str) -> uuid.U
 
     client.cookies.clear()
     resp = await client.post(
-        "/auth/register",
+        "/api/auth/register",
         json={"email": email, "password": password, "display_name": email.split("@")[0]},
     )
     assert resp.status_code in (200, 201), f"Register failed: {resp.text}"

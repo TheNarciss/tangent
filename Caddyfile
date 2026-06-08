@@ -1,12 +1,13 @@
 :80 {
     # ── API routes ──────────────────────────────────────────────────────────
     @api {
-        path /auth/* /users/*
-        path /portfolio* /dashboard* /timeseries* /transactions*
-        path /optimizer* /projection* /strategy* /bengen* /scan*
-        path /brokers* /envelopes/* /profile*
-        path /watchlist* /powens* /sync/* /webhooks/* /accounts* /reviews*
-        path /admin* /health
+        # ADR-020: all backend routes namespaced under /api/* by default.
+        # Two exceptions (Powens sandbox limitation: single redirect URI):
+        #   - /auth/powens/* (OAuth initiate + callback)
+        #   - /webhooks/powens (external POST from Powens, currently disabled)
+        path /api/*
+        path /auth/powens/*
+        path /webhooks/powens
     }
 
     handle @api {

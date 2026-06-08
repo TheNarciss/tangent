@@ -18,10 +18,10 @@ async def test_dashboard_includes_wealth_summary(client):
     email = f"dash-wealth-{suffix}@example.com"
     pwd = "test-password-123"
 
-    await client.post("/auth/register", json={"email": email, "password": pwd})
-    await client.post("/auth/login", data={"username": email, "password": pwd})
+    await client.post("/api/auth/register", json={"email": email, "password": pwd})
+    await client.post("/api/auth/login", data={"username": email, "password": pwd})
 
-    resp = await client.get("/dashboard")
+    resp = await client.get("/api/dashboard")
     # Empty portfolio → 422 expected (no positions). We still check the schema
     # by hitting /dashboard once positions exist would require a heavy fixture.
     # Here we just confirm the endpoint stays reachable and doesn't 500.

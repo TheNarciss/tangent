@@ -20,13 +20,13 @@ async def _register_login_and_get_id(client, email: str, password: str) -> tuple
 
     client.cookies.clear()
     resp = await client.post(
-        "/auth/register",
+        "/api/auth/register",
         json={"email": email, "password": password, "display_name": email.split("@")[0]},
     )
     assert resp.status_code in (200, 201)
 
     resp = await client.post(
-        "/auth/login",
+        "/api/auth/login",
         data={"username": email, "password": password},
     )
     assert resp.status_code == 204
@@ -49,7 +49,7 @@ async def test_list_accounts_empty_for_new_user(client):
     )
     try:
         client.cookies.clear()
-        resp = await client.get("/accounts", cookies={"tangent_auth": cookie})
+        resp = await client.get("/api/accounts", cookies={"tangent_auth": cookie})
         assert resp.status_code == 200
         assert resp.json() == []
     finally:
@@ -88,7 +88,7 @@ async def test_list_accounts_isolation(client):
 
         # A sees their account
         client.cookies.clear()
-        resp_a = await client.get("/accounts", cookies={"tangent_auth": cookie_a})
+        resp_a = await client.get("/api/accounts", cookies={"tangent_auth": cookie_a})
         assert resp_a.status_code == 200
         accounts_a = resp_a.json()
         assert len(accounts_a) == 1
@@ -96,7 +96,7 @@ async def test_list_accounts_isolation(client):
 
         # B sees nothing
         client.cookies.clear()
-        resp_b = await client.get("/accounts", cookies={"tangent_auth": cookie_b})
+        resp_b = await client.get("/api/accounts", cookies={"tangent_auth": cookie_b})
         assert resp_b.status_code == 200
         assert resp_b.json() == []
     finally:
@@ -135,7 +135,7 @@ async def test_get_account_404_for_other_users_account(client):
             account_id = orm.id
 
         client.cookies.clear()
-        resp = await client.get(f"/accounts/{account_id}", cookies={"tangent_auth": cookie_b})
+        resp = await client.get(f"/api/accounts/{account_id}", cookies={"tangent_auth": cookie_b})
         assert resp.status_code == 404, f"Expected 404, got {resp.status_code}"
     finally:
         async with async_session_factory() as session:
@@ -153,7 +153,7 @@ async def test_sync_without_powens_credential_returns_400(client):
     )
     try:
         client.cookies.clear()
-        resp = await client.post("/accounts/sync", cookies={"tangent_auth": cookie})
+        resp = await client.post("/api/accounts/sync", cookies={"tangent_auth": cookie})
         assert resp.status_code == 400
         assert "Powens" in resp.json()["detail"]
     finally:

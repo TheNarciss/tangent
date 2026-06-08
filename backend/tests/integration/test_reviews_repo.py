@@ -20,7 +20,7 @@ from app.repositories import reviews as reviews_repo
 
 async def _register_and_get_user_id(client, email: str, password: str) -> uuid.UUID:
     """Register a user via API and return their id."""
-    resp = await client.post("/auth/register", json={"email": email, "password": password})
+    resp = await client.post("/api/auth/register", json={"email": email, "password": password})
     assert resp.status_code in (200, 201), resp.text
     return uuid.UUID(resp.json()["id"])
 
