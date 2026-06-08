@@ -93,7 +93,7 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
 
         {/* Sub-tabs */}
         <Tabs defaultValue="identity" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
             <TabsTrigger value="identity" className="gap-2">
               <User className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Identité</span>

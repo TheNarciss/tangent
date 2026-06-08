@@ -520,7 +520,7 @@ function AccountRowGroup({
     <>
       <TableRow
         onClick={expandable ? onToggle : undefined}
-        className={cn(expandable && "cursor-pointer", isOpen && "bg-accent/30")}
+        className={cn("min-h-[44px]", expandable && "cursor-pointer", isOpen && "bg-accent/30")}
       >
         <TableCell className="w-8">
           {expandable ? (
