@@ -31,7 +31,8 @@ dependencies = [
     "pyjwt>=2.8.0",
     "cryptography>=42.0",      # Fernet pour chiffrer les tokens Powens
     # ─ LLM (Phase 3 - ADR-015) ─
-    "anthropic>=0.40",         # Claude SDK pour les portfolio reviews
+    "anthropic>=0.40",
+    "tenacity>=8.0",         # Claude SDK pour les portfolio reviews
     # ─ Scheduler (Phase 3 - ADR-018 nightly reviews) ─
     "apscheduler>=3.10.4",     # Async cron scheduler for nightly batches (PR #C)
 ]

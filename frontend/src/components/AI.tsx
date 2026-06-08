@@ -158,6 +158,9 @@ function humanError(reason: string): string {
   if (reason === "daily_cost_cap_reached") {
     return "Budget quotidien atteint. Réessaye demain.";
   }
+  if (reason === "overloaded") {
+    return "Service IA temporairement surchargé. Réessaye dans quelques minutes.";
+  }
   if (reason === "already_generated_today") {
     return "Tu as déjà une review aujourd'hui.";
   }

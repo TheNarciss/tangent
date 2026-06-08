@@ -18,6 +18,7 @@ import uuid
 from collections.abc import AsyncIterator
 from datetime import date, datetime
 
+from anthropic import APIStatusError
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -104,6 +105,17 @@ async def generate_review(
             # Defensive: race between pre-check and stream start. Rare.
             payload = json.dumps({"reason": exc.reason}, ensure_ascii=False)
             yield f"event: error\ndata: {payload}\n\n"
+        except APIStatusError as exc:
+            # Anthropic 529/503 → surface as overloaded reason to frontend
+            if exc.status_code in (503, 529):
+                logger.warning(
+                    "Anthropic overloaded during stream user=%s status=%d",
+                    user.id,
+                    exc.status_code,
+                )
+                yield 'event: error\ndata: {"reason": "overloaded"}\n\n'
+                return
+            raise
         except Exception:
             logger.exception("Review stream failed mid-flight user=%s", user.id)
             payload = json.dumps({"reason": "internal"}, ensure_ascii=False)

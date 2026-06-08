@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from typing import Any
 
 from anthropic.types.beta.message_create_params import MessageCreateParamsNonStreaming
 from anthropic.types.beta.messages.batch_create_params import Request
@@ -35,6 +36,7 @@ from ..deps import get_user_wealth
 from ..repositories import profile as profile_repo
 from ..repositories import review_batches as batches_repo
 from . import anthropic_client, cost_tracker
+from ._retry import retry_on_overload
 from .prompt_builder import SYSTEM_PROMPT, build_anonymized_snapshot, build_user_prompt
 
 logger = logging.getLogger(__name__)
@@ -61,6 +63,16 @@ def estimate_cost_per_review() -> float:
         _ESTIMATED_WEB_SEARCHES_PER_REVIEW,
     )
     return api_cost * _BATCH_DISCOUNT
+
+
+@retry_on_overload
+async def _create_batch_with_retry(client: Any, requests: list[Request]) -> Any:
+    """Submit batch with retry on Anthropic 529/503.
+
+    Safe to retry: batches.create() is rejected at the gate when overloaded,
+    no tokens are consumed on failure. See app.llm._retry module docstring.
+    """
+    return await client.beta.messages.batches.create(requests=requests)
 
 
 async def submit_nightly_batch(session: AsyncSession) -> ReviewBatch | None:
@@ -148,7 +160,7 @@ async def submit_nightly_batch(session: AsyncSession) -> ReviewBatch | None:
 
     # 4. Submit to Anthropic
     client = anthropic_client.get_client()
-    anthropic_batch = await client.beta.messages.batches.create(requests=requests)
+    anthropic_batch = await _create_batch_with_retry(client, requests)
     logger.info(
         "Anthropic batch submitted: anthropic_id=%s n_requests=%d",
         anthropic_batch.id,
