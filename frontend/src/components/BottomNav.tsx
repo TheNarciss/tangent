@@ -20,7 +20,7 @@ interface BottomNavItem {
 const NAV_ITEMS: BottomNavItem[] = [
   { view: "ai", label: "IA", icon: Sparkles },
   { view: "accounts", label: "Comptes", icon: Wallet },
-  { view: "optimization", label: "Optim.", icon: Target },
+  { view: "investments", label: "Invest.", icon: Target },
   { view: "projection", label: "Projection", icon: TrendingUp },
   { view: "more", label: "Plus", icon: MoreHorizontal },
 ];
