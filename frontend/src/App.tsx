@@ -2,12 +2,10 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import {
-  ApiError,
   fetchTermsVersion,
   useCurrentUser,
   useDashboard,
   useOptimizer,
-  useTimeseries,
   type OptimizerObjective,
   type OptimizerRequest,
 } from "@/api";
@@ -19,26 +17,20 @@ import { type NavView } from "@/components/Sidebar";
 
 import { Accounts } from "@/components/Accounts";
 import { AddBankButton } from "@/components/AddBankButton";
-import { AI } from "@/components/AI";
-import { Assets } from "@/components/Assets";
 import { AuthScreen } from "@/components/auth/AuthScreen";
 import { UserMenu } from "@/components/auth/UserMenu";
 import { BengenWidget } from "@/components/BengenWidget";
 import { Correlation } from "@/components/Correlation";
-import { Insights } from "@/components/Insights";
-import { Metrics } from "@/components/Metrics";
+import { Dashboard } from "@/components/Dashboard";
 import { OAuthCallbackHandler } from "@/components/OAuthCallback";
 import { Optimizer } from "@/components/Optimizer";
-import { Patrimony } from "@/components/Patrimony";
 import { PowensCallbackHandler } from "@/components/PowensCallback";
 import { ProfilePage } from "@/components/Profile";
 import { Projection } from "@/components/Projection";
 import { RiskReturn } from "@/components/RiskReturn";
 import { Scanner } from "@/components/Scanner";
 import { SettingsPage } from "@/components/Settings";
-import { StressTests } from "@/components/StressTests";
 import { TermsGate } from "@/components/TermsGate";
-import { Timeline } from "@/components/Timeline";
 
 export default function App() {
   const auth = useCurrentUser();
@@ -73,16 +65,12 @@ export default function App() {
 }
 
 function Shell({ view, onViewChange }: { view: NavView; onViewChange: (v: NavView) => void }) {
-  const { data: user } = useCurrentUser();
   const dashboard = useDashboard();
-  const timeseries = useTimeseries();
   const [profile] = useProfile();
 
   // Title + actions vary per view
   const config = getViewConfig(view, {
-    user,
-    dashboard,
-    headerActions: view === "accounts" || view === "overview" ? <AddBankButton /> : null,
+    headerActions: view === "accounts" ? <AddBankButton /> : null,
   });
 
   return (
@@ -97,39 +85,9 @@ function Shell({ view, onViewChange }: { view: NavView; onViewChange: (v: NavVie
         headerActions={config.headerActions}
         sidebarFooter={<UserMenu onNavigate={(v) => onViewChange(v as NavView)} />}
       >
-        {view === "ai" && <AI />}
-
-        {view === "overview" && (
-          <div className="space-y-6">
-            {dashboard.isLoading && <p className="text-sm text-muted-foreground">Chargement…</p>}
-            {dashboard.isError && <DashboardErrorPanel error={dashboard.error} />}
-            {dashboard.data && (
-              <>
-                {dashboard.data.wealth && <Patrimony wealth={dashboard.data.wealth} />}
-                <Metrics metrics={dashboard.data.metrics} />
-                <Assets assets={dashboard.data.metrics.assets} />
-                <StressTests stressTests={dashboard.data.stress_tests} />
-                <Insights insights={dashboard.data.insights} />
-              </>
-            )}
-          </div>
-        )}
+        {view === "ai" && <Dashboard onNavigateToAccounts={() => onViewChange("accounts")} />}
 
         {view === "accounts" && <Accounts />}
-
-        {view === "history" && (
-          <div className="space-y-6">
-            {timeseries.isLoading && (
-              <p className="text-sm text-muted-foreground">Chargement de l'historique…</p>
-            )}
-            {timeseries.data && <Timeline ts={timeseries.data} />}
-            {timeseries.isError && !timeseries.isLoading && (
-              <p className="text-sm text-muted-foreground">
-                Historique indisponible — ajoute des positions ou synchronise un compte d'abord.
-              </p>
-            )}
-          </div>
-        )}
 
         {view === "projection" && (
           <div className="space-y-6">
@@ -159,8 +117,6 @@ function Shell({ view, onViewChange }: { view: NavView; onViewChange: (v: NavVie
 }
 
 interface ViewConfigInputs {
-  user: ReturnType<typeof useCurrentUser>["data"];
-  dashboard: ReturnType<typeof useDashboard>;
   headerActions: React.ReactNode;
 }
 
@@ -171,30 +127,17 @@ interface ViewConfig {
 }
 
 function getViewConfig(view: NavView, inputs: ViewConfigInputs): ViewConfig {
-  const { user, dashboard, headerActions } = inputs;
-
-  const subtitleOverview = dashboard.data ? (
-    <>
-      Au {new Date(dashboard.data.as_of).toLocaleDateString("fr-FR")} ·{" "}
-      {dashboard.data.metrics.assets.length} positions
-    </>
-  ) : (
-    <>Bienvenue {user?.display_name || user?.email}</>
-  );
+  const { headerActions } = inputs;
 
   switch (view) {
     case "ai":
       return { title: "IA", subtitle: "Revues quotidiennes et conversations" };
-    case "overview":
-      return { title: "Aperçu", subtitle: subtitleOverview, headerActions };
     case "accounts":
       return {
         title: "Comptes",
         subtitle: "Comptes bancaires, positions, transactions",
         headerActions,
       };
-    case "history":
-      return { title: "Historique", subtitle: "Évolution du patrimoine dans le temps" };
     case "projection":
       return { title: "Projection", subtitle: "Monte-Carlo, frais et indépendance financière" };
     case "optimization":
@@ -315,57 +258,5 @@ function OptimizationTab({
       <Scanner />
       <Correlation matrix={dashboard.metrics.correlation} />
     </div>
-  );
-}
-
-function DashboardErrorPanel({ error }: { error: unknown }) {
-  if (!(error instanceof ApiError)) {
-    return (
-      <p className="text-sm text-[hsl(var(--loss))]">
-        Erreur : {error instanceof Error ? error.message : "inconnue"}
-      </p>
-    );
-  }
-  const advice = errorAdvice(error.type);
-  return (
-    <div className="space-y-1.5 rounded-md border border-[hsl(var(--loss))] bg-card/40 p-4">
-      <div className="text-sm font-medium text-[hsl(var(--loss))]">{humanType(error.type)}</div>
-      <div className="text-sm text-muted-foreground">{error.message}</div>
-      {advice && <div className="text-xs italic text-muted-foreground">{advice}</div>}
-    </div>
-  );
-}
-
-function humanType(type: string): string {
-  return (
-    {
-      PortfolioEmptyError: "Portefeuille vide",
-      PortfolioCorruptedError: "Données du portefeuille corrompues",
-      TickerNotFoundError: "Ticker introuvable",
-      MarketDataError: "Données de marché indisponibles",
-      InsufficientHistoryError: "Historique insuffisant",
-      ConfigurationError: "Erreur de configuration",
-      UnknownBrokerError: "Broker inconnu",
-      InfeasibleStrategyError: "Stratégie infaisable",
-    }[type] ?? "Erreur"
-  );
-}
-
-function errorAdvice(type: string): string | null {
-  return (
-    {
-      PortfolioEmptyError:
-        "Va dans l'onglet « Comptes » pour synchroniser une banque, ou clique sur « Modifier positions » pour ajouter manuellement.",
-      TickerNotFoundError:
-        "Vérifie l'orthographe Yahoo Finance (ex: CW8.PA pour Amundi MSCI World, .PA pour Paris, .DE pour Frankfurt).",
-      MarketDataError:
-        "Yahoo Finance est peut-être en panne ou ta connexion ne passe pas. Réessaie dans quelques minutes.",
-      InsufficientHistoryError:
-        "Tes tickers n'ont pas assez d'historique commun. Ajoute des ETFs plus anciens (5+ ans) ou retire les plus récents.",
-      ConfigurationError: "Vérifie config/brokers.yaml côté serveur.",
-      UnknownBrokerError: "Choisis un broker dans la liste du dropdown (cf. /brokers).",
-      InfeasibleStrategyError:
-        "Augmente la volatilité max OU baisse le rendement cible dans ton profil. Active les livrets si pas déjà fait.",
-    }[type] ?? null
   );
 }
