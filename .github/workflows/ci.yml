@@ -135,7 +135,7 @@ jobs:
         # Skip on Dependabot PRs: their GITHUB_TOKEN is read-only and Gitleaks
         # needs write access to comment on PRs (returns HTTP 403 otherwise).
         if: github.actor != 'dependabot[bot]'
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
