@@ -27,7 +27,7 @@ from typing import Any
 
 from anthropic.types.beta.message_create_params import MessageCreateParamsNonStreaming
 from anthropic.types.beta.messages.batch_create_params import Request
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...db.models import AccountHolding, BankTransaction
@@ -260,3 +260,28 @@ async def apply_gap_fill_response(
         coerced,
     )
     return True
+
+
+# ── get_source_audit ────────────────────────────────────────────────────────
+
+
+async def get_source_audit(session: AsyncSession) -> dict[str, dict[str, int]]:
+    """Audit gap-fill state: counts per (table.field, source).
+
+    For each registered field, returns a dict mapping source name
+    ('api', 'llm', 'user', or 'null' for NULL) to row count.
+
+    Used by GET /api/admin/data-sources to monitor coverage.
+    """
+    audit: dict[str, dict[str, int]] = {}
+    for gf in get_all_fields():
+        model = _TABLE_TO_MODEL.get(gf.table)
+        if model is None:
+            continue
+        source_col = getattr(model, gf.source_column)
+
+        stmt = select(source_col, func.count().label("n")).group_by(source_col)
+        rows = (await session.execute(stmt)).all()
+        key = f"{gf.table}.{gf.value_column}"
+        audit[key] = {(row[0] if row[0] is not None else "null"): int(row.n) for row in rows}
+    return audit

@@ -16,8 +16,10 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import UTC, datetime
+from typing import Literal
 
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -122,3 +124,35 @@ async def replace_holdings(
         removed,
     )
     return refreshed
+
+
+async def update_ter(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    holding_id: uuid.UUID,
+    ter: float,
+    source: Literal["api", "llm", "user"] = "user",
+) -> AccountHolding | None:
+    """Update the TER of a holding, tagging the source. ADR-021.
+
+    Filtered by user_id (multi-tenant: a user can only update their own
+    holdings). Returns the updated AccountHolding, or None if the holding
+    does not exist or is not owned by the user. Does NOT commit — caller
+    must commit.
+    """
+    now = datetime.now(UTC)
+    stmt = (
+        update(AccountHolding)
+        .where(
+            AccountHolding.id == holding_id,
+            AccountHolding.user_id == user_id,
+        )
+        .values(
+            ter=ter,
+            ter_source=source,
+            ter_resolved_at=now,
+        )
+        .returning(AccountHolding)
+    )
+    result = await session.execute(stmt)
+    return result.scalar_one_or_none()

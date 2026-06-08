@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..auth import User, fastapi_users
 from ..db import get_session
 from ..db.models import ReviewBatch
+from ..finance.gap_filler import engine as gap_filler_engine
 from ..llm import batch_poller, batch_submitter
 from ..repositories import review_batches as batches_repo
 
@@ -113,3 +114,24 @@ async def poll_all_batches(
     """Poll all in-progress batches. Returns how many were finalized."""
     n_finalized = await batch_poller.poll_pending_batches(session)
     return {"finalized": n_finalized}
+
+
+@router.get("/data-sources")
+async def get_data_sources(
+    superuser: User = Depends(_superuser),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, dict[str, int]]:
+    """Audit of gap-fill state across all gappable fields. ADR-021.
+
+    For each registered field, returns counts of rows grouped by *_source
+    value. Used to monitor LLM coverage and identify fields still relying
+    on legacy NULL values.
+
+    Example response:
+        {
+          "account_holdings.ter":      {"null": 6,   "llm": 0, "user": 0},
+          "account_holdings.isin":     {"null": 2,   "api": 4},
+          "bank_transactions.category": {"null": 117, "llm": 0, "user": 0}
+        }
+    """
+    return await gap_filler_engine.get_source_audit(session)
