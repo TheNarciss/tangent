@@ -58,6 +58,10 @@ class GappableField:
     tool_name: str
     validate_value: Callable[[Any], bool]
     coerce_value: Callable[[Any], Any] = _field(default=lambda v: v)
+    requires_web_search: bool = False
+    """If True, the LLM request includes the web_search tool. Costs ~$0.01
+    extra per gap (web_search is not batch-discounted) but enables sourcing
+    from official documents (KID, factsheets, regulator websites)."""
 
 
 @dataclass(frozen=True)
