@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
+from typing import Literal
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -94,3 +95,33 @@ async def upsert_transactions(
         len(rows) - inserted,
     )
     return inserted
+
+
+async def update_category(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    transaction_id: uuid.UUID,
+    category: str,
+    source: Literal["api", "llm", "user"] = "user",
+) -> BankTransaction | None:
+    """Update the category of a bank transaction, tagging the source. ADR-021.
+
+    Filtered by user_id (multi-tenant). Returns the updated row or None if
+    not found / not owned. Does NOT commit — caller must commit.
+    """
+    now = datetime.now(UTC)
+    stmt = (
+        update(BankTransaction)
+        .where(
+            BankTransaction.id == transaction_id,
+            BankTransaction.user_id == user_id,
+        )
+        .values(
+            category=category,
+            category_source=source,
+            category_resolved_at=now,
+        )
+        .returning(BankTransaction)
+    )
+    result = await session.execute(stmt)
+    return result.scalar_one_or_none()

@@ -24,9 +24,10 @@ import asyncio
 import logging
 import uuid
 from datetime import date, datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,6 +36,7 @@ from ..auth import User, current_active_user
 from ..db import get_session
 from ..db.models import BankAccount, PowensCredential
 from ..finance.fees import autodetect_broker
+from ..finance.gap_filler.fields.transaction_category import CATEGORIES
 from ..powens.aggregator import PowensAggregator
 from ..powens.client import PowensClient, PowensError
 from ..powens.crypto import decrypt_token
@@ -631,4 +633,106 @@ async def _do_sync(user: User, session: AsyncSession) -> SyncReport:
         transactions_persisted=persisted_txs,
         synced_at=result.synced_at,
         from_cache=False,
+    )
+
+
+# ── ADR-021 Universal Gap-Filler: user override endpoints ──────────────────
+
+
+class HoldingTerOverride(BaseModel):
+    """User override of the TER on a holding. ADR-021."""
+
+    ter: float = Field(
+        ...,
+        ge=0,
+        le=0.02,
+        description="TER as a ratio (0.0025 = 0.25%/an), bounded to [0, 0.02].",
+    )
+
+
+class TransactionCategoryOverride(BaseModel):
+    """User override of the category on a bank transaction. ADR-021."""
+
+    category: str
+
+    @field_validator("category")
+    @classmethod
+    def _validate_category(cls, v: str) -> str:
+        if v not in CATEGORIES:
+            raise ValueError(f"category must be one of {sorted(CATEGORIES)}")
+        return v
+
+
+class FieldOverrideResponse(BaseModel):
+    """Confirmation of a successful field override."""
+
+    field: str
+    value: float | str
+    source: Literal["user"]
+    resolved_at: datetime
+
+
+@router.put(
+    "/holdings/{holding_id}/ter",
+    response_model=FieldOverrideResponse,
+    summary="Override the TER of a holding (ADR-021)",
+)
+async def override_holding_ter(
+    holding_id: uuid.UUID,
+    body: HoldingTerOverride,
+    user: User = Depends(current_active_user),
+    session: AsyncSession = Depends(get_session),
+) -> FieldOverrideResponse:
+    """User-supplied TER. Beats any LLM-resolved or API-supplied value forever.
+
+    Returns 404 if the holding does not belong to this user.
+    """
+    holding = await holdings_repo.update_ter(
+        session,
+        user_id=user.id,
+        holding_id=holding_id,
+        ter=body.ter,
+        source="user",
+    )
+    if holding is None:
+        raise HTTPException(status_code=404, detail="holding not found")
+    await session.commit()
+    return FieldOverrideResponse(
+        field="ter",
+        value=holding.ter,
+        source="user",
+        resolved_at=holding.ter_resolved_at,
+    )
+
+
+@router.put(
+    "/transactions/{transaction_id}/category",
+    response_model=FieldOverrideResponse,
+    summary="Override the category of a transaction (ADR-021)",
+)
+async def override_transaction_category(
+    transaction_id: uuid.UUID,
+    body: TransactionCategoryOverride,
+    user: User = Depends(current_active_user),
+    session: AsyncSession = Depends(get_session),
+) -> FieldOverrideResponse:
+    """User-supplied category from the closed taxonomy. ADR-021.
+
+    Returns 404 if the transaction does not belong to this user.
+    """
+    tx = await bank_txs_repo.update_category(
+        session,
+        user_id=user.id,
+        transaction_id=transaction_id,
+        category=body.category,
+        source="user",
+    )
+    if tx is None:
+        raise HTTPException(status_code=404, detail="transaction not found")
+    await session.commit()
+    return FieldOverrideResponse(
+        field="category",
+        value=tx.category,
+        source="user",
+        resolved_at=tx.category_resolved_at,
     )

@@ -117,3 +117,24 @@ def autodetect_broker(institution_name: str | None) -> str | None:
         if institution.lower() in needle:
             return broker_id
     return None
+
+
+def apply_ter_to_fee_fn(
+    fee_fn: Callable[[float], float],
+    weighted_ter: float,
+) -> Callable[[float], float]:
+    """Wrap a broker fee function to also include the monthly TER cost. ADR-021.
+
+    The TER (Total Expense Ratio) is the annual expense ratio of an ETF, charged
+    by the fund manager. It's applied as `value * weighted_ter / 12.0` per month
+    (linear accrual), added on top of the broker's monthly fee.
+
+    If weighted_ter <= 0, returns the input function unchanged (zero overhead).
+    """
+    if weighted_ter <= 0:
+        return fee_fn
+
+    def combined(value: float) -> float:
+        return fee_fn(value) + value * weighted_ter / 12.0
+
+    return combined

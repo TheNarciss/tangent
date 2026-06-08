@@ -26,11 +26,13 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db.models import ReviewBatch
+from ..finance.gap_filler import engine as gap_filler_engine
 from ..repositories import review_batches as batches_repo
 from ..repositories import reviews as reviews_repo
 from . import anthropic_client, cost_tracker
@@ -88,6 +90,51 @@ def _compute_actual_cost(
     return api_cost + search_cost
 
 
+async def _process_gap_fill_result(
+    session: AsyncSession,
+    result: Any,
+) -> tuple[int, int]:
+    """Process a single gap-fill result from a batch (ADR-021).
+
+    Returns:
+        (n_succeeded, n_errored) for this single result.
+    """
+    custom_id = result.custom_id
+    result_type = getattr(result.result, "type", None)
+
+    if result_type != "succeeded":
+        if result_type in ("errored", "expired", "canceled"):
+            logger.warning(
+                "Gap-fill custom_id=%s result_type=%s — skipping",
+                custom_id,
+                result_type,
+            )
+        else:
+            logger.error(
+                "Gap-fill custom_id=%s unknown result_type=%r",
+                custom_id,
+                result_type,
+            )
+        return 0, 1
+
+    try:
+        message = result.result.message
+        ok = await gap_filler_engine.apply_gap_fill_response(session, custom_id, message)
+        if ok:
+            await session.commit()
+            return 1, 0
+        # ok=False just means the LLM returned null or invalid — not an error
+        return 0, 0
+    except IntegrityError:
+        await session.rollback()
+        logger.warning("Gap-fill %s IntegrityError on commit", custom_id)
+        return 0, 1
+    except Exception:
+        logger.exception("Gap-fill apply_response failed for %s", custom_id)
+        await session.rollback()
+        return 0, 1
+
+
 async def _process_one_batch(
     session: AsyncSession,
     batch: ReviewBatch,
@@ -118,6 +165,23 @@ async def _process_one_batch(
 
     async for result in await client.beta.messages.batches.results(batch.anthropic_batch_id):
         custom_id = result.custom_id
+
+        # Gap-fill dispatch (ADR-021 Universal Gap-Filler).
+        # custom_id format `gap_<field>_<uuid>` → handled separately from reviews.
+        if custom_id.startswith("gap_"):
+            try:
+                gf_ok, gf_err = await _process_gap_fill_result(session, result)
+                n_succeeded += gf_ok
+                n_errored += gf_err
+            except Exception:
+                logger.exception(
+                    "Gap-fill dispatch failed for custom_id=%s (batch %s)",
+                    custom_id,
+                    batch.id,
+                )
+                n_errored += 1
+            continue
+
         try:
             user_id = uuid.UUID(custom_id)
         except (ValueError, TypeError):

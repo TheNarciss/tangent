@@ -26,6 +26,7 @@ def build(
     goal: float | None,
     broker_id: str | None = None,
     wealth: Wealth | None = None,
+    weighted_ter: float = 0.0,
 ) -> ProjectionResponse:
     if wealth is None:
         raise PortfolioEmptyError("Wealth required for projection.")
@@ -52,11 +53,13 @@ def build(
 
     # Resolve broker and build a value→monthly_fee closure
     bid, broker_fees = fees.get(broker_id)
-    fee_fn = fees.monthly_fee_fn(
+    broker_fee_fn = fees.monthly_fee_fn(
         broker_fees,
         n_lines=len(quantities),
         monthly_contribution=monthly_contribution,
     )
+    # ADR-021: layer ETF TER on top of broker fees as a monthly cost
+    fee_fn = fees.apply_ter_to_fee_fn(broker_fee_fn, weighted_ter)
 
     # Net projection (with fees compounding) — primary curves
     det = analytics.deterministic_projection(
@@ -121,4 +124,5 @@ def build(
         gross_p50=gross_p50,
         cumulative_fees=cumulative_fees,
         multi_broker_warning=multi_broker_warning,
+        weighted_ter=weighted_ter,
     )
