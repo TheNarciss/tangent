@@ -92,6 +92,8 @@ class ProjectionResponse(BaseModel):
     gross_p50: list[float]  # P50 without fees, for comparison
     cumulative_fees: list[float]  # cumulative fee impact at each month (€)
     multi_broker_warning: str | None = None
+    # ADR-021: weighted average TER (Total Expense Ratio) applied as monthly fee
+    weighted_ter: float = 0.0  # ratio (0.0025 = 0.25%/an)
 
 
 class BrokerInfo(BaseModel):

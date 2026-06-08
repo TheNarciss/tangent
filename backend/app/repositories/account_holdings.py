@@ -19,7 +19,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Literal
 
-from sqlalchemy import delete, select, text, update
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -156,3 +156,25 @@ async def update_ter(
     )
     result = await session.execute(stmt)
     return result.scalar_one_or_none()
+
+
+async def get_weighted_ter(session: AsyncSession, user_id: uuid.UUID) -> float:
+    """Weighted-average TER across the user's holdings (weighted by current_value).
+
+    ADR-021. Holdings with NULL TER count as 0 (don't penalize incomplete data).
+    Returns 0.0 if the user has no positive-value holdings.
+
+    SQL-aggregated for efficiency (single round-trip, no Python loop over rows).
+    """
+    stmt = select(
+        func.sum(AccountHolding.current_value * func.coalesce(AccountHolding.ter, 0.0)),
+        func.sum(AccountHolding.current_value),
+    ).where(
+        AccountHolding.user_id == user_id,
+        AccountHolding.current_value > 0,
+    )
+    row = (await session.execute(stmt)).one()
+    weighted_sum, total = row[0], row[1]
+    if not total or float(total) <= 0:
+        return 0.0
+    return float(weighted_sum or 0) / float(total)

@@ -14,6 +14,7 @@ from ..models import (
     ScanResponse,
     Wealth,
 )
+from ..repositories import account_holdings as holdings_repo
 from ..repositories import profile as profile_repo
 
 router = APIRouter(tags=["analysis"])
@@ -42,7 +43,11 @@ async def read_projection(
     if effective_broker is None:
         profile = await profile_repo.get_or_create(session, user.id)
         effective_broker = profile.default_broker
-    return projection.build(monthly, years, goal, effective_broker, wealth=wealth)
+    # ADR-021: subtract weighted TER as a monthly fee on top of broker fees
+    weighted_ter = await holdings_repo.get_weighted_ter(session, user.id)
+    return projection.build(
+        monthly, years, goal, effective_broker, wealth=wealth, weighted_ter=weighted_ter
+    )
 
 
 @router.post("/scan", response_model=ScanResponse)
