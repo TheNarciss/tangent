@@ -88,7 +88,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: "npm"
@@ -150,7 +150,7 @@ jobs:
           pip install -e . pip-audit
           pip-audit --skip-editable
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: "npm"
