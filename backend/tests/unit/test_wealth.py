@@ -291,3 +291,28 @@ def test_wealth_all_positions_flattens_across_accounts():
     )
     assert len(w.all_positions) == 3
     assert [p.ticker for p in w.all_positions] == ["A", "B", "C"]
+
+
+def test_investment_account_without_positions_is_worth_its_balance():
+    acc = InvestmentAccount(
+        provider_account_id="av-1",
+        name="AV fonds euros",
+        account_type="life_insurance",
+        balance=20000.0,
+    )
+    assert acc.positions_value == 0.0
+    assert acc.value == 20000.0
+    assert acc.unrealized_pnl == 0.0
+
+
+def test_investment_account_with_positions_ignores_balance():
+    acc = InvestmentAccount(
+        provider_account_id="pea-1",
+        name="PEA",
+        account_type="pea",
+        balance=999.0,
+        positions=[
+            WealthPosition(ticker="A", label="A", quantity=10, avg_cost=10, current_value=120),
+        ],
+    )
+    assert acc.value == 120.0

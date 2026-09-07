@@ -5,9 +5,19 @@ from fastapi import APIRouter, Depends, Query
 from ..deps import get_user_wealth
 from ..finance import dashboard, timeseries
 from ..finance.wealth_summary import build_summary as build_wealth_summary
-from ..models import DashboardResponse, TimeseriesResponse, Wealth
+from ..models import DashboardResponse, TimeseriesResponse, Wealth, WealthSummary
 
 router = APIRouter(tags=["analytics"])
+
+
+@router.get("/wealth", response_model=WealthSummary)
+async def read_wealth(wealth: Wealth = Depends(get_user_wealth)) -> WealthSummary:
+    """Patrimony snapshot built from the DB only (no market data).
+
+    The single source of truth for "ton patrimoine" across the app: the
+    Aperçu KPI strip and the Comptes header both read it.
+    """
+    return build_wealth_summary(wealth)
 
 
 @router.get("/dashboard", response_model=DashboardResponse)
@@ -25,14 +35,12 @@ async def read_dashboard(
         None, ge=0, le=0.20, description="Risk-free rate (fraction). Default: 0.025"
     ),
 ) -> DashboardResponse:
-    response = dashboard.build(
+    return dashboard.build(
         cma_shrinkage=cma_shrinkage,
         historical_period=historical_period,
         risk_free=risk_free,
         wealth=wealth,
     )
-    response.wealth = build_wealth_summary(wealth)
-    return response
 
 
 @router.get("/timeseries", response_model=TimeseriesResponse)

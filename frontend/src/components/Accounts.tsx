@@ -13,6 +13,7 @@ import {
 
 import {
   useBankAccounts,
+  useWealthSummary,
   useAccountHoldings,
   useAccountTransactions,
   useUpdateHoldingTer,
@@ -252,6 +253,8 @@ function categoryTotal(accounts: BankAccountResponse[], category: Category): num
 
 export function Accounts() {
   const accounts = useBankAccounts();
+  // Same figure as the Aperçu tile: computed once, server-side (GET /wealth).
+  const wealth = useWealthSummary();
   const refresh = useRefreshBankAccounts();
   const sync = useSyncBankAccounts();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -312,17 +315,6 @@ export function Accounts() {
     return out;
   }, [accounts.data]);
 
-  const netWorth = useMemo(() => {
-    const assets =
-      categoryTotal(grouped.cash, "cash") +
-      categoryTotal(grouped.savings, "savings") +
-      categoryTotal(grouped.invest, "invest") +
-      categoryTotal(grouped.retirement, "retirement") +
-      categoryTotal(grouped.employee, "employee");
-    const debt = categoryTotal(grouped.loan, "loan");
-    return { assets, debt, net: assets - debt };
-  }, [grouped]);
-
   const isSyncing = refresh.isPending || sync.isPending;
   const lastReport = refresh.data ?? sync.data;
 
@@ -360,11 +352,11 @@ export function Accounts() {
             </p>
           )}
 
-          {accounts.data && accounts.data.length > 0 && (
+          {accounts.data && accounts.data.length > 0 && wealth.data && (
             <div className="grid grid-cols-1 gap-3 pt-2 sm:grid-cols-3 sm:gap-4">
-              <NetWorthTile label="Actifs" value={netWorth.assets} />
-              <NetWorthTile label="Dettes" value={-netWorth.debt} negative />
-              <NetWorthTile label="Net" value={netWorth.net} bold />
+              <NetWorthTile label="Actifs" value={wealth.data.total_assets} />
+              <NetWorthTile label="Dettes" value={-wealth.data.total_liabilities} negative />
+              <NetWorthTile label="Patrimoine net" value={wealth.data.net_worth} bold />
             </div>
           )}
 

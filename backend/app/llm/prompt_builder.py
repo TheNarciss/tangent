@@ -119,7 +119,7 @@ def build_anonymized_snapshot(
             {
                 "account_type": acc.account_type,
                 "currency": acc.currency,
-                "total_value_eur": round(acc.positions_value, 2),
+                "total_value_eur": round(acc.value, 2),
                 "unrealized_pnl_eur": round(acc.unrealized_pnl, 2),
                 "positions": [
                     {

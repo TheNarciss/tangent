@@ -319,3 +319,83 @@ async def test_wealth_full_scenario_matches_real_user():
         assert abs(wealth.net_worth - (-27962.99)) < 0.05
     finally:
         await _cleanup_user(user.id)
+
+
+@pytest.mark.integration
+async def test_wealth_loan_outstanding_uses_used_amount():
+    """Loan-like accounts (mortgage…) owe `used_amount`, not |balance|."""
+    from app.aggregator import Loan as LoanDTO
+
+    user = await _create_test_user()
+    try:
+        async with async_session_factory() as session:
+            dto = _bank_dto(
+                "mortgage-1",
+                AccountType.MORTGAGE,
+                "Prêt immobilier",
+                -150000.0,
+                raw_data={"loan": {"used_amount": 148250.5, "rate": 1.2}},
+            )
+            dto.loan = LoanDTO(used_amount=148250.5, total_amount=200000.0, rate=1.2)
+            await accounts_repo.upsert_account(session, user.id, dto)
+            await session.commit()
+
+            wealth = await get_user_wealth(user=user, session=session)
+
+        assert len(wealth.loans) == 1
+        assert wealth.loans[0].outstanding_balance == 148250.5
+        assert wealth.total_liabilities == 148250.5
+    finally:
+        await _cleanup_user(user.id)
+
+
+@pytest.mark.integration
+async def test_wealth_covers_retirement_employee_and_cash_like_types():
+    """PER / PEE / AV without positions are valued at their balance; card and
+    deposit accounts count as cash. Nothing is silently dropped."""
+    user = await _create_test_user()
+    try:
+        async with async_session_factory() as session:
+            for dto in [
+                _bank_dto("per-1", AccountType.PER, "PER Linxea", 12000.0),
+                _bank_dto("pee-1", AccountType.PEE, "PEE Amundi", 3500.0),
+                _bank_dto("av-1", AccountType.LIFE_INSURANCE, "AV fonds euros", 20000.0),
+                _bank_dto("card-1", AccountType.CARD, "Carte différée", -420.0),
+                _bank_dto("dep-1", AccountType.DEPOSIT, "Dépôt", 1000.0),
+                _bank_dto("crypto-1", AccountType.CRYPTO, "Coinbase", 800.0),
+            ]:
+                await accounts_repo.upsert_account(session, user.id, dto)
+            await session.commit()
+
+            wealth = await get_user_wealth(user=user, session=session)
+
+        assert {a.account_type for a in wealth.investment_accounts} == {
+            "per",
+            "pee",
+            "life_insurance",
+            "crypto",
+        }
+        assert wealth.investments_total == 12000.0 + 3500.0 + 20000.0 + 800.0
+        assert wealth.unrealized_pnl == 0.0  # no positions → no P&L claimed
+        assert wealth.checking_total == 1000.0 - 420.0
+        assert wealth.net_worth == 36300.0 + 580.0
+    finally:
+        await _cleanup_user(user.id)
+
+
+@pytest.mark.integration
+async def test_wealth_investment_valuation_preferred_over_balance():
+    """When Powens sends a fresher `valuation`, it wins over `balance`."""
+    user = await _create_test_user()
+    try:
+        async with async_session_factory() as session:
+            dto = _bank_dto("av-2", AccountType.LIFE_INSURANCE, "AV", 10000.0)
+            dto.valuation = 10250.0
+            await accounts_repo.upsert_account(session, user.id, dto)
+            await session.commit()
+
+            wealth = await get_user_wealth(user=user, session=session)
+
+        assert wealth.investments_total == 10250.0
+    finally:
+        await _cleanup_user(user.id)
