@@ -6,7 +6,12 @@ import { useSyncBankAccounts } from "@/api";
 /** Detects ?powens_sync=success in the URL after the Powens OAuth callback,
  *  refreshes the auth status, triggers a sync via the new /accounts/sync
  *  endpoint (Phase A), and cleans the URL. */
-export function PowensCallbackHandler() {
+interface Props {
+  /** Called on ?powens_sync=success so the app can show the Comptes view. */
+  onConnected?: () => void;
+}
+
+export function PowensCallbackHandler({ onConnected }: Props = {}) {
   const qc = useQueryClient();
   const sync = useSyncBankAccounts();
   const hasRun = useRef(false);
@@ -28,6 +33,7 @@ export function PowensCallbackHandler() {
       // /accounts/sync also bridges legacy positions, so dashboard/historique/
       // optimisation tabs are populated in the same call.
       qc.invalidateQueries({ queryKey: ["sync", "status"] });
+      onConnected?.();
       sync.mutate(undefined, {
         onSuccess: () => {
           // Invalidate legacy queries too — /accounts/sync writes the bridge
@@ -38,13 +44,18 @@ export function PowensCallbackHandler() {
           qc.invalidateQueries({ queryKey: ["projection"] });
           qc.invalidateQueries({ queryKey: ["optimizer"] });
         },
+        onError: () => {
+          window.alert(
+            "Banque ajoutée, mais la première récupération des comptes a échoué. Réessaie avec « Mettre à jour ».",
+          );
+        },
       });
     } else {
       const reason = params.get("error") || "unknown";
       console.error("Powens callback failed:", reason);
-      alert(`Connexion Powens échouée : ${reason}`);
+      window.alert(`La connexion à la banque a échoué (${reason}). Réessaie.`);
     }
-  }, [qc, sync]);
+  }, [qc, sync, onConnected]);
 
   return null;
 }

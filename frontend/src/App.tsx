@@ -38,7 +38,7 @@ import { TermsGate } from "@/components/TermsGate";
 export default function App() {
   const auth = useCurrentUser();
   useProfileSync(!!auth.data);
-  const [view, setView] = useState<NavView>("ai");
+  const [view, setView] = useState<NavView>("overview");
 
   const termsVersionQuery = useQuery({
     queryKey: ["terms-version"],
@@ -78,7 +78,7 @@ function Shell({ view, onViewChange }: { view: NavView; onViewChange: (v: NavVie
 
   return (
     <>
-      <PowensCallbackHandler />
+      <PowensCallbackHandler onConnected={() => onViewChange("accounts")} />
       <OAuthCallbackHandler />
       <AppShell
         currentView={view}
@@ -88,7 +88,7 @@ function Shell({ view, onViewChange }: { view: NavView; onViewChange: (v: NavVie
         headerActions={config.headerActions}
         sidebarFooter={<UserMenu onNavigate={(v) => onViewChange(v as NavView)} />}
       >
-        {view === "ai" && <Dashboard onNavigateToAccounts={() => onViewChange("accounts")} />}
+        {view === "overview" && <Dashboard onNavigateToAccounts={() => onViewChange("accounts")} />}
 
         {view === "accounts" && <Accounts />}
 
@@ -105,16 +105,16 @@ function Shell({ view, onViewChange }: { view: NavView; onViewChange: (v: NavVie
               <InvestmentsTab dashboard={dashboard.data} />
             ) : (
               <p className="text-sm text-muted-foreground">
-                Analyse d'investissements indisponible — ajoute des positions ou synchronise un
-                compte d'abord.
+                Analyse indisponible pour l'instant — connecte un compte d'investissement ou attends
+                la fin du chargement.
               </p>
             )}
           </>
         )}
 
-        {view === "profile" && <ProfilePage onBack={() => onViewChange("ai")} />}
+        {view === "profile" && <ProfilePage />}
 
-        {view === "settings" && <SettingsPage onBack={() => onViewChange("ai")} />}
+        {view === "settings" && <SettingsPage />}
       </AppShell>
     </>
   );
@@ -134,25 +134,25 @@ function getViewConfig(view: NavView, inputs: ViewConfigInputs): ViewConfig {
   const { headerActions } = inputs;
 
   switch (view) {
-    case "ai":
-      return { title: "IA", subtitle: "Revues quotidiennes et conversations" };
+    case "overview":
+      return { title: "Aperçu", subtitle: "Ton patrimoine en un coup d'œil" };
     case "accounts":
       return {
         title: "Comptes",
-        subtitle: "Comptes bancaires, positions, transactions",
+        subtitle: "Tous tes comptes, mis à jour automatiquement",
         headerActions,
       };
     case "projection":
-      return { title: "Projection", subtitle: "Monte-Carlo, frais et indépendance financière" };
+      return { title: "Projection", subtitle: "Où tu en seras dans quelques années" };
     case "investments":
       return {
-        title: "Investissements",
-        subtitle: "Holdings, scanner, frontière efficiente, corrélations",
+        title: "Placements",
+        subtitle: "Ce que tu détiens, le risque que tu prends, des pistes",
       };
     case "profile":
-      return { title: "Profil", subtitle: "Informations personnelles et stratégie" };
+      return { title: "Mon profil", subtitle: "Ce que Tangent doit savoir pour calculer juste" };
     case "settings":
-      return { title: "Paramètres", subtitle: "Compte, banques, sécurité" };
+      return { title: "Réglages", subtitle: "Options avancées de calcul" };
   }
 }
 

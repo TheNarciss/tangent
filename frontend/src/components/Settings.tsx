@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, Palette, Radar, Settings2, Sliders, X } from "lucide-react";
+import { Palette, Radar, Settings2, Sliders, X } from "lucide-react";
 
 import {
   DEFAULT_SETTINGS,
@@ -11,6 +11,7 @@ import {
   type ScannerMode,
 } from "@/lib/settings";
 import { Button } from "@/components/ui/button";
+import { Section } from "@/components/ui/section";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -24,16 +25,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const PERIOD_OPTIONS: HistoricalPeriod[] = ["1y", "2y", "3y", "5y", "10y", "max"];
 
-interface SettingsPageProps {
-  onBack: () => void;
-}
-
 /** Page « Réglages » — paramètres techniques de l'app.
  *
  * 4 sous-onglets : Scanner, Modèle (CMA), Overrides, Préférences. Pattern draft + sticky
  * footer save identique à ProfilePage.
  */
-export function SettingsPage({ onBack }: SettingsPageProps) {
+export function SettingsPage() {
   const [settings, setSettings] = useSettings();
   const [draft, setDraft] = useState<AppSettings>(settings);
 
@@ -43,55 +40,42 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
 
   const isDirty = JSON.stringify(draft) !== JSON.stringify(settings);
 
-  const handleBack = () => {
-    if (
-      isDirty &&
-      !window.confirm("Tu as des modifications non sauvegardées. Quitter sans enregistrer ?")
-    ) {
-      return;
-    }
-    onBack();
-  };
-
   const handleSave = () => setSettings(draft);
   const handleReset = () => setDraft(settings);
   const handleResetDefaults = () => setDraft(DEFAULT_SETTINGS);
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container max-w-4xl py-8 pb-32">
-        {/* Header */}
-        <header className="flex items-start gap-3 mb-8">
-          <Button variant="ghost" size="sm" onClick={handleBack} className="gap-2 mt-0.5">
-            <ArrowLeft className="h-4 w-4" />
-            Retour
-          </Button>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-2xl font-semibold tracking-tight">Réglages</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Paramètres techniques de l&apos;app : comment les algos calculent et ce qui
-              s&apos;affiche. Stockés localement.
-            </p>
-          </div>
-        </header>
-
+    <div>
+      <div className="mx-auto max-w-4xl pb-24">
         <Tabs defaultValue="scanner" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
-            <TabsTrigger value="scanner" className="gap-2">
+          <TabsList className="grid h-auto w-full grid-cols-4">
+            <TabsTrigger
+              value="scanner"
+              className="flex-col gap-1 px-1 py-1.5 text-xs sm:flex-row sm:gap-2 sm:text-sm"
+            >
               <Radar className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Scanner</span>
+              <span>Scanner</span>
             </TabsTrigger>
-            <TabsTrigger value="cma" className="gap-2">
+            <TabsTrigger
+              value="cma"
+              className="flex-col gap-1 px-1 py-1.5 text-xs sm:flex-row sm:gap-2 sm:text-sm"
+            >
               <Sliders className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Modèle CMA</span>
+              <span>Modèle CMA</span>
             </TabsTrigger>
-            <TabsTrigger value="overrides" className="gap-2">
+            <TabsTrigger
+              value="overrides"
+              className="flex-col gap-1 px-1 py-1.5 text-xs sm:flex-row sm:gap-2 sm:text-sm"
+            >
               <Settings2 className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Overrides</span>
+              <span>Overrides</span>
             </TabsTrigger>
-            <TabsTrigger value="prefs" className="gap-2">
+            <TabsTrigger
+              value="prefs"
+              className="flex-col gap-1 px-1 py-1.5 text-xs sm:flex-row sm:gap-2 sm:text-sm"
+            >
               <Palette className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Préférences</span>
+              <span>Préférences</span>
             </TabsTrigger>
           </TabsList>
 
@@ -127,8 +111,8 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
 
       {/* Sticky footer */}
       {isDirty && (
-        <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur border-t z-50">
-          <div className="container max-w-4xl py-3 flex items-center justify-between gap-3">
+        <div className="fixed inset-x-0 bottom-16 z-40 border-t bg-background/95 backdrop-blur md:bottom-0 md:pb-[env(safe-area-inset-bottom)]">
+          <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-3">
             <p className="text-sm text-muted-foreground">Modifications non enregistrées</p>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={handleReset}>
@@ -442,28 +426,6 @@ function PreferencesTab() {
 /* ────────────────────────────────────────────────────────────────────────── */
 /*  Atoms                                                                     */
 /* ────────────────────────────────────────────────────────────────────────── */
-
-function Section({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="space-y-4">
-      <div>
-        <h2 className="text-base font-semibold">{title}</h2>
-        {description && (
-          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{description}</p>
-        )}
-      </div>
-      <div>{children}</div>
-    </section>
-  );
-}
 
 function NumField({
   label,

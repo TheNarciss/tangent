@@ -58,7 +58,7 @@ services:
     container_name: tangent-frontend
     restart: unless-stopped
     environment:
-      VITE_API_URL: http://localhost:8000
+      VITE_API_URL: http://localhost:8000/api
       # Force polling pour Vite/chokidar — même raison que pour le back.
       CHOKIDAR_USEPOLLING: "true"
       CHOKIDAR_INTERVAL: "300"            # ms entre 2 polls (default 100 = OK mais 300 = moins CPU)

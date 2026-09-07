@@ -47,11 +47,13 @@ export function ChartTooltip(props: Props) {
     containerWidth = props.containerW;
   }
 
-  const left = x < containerWidth / 2 ? x + 12 : x - W - 12;
+  const width = Math.min(W, containerWidth - 16);
+  const preferred = x < containerWidth / 2 ? x + 12 : x - width - 12;
+  const left = Math.max(8, Math.min(preferred, containerWidth - width - 8));
   return (
     <div
       className="pointer-events-none absolute z-10 rounded-md border bg-popover/95 backdrop-blur px-3 py-2 text-xs shadow-lg"
-      style={{ left, top: Math.max(8, y - 12), width: W }}
+      style={{ left, top: Math.max(8, y - 12), width }}
     >
       {props.children}
     </div>

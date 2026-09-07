@@ -51,7 +51,7 @@ export function Timeline({ ts }: Props) {
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [wrapW, setWrapW] = useState(W);
 
-  const handleMove = (e: React.MouseEvent<SVGSVGElement>) => {
+  const handleMove = (e: React.PointerEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     setWrapW(rect.width);
     const px = ((e.clientX - rect.left) / rect.width) * W;
@@ -80,11 +80,13 @@ export function Timeline({ ts }: Props) {
         <div className="relative w-full overflow-x-auto">
           <svg
             viewBox={`0 0 ${W} ${TOTAL_H}`}
-            className="w-full h-auto"
+            className="h-auto w-full touch-pan-y"
             role="img"
             aria-label="Évolution historique"
-            onMouseMove={handleMove}
-            onMouseLeave={() => setHoverIdx(null)}
+            onPointerMove={handleMove}
+            onPointerLeave={(e) => {
+              if (e.pointerType === "mouse") setHoverIdx(null);
+            }}
           >
             <PerformancePanel ts={ts} xScale={xScale} />
             <DrawdownPanel ts={ts} xScale={xScale} />

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, Calculator, Shield, Target, User } from "lucide-react";
+import { Calculator, Shield, Target, User } from "lucide-react";
 import { useBrokers } from "@/api";
 import { useEligibleEnvelopes, type EnvelopeEligibility } from "@/api";
 import { fmt } from "@/lib/format";
@@ -11,6 +11,7 @@ import {
   type UserProfile,
 } from "@/lib/profile";
 import { Button } from "@/components/ui/button";
+import { Section } from "@/components/ui/section";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -39,17 +40,13 @@ const LIVRETS = [
   ["pel", "PEL"],
 ] as const;
 
-interface ProfilePageProps {
-  onBack: () => void;
-}
-
 /** Page « Mon profil » — données utilisateur (qui je suis, situation, stratégie, compte).
  *
  * 4 sous-onglets : Identité, Fiscalité, Stratégie, Mon compte. Pattern draft + sticky
  * footer save : tant que des modifs sont en attente, un bandeau bas propose Annuler /
- * Enregistrer. Si l'user navigue avant save, on confirme pour ne rien perdre.
+ * Enregistrer. Le titre de page est porté par AppShell.
  */
-export function ProfilePage({ onBack }: ProfilePageProps) {
+export function ProfilePage() {
   const [profile, setProfile] = useProfile();
   const [draft, setDraft] = useState<UserProfile>(profile ?? EMPTY_PROFILE);
 
@@ -60,55 +57,42 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
 
   const isDirty = JSON.stringify(draft) !== JSON.stringify(profile ?? EMPTY_PROFILE);
 
-  const handleBack = () => {
-    if (
-      isDirty &&
-      !window.confirm("Tu as des modifications non sauvegardées. Quitter sans enregistrer ?")
-    ) {
-      return;
-    }
-    onBack();
-  };
-
   const handleSave = () => setProfile(draft);
   const handleReset = () => setDraft(profile ?? EMPTY_PROFILE);
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container max-w-4xl py-8 pb-32">
-        {/* Header */}
-        <header className="flex items-start gap-3 mb-8">
-          <Button variant="ghost" size="sm" onClick={handleBack} className="gap-2 mt-0.5">
-            <ArrowLeft className="h-4 w-4" />
-            Retour
-          </Button>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-2xl font-semibold tracking-tight">Mon profil</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Données qui alimentent les calculs (éligibilité, optimiseur, projections). Stockées
-              dans ton navigateur et synchronisées avec ton compte.
-            </p>
-          </div>
-        </header>
-
+    <div>
+      <div className="mx-auto max-w-4xl pb-24">
         {/* Sub-tabs */}
         <Tabs defaultValue="identity" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
-            <TabsTrigger value="identity" className="gap-2">
+          <TabsList className="grid h-auto w-full grid-cols-4">
+            <TabsTrigger
+              value="identity"
+              className="flex-col gap-1 px-1 py-1.5 text-xs sm:flex-row sm:gap-2 sm:text-sm"
+            >
               <User className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Identité</span>
+              <span>Identité</span>
             </TabsTrigger>
-            <TabsTrigger value="fiscal" className="gap-2">
+            <TabsTrigger
+              value="fiscal"
+              className="flex-col gap-1 px-1 py-1.5 text-xs sm:flex-row sm:gap-2 sm:text-sm"
+            >
               <Calculator className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Fiscalité</span>
+              <span>Fiscalité</span>
             </TabsTrigger>
-            <TabsTrigger value="strategy" className="gap-2">
+            <TabsTrigger
+              value="strategy"
+              className="flex-col gap-1 px-1 py-1.5 text-xs sm:flex-row sm:gap-2 sm:text-sm"
+            >
               <Target className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Stratégie</span>
+              <span>Stratégie</span>
             </TabsTrigger>
-            <TabsTrigger value="account" className="gap-2">
+            <TabsTrigger
+              value="account"
+              className="flex-col gap-1 px-1 py-1.5 text-xs sm:flex-row sm:gap-2 sm:text-sm"
+            >
               <Shield className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Mon compte</span>
+              <span>Mon compte</span>
             </TabsTrigger>
           </TabsList>
 
@@ -132,8 +116,8 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
 
       {/* Sticky footer : visible uniquement si modifs */}
       {isDirty && (
-        <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur border-t z-50">
-          <div className="container max-w-4xl py-3 flex items-center justify-between gap-3">
+        <div className="fixed inset-x-0 bottom-16 z-40 border-t bg-background/95 backdrop-blur md:bottom-0 md:pb-[env(safe-area-inset-bottom)]">
+          <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-3">
             <p className="text-sm text-muted-foreground">Modifications non enregistrées</p>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={handleReset}>
@@ -393,28 +377,6 @@ function StrategyTab({ draft, setDraft }: TabProps) {
 /* ────────────────────────────────────────────────────────────────────────── */
 /*  Atoms                                                                     */
 /* ────────────────────────────────────────────────────────────────────────── */
-
-function Section({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="space-y-4">
-      <div>
-        <h2 className="text-base font-semibold">{title}</h2>
-        {description && (
-          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{description}</p>
-        )}
-      </div>
-      <div>{children}</div>
-    </section>
-  );
-}
 
 function Field({
   label,

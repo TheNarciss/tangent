@@ -12,7 +12,7 @@ export function Metrics({ metrics }: Props) {
 
   return (
     <div className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <MetricCard
           label="Valorisation"
           value={fmt.eur(metrics.total_value)}
@@ -34,7 +34,7 @@ export function Metrics({ metrics }: Props) {
       </div>
 
       {/* Métriques de risque de queue : drawdown théorique, CVaR, max DD observé */}
-      <div className="grid gap-3 sm:grid-cols-3 rounded-lg border bg-muted/20 p-3">
+      <div className="grid gap-3 rounded-lg border bg-muted/20 p-3 sm:grid-cols-3">
         <RiskCard
           label="Drawdown théorique"
           value={fmt.signedPct(metrics.drawdown_estimate)}

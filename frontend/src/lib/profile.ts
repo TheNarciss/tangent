@@ -130,6 +130,11 @@ function setSharedProfile(next: UserProfile | null): void {
   _listeners.forEach((cb) => cb());
 }
 
+/** Forget the local profile (logout) so the next user starts clean. */
+export function clearProfile(): void {
+  setSharedProfile(null);
+}
+
 export function useProfile(): [UserProfile | null, (p: UserProfile | null) => void] {
   const profile = useSyncExternalStore(_subscribe, _getSnapshot, _getServerSnapshot);
   return [profile, setSharedProfile];
