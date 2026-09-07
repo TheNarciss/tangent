@@ -42,6 +42,7 @@ def _to_out(prof) -> ProfileOut:
         target_annual_return=prof.target_annual_return,
         max_annual_volatility=prof.max_annual_volatility,
         horizon_years=prof.horizon_years,
+        default_broker=prof.default_broker,
         ceilings_used=prof.ceilings_used or {},
         auto_review_enabled=prof.auto_review_enabled,
     )

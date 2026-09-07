@@ -1,5 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { clearProfile } from "@/lib/profile";
+import { clearSettings } from "@/lib/settings";
+
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8000/api";
 // Backend root (without /api). Used for the Powens initiate/callback flow,
 // which keeps the legacy /auth/powens/* path due to the Powens sandbox
@@ -278,7 +281,7 @@ export interface LoginRequest {
 
 /* ── HTTP client ────────────────────────────────────────────────────── */
 
-async function http<T>(path: string, init?: RequestInit): Promise<T> {
+export async function http<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     credentials: "include", // CRITICAL: send/receive auth cookies cross-origin
     headers: { "Content-Type": "application/json" },
@@ -388,6 +391,8 @@ export function useLogout() {
       qc.setQueryData(["user", "me"], null);
       // Then wipe other cached data so next user doesn't see previous content.
       qc.removeQueries({ predicate: (q) => !(q.queryKey[0] === "user" && q.queryKey[1] === "me") });
+      clearProfile();
+      clearSettings();
     },
   });
 }

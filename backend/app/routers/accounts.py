@@ -144,6 +144,9 @@ class HoldingResponse(BaseModel):
     unit_price: float
     current_value: float
     currency: str
+    # ADR-021 gap-fill: resolved TER (ratio) and where it came from
+    ter: float | None = None
+    ter_source: str | None = None
 
 
 class TransactionResponse(BaseModel):
@@ -403,6 +406,8 @@ async def list_holdings(
             unit_price=r.unit_price,
             current_value=r.current_value,
             currency=r.currency,
+            ter=r.ter,
+            ter_source=r.ter_source,
         )
         for r in rows
     ]

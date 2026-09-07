@@ -27,8 +27,6 @@ const DIMS = {
 const COLOR = {
   band: "hsl(var(--foreground))",
   base: "hsl(var(--foreground))",
-  bear: "hsl(var(--loss))",
-  bull: "hsl(var(--gain))",
   invested: "hsl(var(--muted-foreground))",
   goal: "hsl(45 95% 55%)",
   gross: "hsl(var(--muted-foreground))",
@@ -47,12 +45,9 @@ export function Projection() {
   const dGoal = useDebouncedValue(typeof goal === "number" ? goal : 0, 350);
 
   const brokers = useBrokers();
+  // No broker param until the user picks one: the backend then uses the
+  // profile's broker (auto-detected at sync) and echoes it back as broker_id.
   const q = useProjection(dMonthly, dYears, dGoal || undefined, broker);
-
-  // First load: align local state with backend's default broker so the UI matches what's used
-  if (broker === undefined && brokers.data) {
-    setBroker(brokers.data.default);
-  }
 
   return (
     <Card>
@@ -92,7 +87,11 @@ export function Projection() {
             step={5000}
             allowEmpty
           />
-          <BrokerField value={broker} onChange={setBroker} brokers={brokers.data} />
+          <BrokerField
+            value={broker ?? q.data?.broker_id}
+            onChange={setBroker}
+            brokers={brokers.data}
+          />
           {q.data?.weighted_ter !== undefined && q.data.weighted_ter > 0 && (
             <span
               title="Total Expense Ratio pondéré, appliqué comme frais mensuels sur la projection"
@@ -284,7 +283,7 @@ function FanChart({ data }: FanProps) {
 
   const { xScale, yScale, yTicks, xTicks } = useMemo(() => {
     const lastIdx = data.months.length - 1;
-    const allValues = [...data.bands.p10, ...data.bands.p90, ...data.bands.bull, ...data.invested];
+    const allValues = [...data.bands.p10, ...data.bands.p90, ...data.invested];
     const yMin = 0;
     const yMax = Math.max(...allValues);
 
@@ -391,20 +390,6 @@ function FanChart({ data }: FanProps) {
         )}
 
         {/* Deterministic lines */}
-        <path
-          d={linePath(data.bands.bear, xAt, yScale)}
-          fill="none"
-          stroke={COLOR.bear}
-          strokeWidth="1.4"
-          strokeOpacity={0.85}
-        />
-        <path
-          d={linePath(data.bands.bull, xAt, yScale)}
-          fill="none"
-          stroke={COLOR.bull}
-          strokeWidth="1.4"
-          strokeOpacity={0.85}
-        />
         <path
           d={linePath(data.bands.base, xAt, yScale)}
           fill="none"
@@ -580,8 +565,6 @@ function Legend() {
         label="P10–P90 / P25–P75 (Monte Carlo, net frais)"
       />
       <LegendItem swatch={<Stroke color={COLOR.base} thick />} label="Scénario base (μ)" />
-      <LegendItem swatch={<Stroke color={COLOR.bull} />} label="Bull (μ+σ)" />
-      <LegendItem swatch={<Stroke color={COLOR.bear} />} label="Bear (μ−σ)" />
       <LegendItem
         swatch={<Stroke color={COLOR.gross} dashed />}
         label="P50 sans frais (comparaison)"

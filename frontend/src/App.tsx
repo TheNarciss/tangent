@@ -78,7 +78,7 @@ function Shell({ view, onViewChange }: { view: NavView; onViewChange: (v: NavVie
 
   return (
     <>
-      <PowensCallbackHandler />
+      <PowensCallbackHandler onConnected={() => onViewChange("accounts")} />
       <OAuthCallbackHandler />
       <AppShell
         currentView={view}

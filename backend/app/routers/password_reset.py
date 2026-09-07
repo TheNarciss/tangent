@@ -28,7 +28,7 @@ class VerifyCodeOut(BaseModel):
 
 class ResetPasswordIn(BaseModel):
     reset_token: str
-    new_password: str = Field(..., min_length=12, max_length=200)
+    new_password: str = Field(..., min_length=8, max_length=200)
 
 
 @router.post("/password-reset/request", status_code=status.HTTP_204_NO_CONTENT)

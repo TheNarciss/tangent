@@ -118,6 +118,11 @@ function setSharedSettings(next: AppSettings): void {
   _listeners.forEach((cb) => cb());
 }
 
+/** Back to defaults (logout). */
+export function clearSettings(): void {
+  setSharedSettings(DEFAULT_SETTINGS);
+}
+
 export function useSettings(): [AppSettings, (s: AppSettings) => void] {
   const s = useSyncExternalStore(_subscribe, _getSnapshot, _getServerSnapshot);
   return [s, setSharedSettings];

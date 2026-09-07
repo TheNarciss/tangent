@@ -41,9 +41,16 @@ export function ChartTile({ className }: ChartTileProps) {
         )}
       >
         <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-          Évolution · 90 jours
+          Évolution
         </div>
-        <div className="mt-2 h-16 animate-pulse rounded bg-muted/30 md:h-20" />
+        {isLoading ? (
+          <div className="mt-2 h-16 animate-pulse rounded bg-muted/30 md:h-20" />
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Pas encore d'historique — il apparaîtra dès qu'un compte d'investissement sera
+            synchronisé.
+          </p>
+        )}
       </div>
     );
   }

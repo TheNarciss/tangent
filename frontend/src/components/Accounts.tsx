@@ -17,6 +17,7 @@ import {
   useAccountTransactions,
   useUpdateHoldingTer,
   useRefreshBankAccounts,
+  useSyncBankAccounts,
   type BankAccountResponse,
   type BankAccountType,
   type LoanResponse,
@@ -252,6 +253,7 @@ function categoryTotal(accounts: BankAccountResponse[], category: Category): num
 export function Accounts() {
   const accounts = useBankAccounts();
   const refresh = useRefreshBankAccounts();
+  const sync = useSyncBankAccounts();
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // Synchronous in-flight guard — closes the race window between
@@ -272,12 +274,12 @@ export function Accounts() {
     });
   }, [refresh]);
 
-  // AUTO-REFRESH au mount si stale (oldest last_synced_at > 5 min).
-  // Garantit data fraîche à l'arrivée sans hammer Powens à chaque mount.
+  // Auto-sync au mount si stale (oldest last_synced_at > 5 min) via /accounts/sync
+  // (cache 5 min côté back) — /accounts/refresh (force Powens) reste réservé au bouton.
   const STALENESS_MINUTES = 5;
   const didAutoRefresh = useRef(false);
   useEffect(() => {
-    if (didAutoRefresh.current) return;
+    if (didAutoRefresh.current || sync.isPending) return;
     if (!accounts.data || accounts.data.length === 0) return;
 
     const syncTimes = accounts.data
@@ -290,9 +292,9 @@ export function Accounts() {
 
     if (isStale) {
       didAutoRefresh.current = true;
-      startSync();
+      sync.mutate();
     }
-  }, [accounts.data, startSync]);
+  }, [accounts.data, sync]);
 
   const grouped = useMemo(() => {
     const out: Record<Category, BankAccountResponse[]> = {
@@ -321,8 +323,8 @@ export function Accounts() {
     return { assets, debt, net: assets - debt };
   }, [grouped]);
 
-  const isSyncing = refresh.isPending;
-  const lastReport = refresh.data;
+  const isSyncing = refresh.isPending || sync.isPending;
+  const lastReport = refresh.data ?? sync.data;
 
   return (
     <div className="space-y-4">
@@ -336,12 +338,12 @@ export function Accounts() {
             variant="outline"
             size="sm"
             onClick={startSync}
-            disabled={isSyncing || !accounts.data || accounts.data.length === 0}
+            disabled={isSyncing}
             className="gap-2"
             title="Force la banque à renvoyer les dernières données (10-30s)"
           >
             <RefreshCw className={cn("h-4 w-4", isSyncing && "animate-spin")} />
-            {isSyncing ? "Sync…" : "Sync"}
+            {isSyncing ? "Mise à jour…" : "Mettre à jour"}
           </Button>
         </CardHeader>
         <CardContent>

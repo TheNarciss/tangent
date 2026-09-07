@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useBengen, useDashboard } from "@/api";
 import { fmt } from "@/lib/format";
+import { useDebouncedValue } from "@/lib/hooks";
 import type { UserProfile } from "@/lib/profile";
 
 interface Props {
@@ -16,17 +17,19 @@ export function BengenWidget({ profile }: Props) {
   const expectedReturn = dashboard?.metrics.expected_return ?? 0.08;
 
   const [targetIncome, setTargetIncome] = useState<number>(100);
-  const [withdrawalRate, setWithdrawalRate] = useState<number>(4); // raw %
+  const [withdrawalRate, setWithdrawalRate] = useState<number | "">(4); // raw %
+  const dIncome = useDebouncedValue(targetIncome, 350);
+  const dRate = useDebouncedValue(typeof withdrawalRate === "number" ? withdrawalRate : 4, 350);
 
   const baseReq = useMemo(
     () => ({
-      target_monthly_income: targetIncome,
-      withdrawal_rate: withdrawalRate / 100,
+      target_monthly_income: dIncome,
+      withdrawal_rate: dRate / 100,
       current_capital: currentCapital,
       monthly_dca: profile.monthly_dca,
       expected_return: expectedReturn,
     }),
-    [targetIncome, withdrawalRate, currentCapital, profile.monthly_dca, expectedReturn],
+    [dIncome, dRate, currentCapital, profile.monthly_dca, expectedReturn],
   );
 
   const { data: base } = useBengen(baseReq);
@@ -78,7 +81,9 @@ export function BengenWidget({ profile }: Props) {
               max={10}
               step={0.1}
               value={withdrawalRate}
-              onChange={(e) => setWithdrawalRate(Number(e.target.value) || 4)}
+              onChange={(e) =>
+                setWithdrawalRate(e.target.value === "" ? "" : Number(e.target.value))
+              }
               className="font-mono tabular"
             />
           </div>

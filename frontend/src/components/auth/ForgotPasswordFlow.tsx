@@ -57,8 +57,8 @@ export function ForgotPasswordFlow({ onBack }: Props) {
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (newPassword.length < 12) {
-      setError("Le mot de passe doit faire au moins 12 caractères.");
+    if (newPassword.length < 8) {
+      setError("Le mot de passe doit faire au moins 8 caractères.");
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -80,7 +80,7 @@ export function ForgotPasswordFlow({ onBack }: Props) {
         <p className="text-sm text-muted-foreground">
           {step === "email" && "Entre ton adresse e-mail, on t'envoie un code."}
           {step === "code" && `Code envoyé à ${email}. Vérifie ta boîte mail.`}
-          {step === "password" && "Choisis ton nouveau mot de passe (12 caractères min)."}
+          {step === "password" && "Choisis ton nouveau mot de passe (8 caractères min)."}
           {step === "success" && "C'est fait. Tu peux te reconnecter."}
         </p>
       </div>
@@ -166,8 +166,8 @@ export function ForgotPasswordFlow({ onBack }: Props) {
               autoComplete="new-password"
               autoFocus
               required
-              minLength={12}
-              placeholder="12 caractères minimum"
+              minLength={8}
+              placeholder="8 caractères minimum"
             />
           </div>
           <div className="space-y-1.5">
@@ -179,7 +179,7 @@ export function ForgotPasswordFlow({ onBack }: Props) {
               onChange={(e) => setConfirmPassword(e.target.value)}
               autoComplete="new-password"
               required
-              minLength={12}
+              minLength={8}
             />
           </div>
           <Button type="submit" className="w-full" disabled={confirmReset.isPending}>
