@@ -1,12 +1,10 @@
 import { useState, type ReactNode } from "react";
 
-import { Sidebar, type NavView } from "./Sidebar";
+import { Sidebar } from "./Sidebar";
 import { BottomNav } from "./BottomNav";
 import { MoreSheet } from "./MoreSheet";
 
 interface AppShellProps {
-  currentView: NavView;
-  onViewChange: (v: NavView) => void;
   pageTitle: string;
   pageSubtitle?: ReactNode;
   headerActions?: ReactNode;
@@ -18,15 +16,12 @@ interface AppShellProps {
  * Application shell — Claude Console inspired.
  *
  * Desktop (≥ md): left sidebar 240px fixed in flex layout, full-width main.
- * Mobile (< md): sidebar becomes a slide-in drawer triggered by a hamburger
- *   button in the header; an overlay closes it on tap; the drawer also
- *   auto-closes when navigating.
+ * Mobile (< md): bottom navigation bar + a "Plus" bottom sheet.
  *
- * Uses existing CSS variables only (no new color tokens).
+ * Navigation is URL-driven (react-router): the sidebar and bottom nav are
+ * links, the active item follows the current location.
  */
 export function AppShell({
-  currentView,
-  onViewChange,
   pageTitle,
   pageSubtitle,
   headerActions,
@@ -37,7 +32,7 @@ export function AppShell({
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
-      <Sidebar currentView={currentView} onViewChange={onViewChange} footer={sidebarFooter} />
+      <Sidebar footer={sidebarFooter} />
 
       <div className="flex flex-1 flex-col overflow-hidden">
         <header className="flex items-center gap-3 border-b border-border bg-background px-4 py-3 md:gap-4 md:px-8 md:py-4">
@@ -64,14 +59,9 @@ export function AppShell({
         </main>
       </div>
 
-      <BottomNav
-        currentView={currentView}
-        onViewChange={onViewChange}
-        onOpenMore={() => setMoreOpen(true)}
-        isMoreOpen={moreOpen}
-      />
+      <BottomNav onOpenMore={() => setMoreOpen(true)} isMoreOpen={moreOpen} />
 
-      <MoreSheet open={moreOpen} onOpenChange={setMoreOpen} onNavigate={onViewChange} />
+      <MoreSheet open={moreOpen} onOpenChange={setMoreOpen} />
     </div>
   );
 }

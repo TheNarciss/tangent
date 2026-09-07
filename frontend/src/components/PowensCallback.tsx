@@ -1,39 +1,35 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { useSyncBankAccounts } from "@/api";
+import { NAV_PATHS } from "@/components/Sidebar";
 
 /** Detects ?powens_sync=success in the URL after the Powens OAuth callback,
  *  refreshes the auth status, triggers a sync via the new /accounts/sync
- *  endpoint (Phase A), and cleans the URL. */
-interface Props {
-  /** Called on ?powens_sync=success so the app can show the Comptes view. */
-  onConnected?: () => void;
-}
-
-export function PowensCallbackHandler({ onConnected }: Props = {}) {
+ *  endpoint (Phase A), and lands on Comptes with a clean URL. */
+export function PowensCallbackHandler() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
+  const { pathname, search } = useLocation();
   const sync = useSyncBankAccounts();
   const hasRun = useRef(false);
 
   useEffect(() => {
     if (hasRun.current) return;
 
-    const params = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(search);
     const status = params.get("powens_sync");
     if (!status) return;
     hasRun.current = true;
-
-    // Clean URL immediately so a refresh doesn't re-trigger
-    const cleanUrl = window.location.pathname;
-    window.history.replaceState({}, "", cleanUrl);
 
     if (status === "success") {
       // Refresh user_connected status and trigger the new multi-account sync.
       // /accounts/sync also bridges legacy positions, so dashboard/historique/
       // optimisation tabs are populated in the same call.
       qc.invalidateQueries({ queryKey: ["sync", "status"] });
-      onConnected?.();
+      // Replace (not push) so a refresh or "back" doesn't re-trigger the callback.
+      navigate(NAV_PATHS.accounts, { replace: true });
       sync.mutate(undefined, {
         onSuccess: () => {
           // Invalidate legacy queries too — /accounts/sync writes the bridge
@@ -51,11 +47,12 @@ export function PowensCallbackHandler({ onConnected }: Props = {}) {
         },
       });
     } else {
+      navigate(pathname, { replace: true });
       const reason = params.get("error") || "unknown";
       console.error("Powens callback failed:", reason);
       window.alert(`La connexion à la banque a échoué (${reason}). Réessaie.`);
     }
-  }, [qc, sync, onConnected]);
+  }, [qc, sync, navigate, pathname, search]);
 
   return null;
 }

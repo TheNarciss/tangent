@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import {
   ChevronRight,
   FileText,
@@ -18,12 +19,11 @@ import {
   BottomSheetTitle,
 } from "@/components/ui/bottom-sheet";
 
-import { type NavView } from "./Sidebar";
+import { NAV_PATHS, type NavView } from "./Sidebar";
 
 interface MoreSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onNavigate: (v: NavView) => void;
 }
 
 /**
@@ -33,7 +33,8 @@ interface MoreSheetProps {
  * profile/settings nav, legal links, and sign out — all in a tap-friendly
  * vertical list.
  */
-export function MoreSheet({ open, onOpenChange, onNavigate }: MoreSheetProps) {
+export function MoreSheet({ open, onOpenChange }: MoreSheetProps) {
+  const navigate = useNavigate();
   const { data: user } = useCurrentUser();
   const logout = useLogout();
   const oauthAccounts = useQuery({
@@ -57,7 +58,7 @@ export function MoreSheet({ open, onOpenChange, onNavigate }: MoreSheetProps) {
   };
 
   const handleNavigate = (v: NavView) => {
-    onNavigate(v);
+    navigate(NAV_PATHS[v]);
     onOpenChange(false);
   };
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
 import {
   fetchTermsVersion,
@@ -13,7 +14,7 @@ import { ageFromBirthDate, useProfile } from "@/lib/profile";
 import { useProfileSync } from "@/lib/profile-sync";
 
 import { AppShell } from "@/components/AppShell";
-import { type NavView } from "@/components/Sidebar";
+import { NAV_PATHS } from "@/components/Sidebar";
 
 import { Accounts } from "@/components/Accounts";
 import { AddBankButton } from "@/components/AddBankButton";
@@ -38,7 +39,6 @@ import { TermsGate } from "@/components/TermsGate";
 export default function App() {
   const auth = useCurrentUser();
   useProfileSync(!!auth.data);
-  const [view, setView] = useState<NavView>("overview");
 
   const termsVersionQuery = useQuery({
     queryKey: ["terms-version"],
@@ -64,60 +64,67 @@ export default function App() {
     return <TermsGate user={auth.data} />;
   }
 
-  return <Shell view={view} onViewChange={setView} />;
+  return <Shell />;
 }
 
-function Shell({ view, onViewChange }: { view: NavView; onViewChange: (v: NavView) => void }) {
-  const dashboard = useDashboard();
-  const [profile] = useProfile();
+function Shell() {
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
 
-  // Title + actions vary per view
-  const config = getViewConfig(view, {
-    headerActions: view === "accounts" ? <AddBankButton /> : null,
+  // Title + actions vary per route
+  const config = getViewConfig(pathname, {
+    headerActions: pathname === NAV_PATHS.accounts ? <AddBankButton /> : null,
   });
 
   return (
     <>
-      <PowensCallbackHandler onConnected={() => onViewChange("accounts")} />
+      <PowensCallbackHandler />
       <OAuthCallbackHandler />
       <AppShell
-        currentView={view}
-        onViewChange={onViewChange}
         pageTitle={config.title}
         pageSubtitle={config.subtitle}
         headerActions={config.headerActions}
-        sidebarFooter={<UserMenu onNavigate={(v) => onViewChange(v as NavView)} />}
+        sidebarFooter={<UserMenu />}
       >
-        {view === "overview" && <Dashboard onNavigateToAccounts={() => onViewChange("accounts")} />}
-
-        {view === "accounts" && <Accounts />}
-
-        {view === "projection" && (
-          <div className="space-y-6">
-            <Projection />
-            {profile && <BengenWidget profile={profile} />}
-          </div>
-        )}
-
-        {view === "investments" && (
-          <>
-            {dashboard.data ? (
-              <InvestmentsTab dashboard={dashboard.data} />
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Analyse indisponible pour l'instant — connecte un compte d'investissement ou attends
-                la fin du chargement.
-              </p>
-            )}
-          </>
-        )}
-
-        {view === "profile" && <ProfilePage />}
-
-        {view === "settings" && <SettingsPage />}
+        <Routes>
+          <Route
+            path={NAV_PATHS.overview}
+            element={<Dashboard onNavigateToAccounts={() => navigate(NAV_PATHS.accounts)} />}
+          />
+          <Route path={NAV_PATHS.accounts} element={<Accounts />} />
+          <Route path={NAV_PATHS.investments} element={<InvestmentsView />} />
+          <Route path={NAV_PATHS.projection} element={<ProjectionView />} />
+          <Route path={NAV_PATHS.profile} element={<ProfilePage key="profil" />} />
+          <Route path={NAV_PATHS.account} element={<ProfilePage key="compte" tab="account" />} />
+          <Route path={NAV_PATHS.settings} element={<SettingsPage />} />
+          <Route path="*" element={<Navigate to={NAV_PATHS.overview} replace />} />
+        </Routes>
       </AppShell>
     </>
   );
+}
+
+function ProjectionView() {
+  const [profile] = useProfile();
+  return (
+    <div className="space-y-6">
+      <Projection />
+      {profile && <BengenWidget profile={profile} />}
+    </div>
+  );
+}
+
+function InvestmentsView() {
+  const dashboard = useDashboard();
+  if (!dashboard.data) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Analyse indisponible pour l'instant — connecte un compte d'investissement ou attends la fin
+        du chargement.
+      </p>
+    );
+  }
+  return <InvestmentsTab dashboard={dashboard.data} />;
 }
 
 interface ViewConfigInputs {
@@ -130,29 +137,31 @@ interface ViewConfig {
   headerActions?: React.ReactNode;
 }
 
-function getViewConfig(view: NavView, inputs: ViewConfigInputs): ViewConfig {
+function getViewConfig(pathname: string, inputs: ViewConfigInputs): ViewConfig {
   const { headerActions } = inputs;
 
-  switch (view) {
-    case "overview":
-      return { title: "Aperçu", subtitle: "Ton patrimoine en un coup d'œil" };
-    case "accounts":
+  switch (pathname) {
+    case NAV_PATHS.accounts:
       return {
         title: "Comptes",
         subtitle: "Tous tes comptes, mis à jour automatiquement",
         headerActions,
       };
-    case "projection":
+    case NAV_PATHS.projection:
       return { title: "Projection", subtitle: "Où tu en seras dans quelques années" };
-    case "investments":
+    case NAV_PATHS.investments:
       return {
         title: "Placements",
         subtitle: "Ce que tu détiens, le risque que tu prends, des pistes",
       };
-    case "profile":
+    case NAV_PATHS.profile:
       return { title: "Mon profil", subtitle: "Ce que Tangent doit savoir pour calculer juste" };
-    case "settings":
+    case NAV_PATHS.account:
+      return { title: "Mon compte", subtitle: "Connexion, sécurité, banques et briefing" };
+    case NAV_PATHS.settings:
       return { title: "Réglages", subtitle: "Options avancées de calcul" };
+    default:
+      return { title: "Aperçu", subtitle: "Ton patrimoine en un coup d'œil" };
   }
 }
 
