@@ -246,7 +246,6 @@ function InvestmentsTab({
       <Insights insights={dashboard.insights} />
       <RiskReturn
         metrics={dashboard.metrics}
-        frontier={dashboard.frontier}
         smoothFrontier={optimizer.data?.frontier_curve}
         optimal={optimalPoint}
         envelopePoints={includeEnvelopes ? optimizer.data?.envelope_points : undefined}

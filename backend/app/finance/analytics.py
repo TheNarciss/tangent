@@ -181,31 +181,6 @@ def correlation_matrix(returns: pd.DataFrame) -> dict[str, dict[str, float]]:
     return {a: {b: float(corr.loc[a, b]) for b in corr.columns} for a in corr.columns}
 
 
-def efficient_frontier_cloud(
-    returns: pd.DataFrame,
-    n: int = 3000,
-    seed: int = 42,
-) -> dict[str, list[float]]:
-    """Sample `n` random long-only fully-invested portfolios on the simplex.
-
-    Returns parallel arrays `vol`, `ret` (annualized) and `sharpe`. The upper-left
-    envelope of the cloud traces the efficient frontier.
-    """
-    rng = np.random.default_rng(seed)
-    mu = returns.mean().values * TRADING_DAYS
-    cov = returns.cov().values * TRADING_DAYS
-    w = rng.dirichlet(np.ones(returns.shape[1]), n)
-    ret = w @ mu
-    vol = np.sqrt(np.einsum("ij,jk,ik->i", w, cov, w))
-    sharpe = (ret - RISK_FREE) / np.where(vol > 0, vol, np.nan)
-    cloud: dict[str, list[float]] = {
-        "vol": vol.tolist(),
-        "ret": ret.tolist(),
-        "sharpe": np.nan_to_num(sharpe).tolist(),
-    }
-    return cloud
-
-
 def portfolio_value_series(prices: pd.DataFrame, quantities: dict[str, float]) -> pd.Series:
     """Σ qty_i × price_i(t) — value of holding `quantities` from start to now.
 

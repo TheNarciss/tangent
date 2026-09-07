@@ -1,12 +1,11 @@
 import { useMemo, useState } from "react";
 
-import type { EnvelopePoint, FrontierCloud, FrontierCurve, PortfolioMetrics } from "@/api";
+import type { EnvelopePoint, FrontierCurve, PortfolioMetrics } from "@/api";
 import { fmt } from "@/lib/format";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface Props {
   metrics: PortfolioMetrics;
-  frontier?: FrontierCloud;
   smoothFrontier?: FrontierCurve;
   optimal?: { sigma: number; mu: number; label: string };
   envelopePoints?: EnvelopePoint[];
