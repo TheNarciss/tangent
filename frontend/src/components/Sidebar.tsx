@@ -9,8 +9,7 @@ export type NavView =
   | "investments"
   | "projection"
   | "profile"
-  | "account"
-  | "settings";
+  | "account";
 
 /** One URL per view, so the phone's back button, refresh and shared links work. */
 export const NAV_PATHS: Record<NavView, string> = {
@@ -20,7 +19,6 @@ export const NAV_PATHS: Record<NavView, string> = {
   projection: "/projection",
   profile: "/profil",
   account: "/compte",
-  settings: "/reglages",
 };
 
 export interface NavItem {

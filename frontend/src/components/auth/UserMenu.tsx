@@ -1,4 +1,4 @@
-import { Settings as SettingsIcon, Link2, LogOut, User as UserIcon } from "lucide-react";
+import { Link2, LogOut, Shield, User as UserIcon } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 
@@ -82,9 +82,9 @@ export function UserMenu() {
           <UserIcon className="mr-2 h-3.5 w-3.5" />
           <span>Mon profil</span>
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => navigate(NAV_PATHS.settings)} className="cursor-pointer">
-          <SettingsIcon className="mr-2 h-3.5 w-3.5" />
-          <span>Réglages</span>
+        <DropdownMenuItem onClick={() => navigate(NAV_PATHS.account)} className="cursor-pointer">
+          <Shield className="mr-2 h-3.5 w-3.5" />
+          <span>Mon compte</span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>

@@ -76,12 +76,17 @@ class Profile(Base):
 
     # Identité fiscale
     birth_date: Mapped[date | None] = mapped_column(Date, default=None)
-    fiscal_shares: Mapped[float | None] = mapped_column(Float, default=None)
+    household_status: Mapped[str | None] = mapped_column(String(16), default=None)  # single|couple
+    children: Mapped[int | None] = mapped_column(Integer, default=None)
+    fiscal_shares: Mapped[float | None] = mapped_column(Float, default=None)  # dérivé du foyer
     rfr_n_minus_2: Mapped[float | None] = mapped_column(Float, default=None)
 
-    # Stratégie
-    target_annual_return: Mapped[float | None] = mapped_column(Float, default=None)  # en %
-    max_annual_volatility: Mapped[float | None] = mapped_column(Float, default=None)  # en %
+    # Stratégie — le curseur (1 prudent … 5 dynamique) fixe les deux fractions
+    # ci-dessous via config/risk_levels.yaml (cf. finance/risk_profile.py)
+    risk_level: Mapped[int | None] = mapped_column(Integer, default=None)
+    target_annual_return: Mapped[float | None] = mapped_column(Float, default=None)  # fraction
+    max_annual_volatility: Mapped[float | None] = mapped_column(Float, default=None)  # fraction
+    monthly_dca: Mapped[float | None] = mapped_column(Float, default=None)  # €/mois
     horizon_years: Mapped[int | None] = mapped_column(Integer, default=None)
     default_broker: Mapped[str | None] = mapped_column(String(50), default=None)
 

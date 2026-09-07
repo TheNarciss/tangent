@@ -1,9 +1,9 @@
 import { Search, Plus, Sparkles } from "lucide-react";
-import { useMemo } from "react";
 
 import { useScan, useWatchlistAdd, type ScanCandidate, type ScanRequest } from "@/api";
-import { useSettings, SCANNER_MODE_LABELS, type ScannerMode } from "@/lib/settings";
+import { useSettings } from "@/lib/settings";
 import { fmt } from "@/lib/format";
+import { ScannerOptions } from "@/components/ScannerOptions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -17,18 +17,11 @@ import {
 
 /** Composant Scanner — découverte d'actifs PEA-éligibles qui amélioreraient
     le Sharpe du portefeuille via marginal contribution. Lit toutes les
-    configurations depuis Settings. */
+    configurations depuis Settings (accordéon « Options avancées »). */
 export function Scanner() {
   const [settings] = useSettings();
   const scan = useScan();
   const watchAdd = useWatchlistAdd();
-
-  const modesLabel = useMemo(() => {
-    if (settings.scanner.modes.length === 0) return "Aucun mode actif";
-    return settings.scanner.modes
-      .map((m) => SCANNER_MODE_LABELS[m as ScannerMode] ?? m)
-      .join(" · ");
-  }, [settings.scanner.modes]);
 
   const runScan = () => {
     const req: ScanRequest = {
@@ -66,18 +59,7 @@ export function Scanner() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Bandeau récap des modes actifs */}
-        <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
-          <div>
-            <span className="font-medium text-foreground">Modes activés :</span> {modesLabel}
-          </div>
-          <div className="mt-1">
-            <span className="font-medium text-foreground">Hypothèse :</span> ajout simulé de{" "}
-            {(settings.scanner.hypothesis_fraction * 100).toFixed(0)} % · top{" "}
-            {settings.scanner.n_results} candidats
-          </div>
-          <div className="mt-1 italic">Configurable dans ⚙️ Réglages</div>
-        </div>
+        <ScannerOptions />
 
         {/* Bouton de lancement */}
         <div className="flex items-center gap-3">
@@ -87,7 +69,7 @@ export function Scanner() {
           </Button>
           {!canScan && (
             <p className="text-xs text-[hsl(var(--loss))]">
-              Active au moins un mode dans les Réglages.
+              Active au moins un mode dans les options avancées.
             </p>
           )}
           {scan.isPending && (
@@ -133,7 +115,8 @@ function ScanResults({ data, elapsed, universe, onAdd, isAdding }: ResultsProps)
   if (data.length === 0) {
     return (
       <p className="text-sm text-muted-foreground italic">
-        Aucun candidat retourné. Élargis les modes dans les Réglages ou réduis les contraintes.
+        Aucun candidat retourné. Élargis les modes dans les options avancées ou réduis les
+        contraintes.
       </p>
     );
   }

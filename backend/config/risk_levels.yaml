@@ -1,0 +1,26 @@
+# Curseur « prudent ↔ dynamique » du profil (B4).
+# Chaque cran fixe les deux contraintes lues par l'optimiseur (objectif
+# « selon mon profil ») et par le briefing IA : rendement annuel visé et
+# volatilité annuelle maximale, en fractions (0.07 = 7 %/an).
+# Le cran 3 reprend les anciennes valeurs par défaut (7 % / 12 %).
+levels:
+  - level: 1
+    label: "Prudent"
+    target_annual_return: 0.03
+    max_annual_volatility: 0.05
+  - level: 2
+    label: "Plutôt prudent"
+    target_annual_return: 0.05
+    max_annual_volatility: 0.08
+  - level: 3
+    label: "Équilibré"
+    target_annual_return: 0.07
+    max_annual_volatility: 0.12
+  - level: 4
+    label: "Dynamique"
+    target_annual_return: 0.09
+    max_annual_volatility: 0.16
+  - level: 5
+    label: "Très dynamique"
+    target_annual_return: 0.11
+    max_annual_volatility: 0.22
