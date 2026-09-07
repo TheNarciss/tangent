@@ -11,6 +11,7 @@ import {
   type ScannerMode,
 } from "@/lib/settings";
 import { Button } from "@/components/ui/button";
+import { Section } from "@/components/ui/section";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -425,28 +426,6 @@ function PreferencesTab() {
 /* ────────────────────────────────────────────────────────────────────────── */
 /*  Atoms                                                                     */
 /* ────────────────────────────────────────────────────────────────────────── */
-
-function Section({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="space-y-4">
-      <div>
-        <h2 className="text-base font-semibold">{title}</h2>
-        {description && (
-          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{description}</p>
-        )}
-      </div>
-      <div>{children}</div>
-    </section>
-  );
-}
 
 function NumField({
   label,

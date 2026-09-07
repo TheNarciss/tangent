@@ -505,31 +505,11 @@ export function useScan() {
 
 /* ── Watchlist ──────────────────────────────────────────────────────── */
 
-export function useWatchlist() {
-  return useQuery({
-    queryKey: ["watchlist"],
-    queryFn: () => http<string[]>("/watchlist"),
-  });
-}
-
 export function useWatchlistAdd() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (ticker: string) =>
       http<string[]>(`/watchlist/${encodeURIComponent(ticker)}`, { method: "POST" }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["watchlist"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-      qc.invalidateQueries({ queryKey: ["optimizer"] });
-    },
-  });
-}
-
-export function useWatchlistRemove() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (ticker: string) =>
-      http<string[]>(`/watchlist/${encodeURIComponent(ticker)}`, { method: "DELETE" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["watchlist"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
@@ -624,11 +604,6 @@ export function useConfirmReset() {
       }),
   });
 }
-
-/* ── Bank Accounts (Phase A — multi-account aggregation) ──────────────────── */
-
-// Replace the existing "Bank Accounts (Phase A — multi-account aggregation)" section
-// in frontend/src/api.ts with this. Lines ~670 to ~727 in the current file.
 
 /* ── Bank Accounts (multi-account aggregation, ADR-013 hot+JSONB) ─────────── */
 
@@ -854,49 +829,6 @@ export function useRefreshBankAccounts() {
     },
   });
 }
-export interface BankAccountResponse {
-  id: string;
-  provider: string;
-  provider_account_id: string;
-  name: string;
-  type: BankAccountType;
-  currency: string;
-  balance: number;
-  iban: string | null;
-  institution_name: string | null;
-  last_synced_at: string | null;
-}
-
-export interface HoldingResponse {
-  id: string;
-  bank_account_id: string;
-  provider_investment_id: string;
-  ticker: string;
-  isin: string | null;
-  label: string;
-  quantity: number;
-  unit_price: number;
-  current_value: number;
-  currency: string;
-  // ADR-021 gap-fill tracking
-  ter: number | null;
-  ter_source: "api" | "llm" | "user" | null;
-  ter_resolved_at: string | null;
-  isin_source: "api" | "llm" | "user" | null;
-  isin_resolved_at: string | null;
-}
-
-export interface BankTransactionResponse {
-  id: string;
-  bank_account_id: string;
-  provider_transaction_id: string;
-  amount: number;
-  currency: string;
-  transaction_date: string;
-  description: string;
-  category: string | null;
-}
-
 /* ────────────────────────────────────────────────────────────────────── */
 /*  OAuth (Google, cf ADR-014)                                            */
 /* ────────────────────────────────────────────────────────────────────── */
@@ -953,7 +885,7 @@ export function listOAuthAccounts(): Promise<OAuthAccountPublic[]> {
 
 /** Unlink an OAuth account by id. */
 export function deleteOAuthAccount(id: string): Promise<void> {
-  return http<void>(`/users/me/oauth-accounts/${id}`, { method: "DELETE" });
+  return http<void>(`/users/me/oauth-accounts/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 /* ────────────────────────────────────────────────────────────────────── */
@@ -970,23 +902,14 @@ export interface TermsStatus {
 }
 
 /** Public endpoint — no auth required. */
-export async function fetchTermsVersion(): Promise<TermsVersion> {
-  const res = await fetch(`${API_URL}/auth/terms-version`);
-  if (!res.ok) {
-    throw new ApiError(
-      res.status,
-      "TermsVersionFetchFailed",
-      "Impossible de récupérer la version des CGU.",
-    );
-  }
-  return (await res.json()) as TermsVersion;
+export function fetchTermsVersion(): Promise<TermsVersion> {
+  return http<TermsVersion>("/auth/terms-version");
 }
 
 /** User accepts the current Terms + Privacy version. */
 export function acceptTerms(version: string): Promise<TermsStatus> {
   return http<TermsStatus>("/users/me/accept-terms", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ version }),
   });
 }
@@ -1009,7 +932,6 @@ export async function changePassword(
 ): Promise<void> {
   await http<void>("/users/me/change-password", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ current_password, new_password }),
   });
 }
@@ -1020,18 +942,7 @@ export async function deleteMyAccount(payload: {
 }): Promise<void> {
   await http<void>("/users/me/delete-account", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
-  });
-}
-
-export function fetchOAuthAccounts(): Promise<OAuthAccountPublic[]> {
-  return http<OAuthAccountPublic[]>("/users/me/oauth-accounts");
-}
-
-export async function unlinkOAuthAccount(accountId: string): Promise<void> {
-  await http<void>(`/users/me/oauth-accounts/${encodeURIComponent(accountId)}`, {
-    method: "DELETE",
   });
 }
 
@@ -1104,33 +1015,11 @@ export interface PortfolioReviewResponse {
   created_at: string;
 }
 
-async function fetchTodayReview(): Promise<PortfolioReviewResponse | null> {
-  const resp = await fetch(`${API_URL}/reviews/today`, { credentials: "include" });
-  if (!resp.ok)
-    throw new ApiError(resp.status, "http_error", `GET /reviews/today returned ${resp.status}`);
-  return resp.json();
-}
-
-async function fetchReviewsHistory(): Promise<PortfolioReviewResponse[]> {
-  const resp = await fetch(`${API_URL}/reviews?limit=90`, { credentials: "include" });
-  if (!resp.ok)
-    throw new ApiError(resp.status, "http_error", `GET /reviews returned ${resp.status}`);
-  return resp.json();
-}
-
 export function useTodayReview() {
   return useQuery({
     queryKey: ["reviews", "today"],
-    queryFn: fetchTodayReview,
+    queryFn: () => http<PortfolioReviewResponse | null>("/reviews/today"),
     staleTime: 1000 * 60 * 5, // 5 min
-  });
-}
-
-export function useReviewsHistory() {
-  return useQuery({
-    queryKey: ["reviews", "history"],
-    queryFn: fetchReviewsHistory,
-    staleTime: 1000 * 60 * 10,
   });
 }
 
@@ -1150,19 +1039,11 @@ export interface FieldOverrideResponse {
 export function useUpdateHoldingTer(accountId: string | null) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ holdingId, ter }: { holdingId: string; ter: number }) => {
-      const res = await fetch(`${API_URL}/accounts/holdings/${holdingId}/ter`, {
+    mutationFn: ({ holdingId, ter }: { holdingId: string; ter: number }) =>
+      http<FieldOverrideResponse>(`/accounts/holdings/${holdingId}/ter`, {
         method: "PUT",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ter }),
-      });
-      if (!res.ok) {
-        const detail = await res.json().catch(() => ({}));
-        throw new Error(typeof detail?.detail === "string" ? detail.detail : `HTTP ${res.status}`);
-      }
-      return (await res.json()) as FieldOverrideResponse;
-    },
+      }),
     onSuccess: () => {
       if (accountId) {
         qc.invalidateQueries({ queryKey: ["bank-accounts", accountId, "holdings"] });

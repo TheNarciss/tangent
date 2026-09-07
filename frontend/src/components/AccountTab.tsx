@@ -15,13 +15,14 @@ import {
   changePassword,
   deleteMyAccount,
   fetchBankConnections,
-  fetchOAuthAccounts,
+  listOAuthAccounts,
   unlinkBankConnection,
-  unlinkOAuthAccount,
+  deleteOAuthAccount,
   useCurrentUser,
 } from "@/api";
 import { useProfile } from "@/lib/profile";
 import { Button } from "@/components/ui/button";
+import { Section } from "@/components/ui/section";
 import {
   Dialog,
   DialogContent,
@@ -256,8 +257,8 @@ function ChangePasswordDialog({
 function OAuthSection() {
   const { data: user } = useCurrentUser();
   const accounts = useQuery({
-    queryKey: ["oauth-accounts"],
-    queryFn: fetchOAuthAccounts,
+    queryKey: ["user", "oauth-accounts"],
+    queryFn: listOAuthAccounts,
   });
 
   const hasPassword = user?.has_password ?? true;
@@ -309,9 +310,9 @@ function OAuthRow({
   const [error, setError] = useState<string | null>(null);
 
   const mutation = useMutation({
-    mutationFn: () => unlinkOAuthAccount(accountId),
+    mutationFn: () => deleteOAuthAccount(accountId),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["oauth-accounts"] });
+      qc.invalidateQueries({ queryKey: ["user", "oauth-accounts"] });
       setConfirming(false);
     },
     onError: (e) => {
@@ -708,25 +709,3 @@ function AutoReviewSection() {
 /* ──────────────────────────────────────────────────────────────────────── */
 /*  Atoms                                                                   */
 /* ──────────────────────────────────────────────────────────────────────── */
-
-function Section({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="space-y-4">
-      <div>
-        <h2 className="text-base font-semibold">{title}</h2>
-        {description && (
-          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{description}</p>
-        )}
-      </div>
-      <div>{children}</div>
-    </section>
-  );
-}
