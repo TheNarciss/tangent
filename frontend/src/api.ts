@@ -1057,6 +1057,24 @@ export interface FieldOverrideResponse {
   resolved_at: string;
 }
 
+/** Override the category of a movement (closed taxonomy, cf. lib/accounts.ts). */
+export function useUpdateTransactionCategory(accountId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ transactionId, category }: { transactionId: string; category: string }) =>
+      http<FieldOverrideResponse>(`/accounts/transactions/${transactionId}/category`, {
+        method: "PUT",
+        body: JSON.stringify({ category }),
+      }),
+    onSuccess: () => {
+      if (accountId) {
+        qc.invalidateQueries({ queryKey: ["bank-accounts", accountId, "transactions"] });
+      }
+      qc.invalidateQueries({ queryKey: ["transactions", "recent"] });
+    },
+  });
+}
+
 /**
  * Override the TER of a holding. Sets source='user' which beats LLM/API values
  * forever. Auto-invalidates the holdings query so the UI refetches.
