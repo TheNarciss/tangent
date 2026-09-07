@@ -20,8 +20,11 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .aggregator import AccountType as _AccountType
+from .aggregator.types import INVEST_ACCOUNT_TYPES as _INVEST_ACCOUNT_TYPES
+from .aggregator.types import LOAN_ACCOUNT_TYPES as _LOAN_ACCOUNT_TYPES
 from .auth import User, current_active_user
 from .db import get_session
+from .db.models import BankAccount as _BankAccountRow
 from .finance import envelope_metadata as _envelope_metadata
 from .models import (
     CashAccount as _CashAccount,
@@ -52,12 +55,18 @@ logger = logging.getLogger(__name__)
 # ════════════════════════════════════════════════════════════════════════════
 
 
-# Investment wrappers (have positions inside)
-_INVESTMENT_TYPES = {
-    _AccountType.PEA,
-    _AccountType.CTO,
-    _AccountType.LIFE_INSURANCE,
+# Every AccountType lands in exactly one Wealth bucket (cf. aggregator/types.py
+# groupings). OTHER is the only type left out: its balance means nothing
+# without a type, so it is logged and skipped.
+_CASH_TYPES = {
+    _AccountType.CHECKING,
+    _AccountType.SAVINGS,
+    _AccountType.CARD,  # deferred-debit card: negative balance = pending debits
+    _AccountType.DEPOSIT,
+    _AccountType.JOINT,
 }
+_INVESTMENT_TYPES = _INVEST_ACCOUNT_TYPES | {_AccountType.CRYPTO}
+_LOAN_TYPES = _LOAN_ACCOUNT_TYPES
 
 
 def _parse_date(value: str | None) -> _date | None:
@@ -77,20 +86,39 @@ def _safe_float(value: object) -> float | None:
     return None
 
 
+def _loan_outstanding(acc: _BankAccountRow, loan_dict: dict) -> float:
+    """Capital still owed on a loan-like account.
+
+    Powens exposes it as `used_amount` (hot column on the loans row, mirrored
+    in raw_data.loan). The account balance (negative) is only a fallback.
+    """
+    loan_row = acc.loan
+    used = _safe_float(loan_row.used_amount) if loan_row is not None else None
+    if used is None:
+        used = _safe_float(loan_dict.get("used_amount"))
+    if used is not None and used > 0:
+        return used
+    return abs(float(acc.balance or 0))
+
+
 async def get_user_wealth(
     user: User = Depends(current_active_user),
     session: AsyncSession = Depends(get_session),
 ) -> _Wealth:
     """Build the user's complete Wealth snapshot from bank_accounts + holdings.
 
-    Logic:
-    - CHECKING / SAVINGS → CashAccount (savings non-réglementé treated as cash)
+    Logic (every AccountType is covered, cf. aggregator/types.py):
+    - CHECKING / SAVINGS / CARD / DEPOSIT / JOINT → CashAccount
     - LIVRET_* / LDDS / LEP / PEL / CEL / CSL / CAT → WealthEnvelope (enriched
       with metadata from envelopes.yaml)
-    - PEA / CTO / LIFE_INSURANCE → InvestmentAccount with positions, OR
-      CashAccount(is_pea_cash=True) for PEA sub-accounts with 0 holdings
-    - LOAN → Loan (with details from raw_data.loan if present)
-    - OTHER → ignored (with a debug log; covered by Phase 2 PR 6 cleanup)
+    - PEA / CTO / LIFE_INSURANCE / CAPITALISATION / PER / PERP / PERCO /
+      MADELIN / ARTICLE_83 / PEE / RSP / REAL_ESTATE / CROWDLENDING / CRYPTO
+      → InvestmentAccount with positions when the provider lists them, else
+      valued at the account balance (`valuation` if Powens sent one); a PEA
+      sub-account with 0 holdings is a CashAccount(is_pea_cash=True)
+    - LOAN / MORTGAGE / CONSUMER_CREDIT / REVOLVING_CREDIT → Loan, outstanding
+      = `used_amount` (fallback |balance|)
+    - OTHER → ignored (debug log)
     """
     bank_accounts = await _accounts_repo.list_accounts(session, user.id)
 
@@ -103,7 +131,7 @@ async def get_user_wealth(
         acc_type = _AccountType(acc.type)
         institution = acc.institution_name
 
-        if acc_type in (_AccountType.CHECKING, _AccountType.SAVINGS):
+        if acc_type in _CASH_TYPES:
             wealth.checking_accounts.append(
                 _CashAccount(
                     provider_account_id=acc.provider_account_id,
@@ -157,6 +185,7 @@ async def get_user_wealth(
                     name=acc.name,
                     account_type=acc_type.value,
                     currency=acc.currency or "EUR",
+                    balance=float(acc.valuation if acc.valuation is not None else acc.balance or 0),
                     positions=[
                         _WealthPosition(
                             ticker=h.ticker,
@@ -174,10 +203,11 @@ async def get_user_wealth(
             )
             continue
 
-        if acc_type == _AccountType.LOAN:
+        if acc_type in _LOAN_TYPES:
             raw = acc.raw_data or {}
-            loan_dict = raw.get("loan") or {}
-            rate_raw = loan_dict.get("rate") if isinstance(loan_dict, dict) else None
+            raw_loan = raw.get("loan")
+            loan_dict: dict = raw_loan if isinstance(raw_loan, dict) else {}
+            rate_raw = loan_dict.get("rate")
             # Powens "rate" is in percent (e.g. 1.5 for 1.5%) — convert to decimal
             rate_pct: float | None = None
             if isinstance(rate_raw, (int, float)):
@@ -188,34 +218,17 @@ async def get_user_wealth(
                     provider_account_id=acc.provider_account_id,
                     institution_name=institution,
                     name=acc.name,
-                    outstanding_balance=abs(float(acc.balance or 0)),
+                    outstanding_balance=_loan_outstanding(acc, loan_dict),
                     currency=acc.currency or "EUR",
                     interest_rate_pct=rate_pct,
-                    monthly_payment=_safe_float(
-                        loan_dict.get("next_payment_amount")
-                        if isinstance(loan_dict, dict)
-                        else None
-                    ),
-                    next_payment_date=_parse_date(
-                        loan_dict.get("next_payment_date") if isinstance(loan_dict, dict) else None
-                    ),
-                    deferral_until=_parse_date(
-                        loan_dict.get("deferred_until") if isinstance(loan_dict, dict) else None
-                    ),
-                    maturity_date=_parse_date(
-                        loan_dict.get("maturity_date") if isinstance(loan_dict, dict) else None
-                    ),
+                    monthly_payment=_safe_float(loan_dict.get("next_payment_amount")),
+                    next_payment_date=_parse_date(loan_dict.get("next_payment_date")),
+                    deferral_until=_parse_date(loan_dict.get("deferred_until")),
+                    maturity_date=_parse_date(loan_dict.get("maturity_date")),
                 )
             )
             continue
 
-        # Other / Unknown → ignored. Will be addressed by AccountType heuristics
-        # in a follow-up (the LOAN heuristic for "Vcc - Prêt Jeune" is the first
-        # of these fixes).
-        import logging  # local import to avoid module-level overhead
-
-        logging.getLogger(__name__).debug(
-            "get_user_wealth: ignored account type=%s name=%r", acc_type.value, acc.name
-        )
+        logger.debug("get_user_wealth: ignored account type=%s name=%r", acc_type.value, acc.name)
 
     return wealth

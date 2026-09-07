@@ -71,7 +71,6 @@ export interface DashboardResponse {
   frontier: FrontierCloud;
   insights: Insight[];
   stress_tests: StressTestResult[];
-  wealth?: WealthSummary | null;
 }
 
 export interface TimeseriesResponse {
@@ -398,6 +397,16 @@ export function useLogout() {
 }
 
 /* ── Query hooks ────────────────────────────────────────────────────── */
+
+/** Patrimony snapshot from the DB only (no market data): the one
+ *  "patrimoine net" of the app, read by Aperçu and Comptes alike. */
+export function useWealthSummary() {
+  return useQuery({
+    queryKey: ["wealth"],
+    queryFn: () => http<WealthSummary>("/wealth"),
+    staleTime: 60_000,
+  });
+}
 
 export function useDashboard() {
   return useQuery({
@@ -818,6 +827,7 @@ export function useSyncBankAccounts() {
     onSuccess: (result) => {
       if (result.success) {
         qc.invalidateQueries({ queryKey: ["bank-accounts"] });
+        qc.invalidateQueries({ queryKey: ["wealth"] });
       }
     },
   });
@@ -830,6 +840,7 @@ export function useRefreshBankAccounts() {
     onSuccess: (result) => {
       if (result.success) {
         qc.invalidateQueries({ queryKey: ["bank-accounts"] });
+        qc.invalidateQueries({ queryKey: ["wealth"] });
       }
     },
   });

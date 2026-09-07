@@ -53,7 +53,6 @@ class DashboardResponse(BaseModel):
     frontier: FrontierCloud
     insights: list[Insight]
     stress_tests: list["StressTestResult"] = Field(default_factory=list)
-    wealth: "WealthSummary | None" = None  # Phase 2 PR 2/6: patrimony context
 
 
 class TimeseriesResponse(BaseModel):
@@ -396,20 +395,31 @@ class WealthEnvelope(BaseModel):
 
 
 class InvestmentAccount(BaseModel):
-    """A wrapper account (PEA, CTO, life insurance) and its positions."""
+    """A wrapper account (PEA, CTO, AV, PER, PEE, real estate…) and its positions.
+
+    `balance` is the provider-side valuation of the whole account. It is the
+    fallback value when the provider exposes no line-by-line positions (fonds
+    euros of a life insurance, a PER managed by the employer, real estate…).
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     provider_account_id: str
     institution_name: str | None = None
     name: str
-    account_type: str = Field(..., description="pea | cto | life_insurance")
+    account_type: str = Field(..., description="pea | cto | life_insurance | per | pee | …")
     currency: str = "EUR"
+    balance: float = Field(default=0.0, description="Provider valuation of the account")
     positions: list[WealthPosition] = []
 
     @property
     def positions_value(self) -> float:
         return sum(p.current_value for p in self.positions)
+
+    @property
+    def value(self) -> float:
+        """What the account is worth: its positions, else the provider balance."""
+        return self.positions_value if self.positions else self.balance
 
     @property
     def cost_basis(self) -> float:
@@ -472,7 +482,7 @@ class Wealth(BaseModel):
 
     @property
     def investments_total(self) -> float:
-        return sum(acc.positions_value for acc in self.investment_accounts)
+        return sum(acc.value for acc in self.investment_accounts)
 
     @property
     def investments_cost_basis(self) -> float:
@@ -480,7 +490,9 @@ class Wealth(BaseModel):
 
     @property
     def unrealized_pnl(self) -> float:
-        return self.investments_total - self.investments_cost_basis
+        # Per account: accounts valued at their balance (no positions) have no
+        # cost basis, so they contribute 0 rather than their whole value.
+        return sum(acc.unrealized_pnl for acc in self.investment_accounts)
 
     @property
     def liquid_assets(self) -> float:
@@ -509,12 +521,12 @@ class Wealth(BaseModel):
 
 
 # ════════════════════════════════════════════════════════════════════════════
-#  WealthSummary — patrimony context for DashboardResponse (Phase 2 PR 2/6)
+#  WealthSummary — patrimony snapshot served by GET /wealth (Phase 2 PR 2/6)
 # ════════════════════════════════════════════════════════════════════════════
 #
-# Light DTO carrying the patrimony view alongside the existing PortfolioMetrics.
-# DashboardResponse gains an optional `wealth` field, which the frontend Aperçu
-# tab uses to render 3 new blocks (Net Worth / Envelopes / Loans).
+# Light DTO carrying the patrimony view. Served by GET /wealth (DB only, no
+# market data) and read by the Aperçu KPI strip and the Comptes header, so the
+# app shows one "patrimoine net".
 #
 # Sized for serialisation : we don't ship every individual position here, only
 # the aggregates the frontend needs.
@@ -572,6 +584,5 @@ class WealthSummary(BaseModel):
     loans: list[LoanSummary] = []
 
 
-# Re-resolve forward references now that StressTestResult AND WealthSummary
-# are both defined.
+# Re-resolve forward references now that StressTestResult is defined.
 DashboardResponse.model_rebuild()

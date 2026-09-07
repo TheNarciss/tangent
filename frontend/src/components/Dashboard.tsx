@@ -1,4 +1,4 @@
-import { useDashboard } from "@/api";
+import { useWealthSummary } from "@/api";
 
 import { AiBriefTile } from "./dashboard/AiBriefTile";
 import { ChartTile } from "./dashboard/ChartTile";
@@ -22,25 +22,25 @@ interface DashboardProps {
  * Adaptive: bento grid on desktop (≥768px), single-column stacked on
  * mobile with KPIs in a 2-col grid (Net worth full-width on top).
  *
- * Data: single `useDashboard()` call powers the KPI strip via
- * `dashboard.wealth` (DashboardResponse.wealth nests a WealthSummary).
+ * Data: `useWealthSummary()` (GET /wealth, DB only) powers the KPI strip,
+ * so the patrimony figures show even when market data is unavailable.
  * Sparkline, AI brief, and transactions each have their own dedicated
  * query (different cache key, independent refetch).
  */
 export function Dashboard({ onNavigateToAccounts }: DashboardProps = {}) {
-  const { data: dashboard, isLoading, error } = useDashboard();
+  const { data: wealth, isLoading, error } = useWealthSummary();
 
   if (isLoading) {
     return <DashboardSkeleton />;
   }
 
-  if (error || !dashboard?.wealth) {
+  if (error || !wealth) {
     return <DashboardEmptyState />;
   }
 
   return (
     <div className="space-y-3 md:space-y-4">
-      <KpiStrip wealth={dashboard.wealth} />
+      <KpiStrip wealth={wealth} />
       <div className="grid gap-3 md:grid-cols-3 md:gap-4">
         <ChartTile className="md:col-span-2" />
         <AiBriefTile />
