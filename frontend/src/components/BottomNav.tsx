@@ -1,4 +1,4 @@
-import { Sparkles, Wallet, Target, TrendingUp, MoreHorizontal } from "lucide-react";
+import { LayoutDashboard, MoreHorizontal, PieChart, TrendingUp, Wallet } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -18,9 +18,9 @@ interface BottomNavItem {
 }
 
 const NAV_ITEMS: BottomNavItem[] = [
-  { view: "ai", label: "IA", icon: Sparkles },
+  { view: "overview", label: "Aperçu", icon: LayoutDashboard },
   { view: "accounts", label: "Comptes", icon: Wallet },
-  { view: "investments", label: "Invest.", icon: Target },
+  { view: "investments", label: "Placements", icon: PieChart },
   { view: "projection", label: "Projection", icon: TrendingUp },
   { view: "more", label: "Plus", icon: MoreHorizontal },
 ];

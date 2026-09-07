@@ -88,13 +88,13 @@ export function AiBriefTile() {
       >
         {headerLabel}
         <p className="line-clamp-4 text-sm leading-relaxed">{preview}</p>
-        <div className="text-[10px] text-muted-foreground">Voir la review complète →</div>
+        <div className="text-[10px] text-muted-foreground">Lire le briefing →</div>
       </button>
 
       <BottomSheet open={open} onOpenChange={setOpen}>
         <BottomSheetContent className="md:max-w-3xl">
           <BottomSheetHeader>
-            <BottomSheetTitle>Ta review du jour</BottomSheetTitle>
+            <BottomSheetTitle>Ton briefing du jour</BottomSheetTitle>
           </BottomSheetHeader>
           <ReviewSheet review={review} />
         </BottomSheetContent>

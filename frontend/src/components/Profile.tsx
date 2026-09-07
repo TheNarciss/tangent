@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, Calculator, Shield, Target, User } from "lucide-react";
+import { Calculator, Shield, Target, User } from "lucide-react";
 import { useBrokers } from "@/api";
 import { useEligibleEnvelopes, type EnvelopeEligibility } from "@/api";
 import { fmt } from "@/lib/format";
@@ -39,17 +39,13 @@ const LIVRETS = [
   ["pel", "PEL"],
 ] as const;
 
-interface ProfilePageProps {
-  onBack: () => void;
-}
-
 /** Page « Mon profil » — données utilisateur (qui je suis, situation, stratégie, compte).
  *
  * 4 sous-onglets : Identité, Fiscalité, Stratégie, Mon compte. Pattern draft + sticky
  * footer save : tant que des modifs sont en attente, un bandeau bas propose Annuler /
- * Enregistrer. Si l'user navigue avant save, on confirme pour ne rien perdre.
+ * Enregistrer. Le titre de page est porté par AppShell.
  */
-export function ProfilePage({ onBack }: ProfilePageProps) {
+export function ProfilePage() {
   const [profile, setProfile] = useProfile();
   const [draft, setDraft] = useState<UserProfile>(profile ?? EMPTY_PROFILE);
 
@@ -60,37 +56,12 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
 
   const isDirty = JSON.stringify(draft) !== JSON.stringify(profile ?? EMPTY_PROFILE);
 
-  const handleBack = () => {
-    if (
-      isDirty &&
-      !window.confirm("Tu as des modifications non sauvegardées. Quitter sans enregistrer ?")
-    ) {
-      return;
-    }
-    onBack();
-  };
-
   const handleSave = () => setProfile(draft);
   const handleReset = () => setDraft(profile ?? EMPTY_PROFILE);
 
   return (
     <div>
       <div className="mx-auto max-w-4xl pb-24">
-        {/* Header */}
-        <header className="flex items-start gap-3 mb-8">
-          <Button variant="ghost" size="sm" onClick={handleBack} className="gap-2 mt-0.5">
-            <ArrowLeft className="h-4 w-4" />
-            Retour
-          </Button>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-2xl font-semibold tracking-tight">Mon profil</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Données qui alimentent les calculs (éligibilité, optimiseur, projections). Stockées
-              dans ton navigateur et synchronisées avec ton compte.
-            </p>
-          </div>
-        </header>
-
         {/* Sub-tabs */}
         <Tabs defaultValue="identity" className="space-y-6">
           <TabsList className="grid h-auto w-full grid-cols-4">

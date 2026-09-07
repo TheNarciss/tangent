@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, Palette, Radar, Settings2, Sliders, X } from "lucide-react";
+import { Palette, Radar, Settings2, Sliders, X } from "lucide-react";
 
 import {
   DEFAULT_SETTINGS,
@@ -24,16 +24,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const PERIOD_OPTIONS: HistoricalPeriod[] = ["1y", "2y", "3y", "5y", "10y", "max"];
 
-interface SettingsPageProps {
-  onBack: () => void;
-}
-
 /** Page « Réglages » — paramètres techniques de l'app.
  *
  * 4 sous-onglets : Scanner, Modèle (CMA), Overrides, Préférences. Pattern draft + sticky
  * footer save identique à ProfilePage.
  */
-export function SettingsPage({ onBack }: SettingsPageProps) {
+export function SettingsPage() {
   const [settings, setSettings] = useSettings();
   const [draft, setDraft] = useState<AppSettings>(settings);
 
@@ -43,16 +39,6 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
 
   const isDirty = JSON.stringify(draft) !== JSON.stringify(settings);
 
-  const handleBack = () => {
-    if (
-      isDirty &&
-      !window.confirm("Tu as des modifications non sauvegardées. Quitter sans enregistrer ?")
-    ) {
-      return;
-    }
-    onBack();
-  };
-
   const handleSave = () => setSettings(draft);
   const handleReset = () => setDraft(settings);
   const handleResetDefaults = () => setDraft(DEFAULT_SETTINGS);
@@ -60,21 +46,6 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
   return (
     <div>
       <div className="mx-auto max-w-4xl pb-24">
-        {/* Header */}
-        <header className="flex items-start gap-3 mb-8">
-          <Button variant="ghost" size="sm" onClick={handleBack} className="gap-2 mt-0.5">
-            <ArrowLeft className="h-4 w-4" />
-            Retour
-          </Button>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-2xl font-semibold tracking-tight">Réglages</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Paramètres techniques de l&apos;app : comment les algos calculent et ce qui
-              s&apos;affiche. Stockés localement.
-            </p>
-          </div>
-        </header>
-
         <Tabs defaultValue="scanner" className="space-y-6">
           <TabsList className="grid h-auto w-full grid-cols-4">
             <TabsTrigger

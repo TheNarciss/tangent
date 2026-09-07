@@ -19,8 +19,8 @@ export function AuthScreen() {
       <div className="w-full max-w-md space-y-6">
         {/* Branding */}
         <div className="text-center space-y-2">
-          <h1 className="text-4xl font-semibold tracking-tight">Risky businesses</h1>
-          <p className="text-sm text-muted-foreground">Ton portefeuille, optimisé.</p>
+          <h1 className="text-4xl font-semibold tracking-tight">Tangent</h1>
+          <p className="text-sm text-muted-foreground">Ton patrimoine, clairement.</p>
         </div>
 
         {/* Card with the form */}

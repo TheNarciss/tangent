@@ -1,8 +1,14 @@
-import { Sparkles, Target, TrendingUp, Wallet } from "lucide-react";
+import { LayoutDashboard, PieChart, TrendingUp, Wallet } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-export type NavView = "ai" | "accounts" | "projection" | "investments" | "profile" | "settings";
+export type NavView =
+  | "overview"
+  | "accounts"
+  | "investments"
+  | "projection"
+  | "profile"
+  | "settings";
 
 interface NavItem {
   view: NavView;
@@ -11,10 +17,10 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { view: "ai", label: "IA", icon: Sparkles },
+  { view: "overview", label: "Aperçu", icon: LayoutDashboard },
   { view: "accounts", label: "Comptes", icon: Wallet },
+  { view: "investments", label: "Placements", icon: PieChart },
   { view: "projection", label: "Projection", icon: TrendingUp },
-  { view: "investments", label: "Investissements", icon: Target },
 ];
 
 interface SidebarProps {
