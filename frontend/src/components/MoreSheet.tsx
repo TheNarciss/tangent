@@ -1,14 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import {
-  ChevronRight,
-  FileText,
-  Link2,
-  LogOut,
-  Settings as SettingsIcon,
-  Shield,
-  User as UserIcon,
-} from "lucide-react";
+import { ChevronRight, FileText, Link2, LogOut, Shield, User as UserIcon } from "lucide-react";
 
 import { listOAuthAccounts, startGoogleAssociate, useCurrentUser, useLogout } from "@/api";
 import { cn } from "@/lib/utils";
@@ -30,7 +22,7 @@ interface MoreSheetProps {
  * BottomSheet that mirrors the desktop UserMenu on mobile.
  *
  * Triggered from BottomNav "Plus" tab. Shows user identity, Google linking,
- * profile/settings nav, legal links, and sign out — all in a tap-friendly
+ * profile/account nav, legal links, and sign out — all in a tap-friendly
  * vertical list.
  */
 export function MoreSheet({ open, onOpenChange }: MoreSheetProps) {
@@ -101,11 +93,7 @@ export function MoreSheet({ open, onOpenChange }: MoreSheetProps) {
               label="Mon profil"
               onClick={() => handleNavigate("profile")}
             />
-            <MoreItem
-              icon={SettingsIcon}
-              label="Réglages"
-              onClick={() => handleNavigate("settings")}
-            />
+            <MoreItem icon={Shield} label="Mon compte" onClick={() => handleNavigate("account")} />
           </div>
 
           {/* Legal */}

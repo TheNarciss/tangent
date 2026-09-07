@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
-import { Calculator, Shield, Target, User } from "lucide-react";
-import { useBrokers } from "@/api";
-import { useEligibleEnvelopes, type EnvelopeEligibility } from "@/api";
+
+import { useRiskLevels, useWealthSummary, type RiskLevel } from "@/api";
 import { fmt } from "@/lib/format";
 import {
   ageFromBirthDate,
   EMPTY_PROFILE,
+  fiscalSharesFor,
   isProfileComplete,
   useProfile,
+  type CeilingsUsed,
+  type HouseholdStatus,
   type UserProfile,
 } from "@/lib/profile";
 import { Button } from "@/components/ui/button";
@@ -21,39 +23,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AccountTab } from "@/components/AccountTab";
 
-const TMI_OPTIONS = [
-  { value: "0", label: "0 % — non imposable" },
-  { value: "0.11", label: "11 %" },
-  { value: "0.30", label: "30 %" },
-  { value: "0.41", label: "41 %" },
-  { value: "0.45", label: "45 %" },
-];
-
-const LIVRETS = [
+const LIVRETS: [keyof CeilingsUsed, string][] = [
   ["livret_a", "Livret A"],
-  ["livret_a_jeune", "Livret A Jeune"],
   ["ldds", "LDDS"],
   ["lep", "LEP"],
   ["pel", "PEL"],
-] as const;
+  ["livret_a_jeune", "Livret A Jeune"],
+];
 
-/** Page « Mon profil » — données utilisateur (qui je suis, situation, stratégie, compte).
+/** Page « Mon profil » — les 5 réponses dont Tangent a besoin pour calculer juste.
  *
- * 4 sous-onglets : Identité, Fiscalité, Stratégie, Mon compte. Pattern draft + sticky
- * footer save : tant que des modifs sont en attente, un bandeau bas propose Annuler /
- * Enregistrer. Le titre de page est porté par AppShell.
+ * Pattern draft + sticky footer : tant que des modifs sont en attente, un bandeau
+ * bas propose Annuler / Enregistrer. Le titre de page est porté par AppShell.
  */
-interface ProfilePageProps {
-  /** Tab opened on mount: /profil → identity, /compte → account. */
-  tab?: "identity" | "fiscal" | "strategy" | "account";
-}
-
-export function ProfilePage({ tab = "identity" }: ProfilePageProps) {
+export function ProfilePage() {
   const [profile, setProfile] = useProfile();
   const [draft, setDraft] = useState<UserProfile>(profile ?? EMPTY_PROFILE);
+  const riskLevels = useRiskLevels();
 
   // Resync le draft si le profile change depuis l'extérieur (sync DB, autre tab)
   useEffect(() => {
@@ -61,69 +48,154 @@ export function ProfilePage({ tab = "identity" }: ProfilePageProps) {
   }, [profile]);
 
   const isDirty = JSON.stringify(draft) !== JSON.stringify(profile ?? EMPTY_PROFILE);
-
   const handleSave = () => setProfile(draft);
   const handleReset = () => setDraft(profile ?? EMPTY_PROFILE);
 
+  const age = ageFromBirthDate(draft.birth_date);
+  const setHousehold = (status: HouseholdStatus, children: number) =>
+    setDraft({
+      ...draft,
+      household_status: status,
+      children,
+      fiscal_shares: fiscalSharesFor(status, children),
+    });
+  const setRiskLevel = (level: number) => {
+    const lv = riskLevels.data?.find((l) => l.level === level);
+    setDraft({
+      ...draft,
+      risk_level: level,
+      // Mirror the derived pair so the optimizer works before the server echoes it
+      ...(lv
+        ? {
+            target_annual_return: lv.target_annual_return * 100,
+            max_annual_volatility: lv.max_annual_volatility * 100,
+          }
+        : {}),
+    });
+  };
+
   return (
     <div>
-      <div className="mx-auto max-w-4xl pb-24">
-        {/* Sub-tabs */}
-        <Tabs defaultValue={tab} className="space-y-6">
-          <TabsList className="grid h-auto w-full grid-cols-4">
-            <TabsTrigger
-              value="identity"
-              className="flex-col gap-1 px-1 py-1.5 text-xs sm:flex-row sm:gap-2 sm:text-sm"
-            >
-              <User className="h-3.5 w-3.5" />
-              <span>Identité</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="fiscal"
-              className="flex-col gap-1 px-1 py-1.5 text-xs sm:flex-row sm:gap-2 sm:text-sm"
-            >
-              <Calculator className="h-3.5 w-3.5" />
-              <span>Fiscalité</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="strategy"
-              className="flex-col gap-1 px-1 py-1.5 text-xs sm:flex-row sm:gap-2 sm:text-sm"
-            >
-              <Target className="h-3.5 w-3.5" />
-              <span>Stratégie</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="account"
-              className="flex-col gap-1 px-1 py-1.5 text-xs sm:flex-row sm:gap-2 sm:text-sm"
-            >
-              <Shield className="h-3.5 w-3.5" />
-              <span>Mon compte</span>
-            </TabsTrigger>
-          </TabsList>
+      <div className="mx-auto max-w-2xl space-y-8 pb-24">
+        <Section
+          title="1 · Ta date de naissance"
+          description="Ton âge conditionne les livrets auxquels tu as droit et l'horizon de tes placements."
+        >
+          <Field
+            label="Date de naissance"
+            htmlFor="birth_date"
+            hint={age !== null ? `${age} ans` : "Obligatoire pour enregistrer"}
+          >
+            <Input
+              id="birth_date"
+              type="date"
+              value={draft.birth_date}
+              onChange={(e) => setDraft({ ...draft, birth_date: e.target.value })}
+              className="sm:max-w-xs"
+            />
+          </Field>
+        </Section>
 
-          <TabsContent value="identity" className="space-y-8 mt-6">
-            <IdentityTab draft={draft} setDraft={setDraft} />
-          </TabsContent>
+        <Section
+          title="2 · Ton foyer"
+          description="Sert à calculer tes parts fiscales, et donc les plafonds de revenu des livrets (LEP)."
+        >
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Situation" htmlFor="household">
+              <Select
+                value={draft.household_status}
+                onValueChange={(v: HouseholdStatus) => setHousehold(v, draft.children)}
+              >
+                <SelectTrigger id="household">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="single">Célibataire</SelectItem>
+                  <SelectItem value="couple">En couple (marié·e ou pacsé·e)</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field
+              label="Enfants à charge"
+              htmlFor="children"
+              hint={`= ${fmtShares(draft.fiscal_shares)} fiscale${draft.fiscal_shares > 1 ? "s" : ""}`}
+            >
+              <Input
+                id="children"
+                type="number"
+                min="0"
+                max="20"
+                step="1"
+                value={draft.children}
+                onChange={(e) =>
+                  setHousehold(draft.household_status, Math.max(0, Number(e.target.value) || 0))
+                }
+              />
+            </Field>
+          </div>
+        </Section>
 
-          <TabsContent value="fiscal" className="space-y-8 mt-6">
-            <FiscalTab draft={draft} setDraft={setDraft} />
-          </TabsContent>
+        <Section
+          title="3 · Ton revenu fiscal de référence"
+          description="Il est écrit sur la première page de ton avis d'imposition (« Revenu fiscal de référence »). Prends celui d'il y a deux ans."
+        >
+          <Field label="Revenu fiscal de référence (€)" htmlFor="rfr">
+            <Input
+              id="rfr"
+              type="number"
+              min="0"
+              step="500"
+              value={draft.rfr_n_minus_2}
+              onChange={(e) => setDraft({ ...draft, rfr_n_minus_2: Number(e.target.value) || 0 })}
+              className="sm:max-w-xs"
+            />
+          </Field>
+        </Section>
 
-          <TabsContent value="strategy" className="space-y-8 mt-6">
-            <StrategyTab draft={draft} setDraft={setDraft} />
-          </TabsContent>
+        <Section
+          title="4 · Ce que tu mets de côté chaque mois"
+          description="Le versement que Tangent utilise pour projeter ton épargne."
+        >
+          <Field label="Épargne mensuelle (€ / mois)" htmlFor="dca">
+            <Input
+              id="dca"
+              type="number"
+              min="0"
+              step="50"
+              value={draft.monthly_dca}
+              onChange={(e) => setDraft({ ...draft, monthly_dca: Number(e.target.value) || 0 })}
+              className="sm:max-w-xs"
+            />
+          </Field>
+        </Section>
 
-          <TabsContent value="account" className="space-y-8 mt-6">
-            <AccountTab />
-          </TabsContent>
-        </Tabs>
+        <Section
+          title="5 · Prudent ou dynamique ?"
+          description="Plus tu vas vers « dynamique », plus Tangent accepte que ton épargne varie d'une année à l'autre, en échange d'un rendement visé plus élevé."
+        >
+          <RiskSlider
+            value={draft.risk_level}
+            levels={riskLevels.data}
+            fallback={{
+              target_annual_return: draft.target_annual_return / 100,
+              max_annual_volatility: draft.max_annual_volatility / 100,
+            }}
+            onChange={setRiskLevel}
+          />
+        </Section>
+
+        <LivretsSection draft={draft} setDraft={setDraft} />
       </div>
 
       {/* Sticky footer : visible uniquement si modifs */}
       {isDirty && (
         <div className="fixed inset-x-0 bottom-16 z-40 border-t bg-background/95 backdrop-blur md:bottom-0 md:pb-[env(safe-area-inset-bottom)]">
-          <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-3">
-            <p className="text-sm text-muted-foreground">Modifications non enregistrées</p>
+          <div className="mx-auto flex max-w-2xl items-center justify-between gap-3 px-4 py-3">
+            <p className="text-sm text-muted-foreground">
+              {isProfileComplete(draft)
+                ? "Modifications non enregistrées"
+                : "Renseigne ta date de naissance pour enregistrer"}
+            </p>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={handleReset}>
                 Annuler
@@ -140,240 +212,107 @@ export function ProfilePage({ tab = "identity" }: ProfilePageProps) {
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */
-/*  Sub-tab content                                                          */
+/*  Risk slider                                                              */
 /* ────────────────────────────────────────────────────────────────────────── */
 
-interface TabProps {
+function RiskSlider({
+  value,
+  levels,
+  fallback,
+  onChange,
+}: {
+  value: number;
+  levels: RiskLevel[] | undefined;
+  fallback: { target_annual_return: number; max_annual_volatility: number };
+  onChange: (level: number) => void;
+}) {
+  const max = levels?.length ?? 5;
+  const current = levels?.find((l) => l.level === value);
+  const target = current?.target_annual_return ?? fallback.target_annual_return;
+  const vol = current?.max_annual_volatility ?? fallback.max_annual_volatility;
+
+  return (
+    <div className="space-y-3">
+      <input
+        id="risk_level"
+        type="range"
+        min={1}
+        max={max}
+        step={1}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        aria-label="Niveau de risque"
+        className="h-2 w-full cursor-pointer accent-primary"
+      />
+      <div className="flex justify-between text-xs text-muted-foreground">
+        <span>Prudent</span>
+        <span className="font-medium text-foreground">{current?.label ?? `Niveau ${value}`}</span>
+        <span>Dynamique</span>
+      </div>
+      <p className="text-sm text-muted-foreground">
+        Tangent vise environ <strong className="text-foreground">{wholePct(target)}</strong> par an
+        et accepte des variations jusqu'à{" "}
+        <strong className="text-foreground">±{wholePct(vol)}</strong> sur une année.
+      </p>
+    </div>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/*  Livrets : lus depuis les comptes synchronisés, saisie manuelle en repli    */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+function LivretsSection({
+  draft,
+  setDraft,
+}: {
   draft: UserProfile;
   setDraft: (p: UserProfile) => void;
-}
+}) {
+  const wealth = useWealthSummary();
+  const synced = wealth.data?.envelopes ?? [];
 
-function IdentityTab({ draft, setDraft }: TabProps) {
-  const age = ageFromBirthDate(draft.birth_date);
+  if (synced.length > 0) {
+    return (
+      <Section
+        title="Tes livrets"
+        description="Lus automatiquement depuis tes comptes connectés : rien à saisir."
+      >
+        <ul className="divide-y rounded-md border text-sm">
+          {synced.map((e, i) => (
+            <li key={i} className="flex items-center justify-between gap-3 px-3 py-2">
+              <span className="truncate">{e.display_name ?? e.name}</span>
+              <span className="font-mono tabular">{fmt.eur(e.balance)}</span>
+            </li>
+          ))}
+        </ul>
+      </Section>
+    );
+  }
+
   return (
     <Section
-      title="Identité"
-      description="Données de base. L'âge est calculé automatiquement et conditionne notamment l'éligibilité au Livret A Jeune."
+      title="Tes livrets"
+      description="Aucun livret synchronisé pour l'instant. Si tu en as ailleurs, indique leurs soldes pour que Tangent connaisse ta marge disponible. Laisse à 0 sinon."
     >
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Field label="Prénom" htmlFor="first_name">
-          <Input
-            id="first_name"
-            value={draft.first_name}
-            onChange={(e) => setDraft({ ...draft, first_name: e.target.value })}
-            placeholder="Ton prénom"
-          />
-        </Field>
-        <Field
-          label="Date de naissance"
-          htmlFor="birth_date"
-          hint={age !== null ? `${age} ans` : "Pour calculer ton âge"}
-        >
-          <Input
-            id="birth_date"
-            type="date"
-            value={draft.birth_date}
-            onChange={(e) => setDraft({ ...draft, birth_date: e.target.value })}
-          />
-        </Field>
-      </div>
-    </Section>
-  );
-}
-
-function FiscalTab({ draft, setDraft }: TabProps) {
-  const age = ageFromBirthDate(draft.birth_date);
-  const hasMinimumData = !!draft.birth_date && draft.fiscal_shares > 0;
-  return (
-    <>
-      <Section
-        title="Situation fiscale"
-        description="Détermine ta TMI, ton éligibilité LEP, et l'optimisation fiscale de l'optimiseur."
-      >
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field
-            label="Parts fiscales"
-            htmlFor="fiscal_shares"
-            hint="1 = célibataire · 2 = couple · +0,5 par enfant"
-          >
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+        {LIVRETS.map(([key, label]) => (
+          <Field key={key} label={`${label} (€)`} htmlFor={key}>
             <Input
-              id="fiscal_shares"
-              type="number"
-              step="0.5"
-              min="0.5"
-              value={draft.fiscal_shares}
-              onChange={(e) => setDraft({ ...draft, fiscal_shares: Number(e.target.value) || 1 })}
-            />
-          </Field>
-          <Field
-            label="RFR N-2 (€)"
-            htmlFor="rfr"
-            hint="Revenu fiscal de référence — sur ton avis d'imposition"
-          >
-            <Input
-              id="rfr"
+              id={key}
               type="number"
               min="0"
-              step="500"
-              value={draft.rfr_n_minus_2}
-              onChange={(e) => setDraft({ ...draft, rfr_n_minus_2: Number(e.target.value) || 0 })}
+              step="100"
+              value={draft.ceilings_used[key]}
+              onChange={(e) =>
+                setDraft({
+                  ...draft,
+                  ceilings_used: { ...draft.ceilings_used, [key]: Number(e.target.value) || 0 },
+                })
+              }
             />
           </Field>
-          <Field
-            label="TMI (Tranche Marginale d'Imposition)"
-            htmlFor="tmi"
-            hint="Tranche la plus haute appliquée à tes revenus"
-          >
-            <Select
-              value={String(draft.tmi_pct)}
-              onValueChange={(v) => setDraft({ ...draft, tmi_pct: Number(v) })}
-            >
-              <SelectTrigger id="tmi">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {TMI_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-        </div>
-      </Section>
-
-      <Section
-        title="Plafonds livrets utilisés"
-        description="Soldes actuels de tes livrets réglementés. Sert à connaître ta marge disponible pour chacun. Laisse à 0 si tu n'en as pas."
-      >
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          {LIVRETS.map(([key, label]) => (
-            <Field key={key} label={`${label} (€)`} htmlFor={key}>
-              <Input
-                id={key}
-                type="number"
-                min="0"
-                step="100"
-                value={draft.ceilings_used[key]}
-                onChange={(e) =>
-                  setDraft({
-                    ...draft,
-                    ceilings_used: {
-                      ...draft.ceilings_used,
-                      [key]: Number(e.target.value) || 0,
-                    },
-                  })
-                }
-              />
-            </Field>
-          ))}
-        </div>
-      </Section>
-
-      {hasMinimumData && age !== null && (
-        <EligibilityPreview
-          age={age}
-          rfr={draft.rfr_n_minus_2}
-          fiscalShares={draft.fiscal_shares}
-        />
-      )}
-    </>
-  );
-}
-
-function StrategyTab({ draft, setDraft }: TabProps) {
-  const brokersQuery = useBrokers();
-  return (
-    <Section
-      title="Stratégie d'investissement"
-      description="L'optimiseur cherche un portefeuille qui atteint ton objectif de rendement sous ta contrainte de risque. Si infaisable, il te le dit."
-    >
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Field label="Horizon (années)" htmlFor="horizon" hint="Durée avant d'utiliser cet argent">
-          <Input
-            id="horizon"
-            type="number"
-            min="1"
-            max="50"
-            step="1"
-            value={draft.horizon_years}
-            onChange={(e) => setDraft({ ...draft, horizon_years: Number(e.target.value) || 1 })}
-          />
-        </Field>
-        <Field
-          label="Capacité d'épargne (€/mois)"
-          htmlFor="dca"
-          hint="Combien tu peux verser chaque mois"
-        >
-          <Input
-            id="dca"
-            type="number"
-            min="0"
-            step="50"
-            value={draft.monthly_dca}
-            onChange={(e) => setDraft({ ...draft, monthly_dca: Number(e.target.value) || 0 })}
-          />
-        </Field>
-        <Field
-          label="Rendement annuel cible (%)"
-          htmlFor="target_return"
-          hint="Repères : livret 3 % · oblig 4–5 % · ETF actions 7–10 % · Nasdaq histo ~13 %"
-        >
-          <Input
-            id="target_return"
-            type="number"
-            min="0"
-            max="50"
-            step="0.5"
-            value={draft.target_annual_return}
-            onChange={(e) =>
-              setDraft({ ...draft, target_annual_return: Number(e.target.value) || 0 })
-            }
-          />
-        </Field>
-        <Field
-          label="Volatilité annuelle max (%)"
-          htmlFor="max_vol"
-          hint={`Plafond σ. Drawdown attendu ≈ −${(draft.max_annual_volatility * 2).toFixed(0)} % en année stressée. 5 %=prudent · 15 %=actions`}
-        >
-          <Input
-            id="max_vol"
-            type="number"
-            min="0"
-            max="50"
-            step="0.5"
-            value={draft.max_annual_volatility}
-            onChange={(e) =>
-              setDraft({ ...draft, max_annual_volatility: Number(e.target.value) || 0 })
-            }
-          />
-        </Field>
-        <Field
-          label="Courtier principal"
-          htmlFor="default_broker"
-          hint="Auto-détecté à la 1re synchro selon ta banque. Sert au calcul des frais en Projection."
-        >
-          <Select
-            value={draft.default_broker ?? "__auto__"}
-            onValueChange={(v: string) =>
-              setDraft({ ...draft, default_broker: v === "__auto__" ? null : v })
-            }
-            disabled={brokersQuery.isLoading}
-          >
-            <SelectTrigger id="default_broker">
-              <SelectValue placeholder="Chargement…" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__auto__">Auto-détection (recommandé)</SelectItem>
-              {brokersQuery.data?.brokers.map((b: { id: string; name: string }) => (
-                <SelectItem key={b.id} value={b.id}>
-                  {b.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
+        ))}
       </div>
     </Section>
   );
@@ -382,6 +321,14 @@ function StrategyTab({ draft, setDraft }: TabProps) {
 /* ────────────────────────────────────────────────────────────────────────── */
 /*  Atoms                                                                     */
 /* ────────────────────────────────────────────────────────────────────────── */
+
+function wholePct(fraction: number): string {
+  return `${Math.round(fraction * 100)} %`;
+}
+
+function fmtShares(n: number): string {
+  return `${n.toLocaleString("fr-FR")} part${n > 1 ? "s" : ""}`;
+}
 
 function Field({
   label,
@@ -402,62 +349,5 @@ function Field({
       {children}
       {hint && <p className="text-[11px] text-muted-foreground leading-relaxed">{hint}</p>}
     </div>
-  );
-}
-
-function EligibilityPreview({
-  age,
-  rfr,
-  fiscalShares,
-}: {
-  age: number;
-  rfr: number;
-  fiscalShares: number;
-}) {
-  const q = useEligibleEnvelopes({ age, rfr, fiscal_shares: fiscalShares });
-
-  return (
-    <Section
-      title="Enveloppes éligibles selon ton profil"
-      description="Calculé en direct depuis ton âge, RFR et parts fiscales."
-    >
-      {q.isLoading && <p className="text-sm text-muted-foreground">Vérification…</p>}
-      {q.data && (
-        <ul className="space-y-2">
-          {q.data.envelopes.map((e) => (
-            <EnvelopeRow key={e.id} env={e} />
-          ))}
-        </ul>
-      )}
-      {q.isError && (
-        <p className="text-sm text-[hsl(var(--loss))]">
-          Impossible de calculer l&apos;éligibilité. Vérifie que le backend tourne.
-        </p>
-      )}
-    </Section>
-  );
-}
-
-function EnvelopeRow({ env }: { env: EnvelopeEligibility }) {
-  return (
-    <li
-      className={`flex flex-wrap items-baseline gap-x-3 gap-y-0.5 rounded-md border px-3 py-2 text-sm ${
-        env.eligible ? "" : "opacity-50"
-      }`}
-    >
-      <span className="font-mono w-5 text-center">{env.eligible ? "✓" : "✗"}</span>
-      <span className="font-medium">{env.name}</span>
-      <span className="font-mono tabular text-xs text-muted-foreground">
-        {fmt.pct(env.rate_pct)}
-      </span>
-      {env.ceiling_eur !== null && (
-        <span className="font-mono tabular text-xs text-muted-foreground">
-          plafond {fmt.eur(env.ceiling_eur)}
-        </span>
-      )}
-      <span className="text-xs text-muted-foreground italic basis-full sm:basis-auto sm:ml-auto">
-        {env.note}
-      </span>
-    </li>
   );
 }

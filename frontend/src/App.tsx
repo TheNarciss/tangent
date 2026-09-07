@@ -7,15 +7,17 @@ import {
   useCurrentUser,
   useDashboard,
   useOptimizer,
+  useWealthSummary,
   type OptimizerObjective,
   type OptimizerRequest,
 } from "@/api";
-import { ageFromBirthDate, useProfile } from "@/lib/profile";
+import { ageFromBirthDate, ceilingsFromEnvelopes, useProfile } from "@/lib/profile";
 import { useProfileSync } from "@/lib/profile-sync";
 
 import { AppShell } from "@/components/AppShell";
 import { NAV_PATHS } from "@/components/Sidebar";
 
+import { AccountTab } from "@/components/AccountTab";
 import { Accounts } from "@/components/Accounts";
 import { AddBankButton } from "@/components/AddBankButton";
 import { AuthScreen } from "@/components/auth/AuthScreen";
@@ -33,7 +35,6 @@ import { ProfilePage } from "@/components/Profile";
 import { Projection } from "@/components/Projection";
 import { RiskReturn } from "@/components/RiskReturn";
 import { Scanner } from "@/components/Scanner";
-import { SettingsPage } from "@/components/Settings";
 import { TermsGate } from "@/components/TermsGate";
 
 export default function App() {
@@ -94,13 +95,20 @@ function Shell() {
           <Route path={NAV_PATHS.accounts} element={<Accounts />} />
           <Route path={NAV_PATHS.investments} element={<InvestmentsView />} />
           <Route path={NAV_PATHS.projection} element={<ProjectionView />} />
-          <Route path={NAV_PATHS.profile} element={<ProfilePage key="profil" />} />
-          <Route path={NAV_PATHS.account} element={<ProfilePage key="compte" tab="account" />} />
-          <Route path={NAV_PATHS.settings} element={<SettingsPage />} />
+          <Route path={NAV_PATHS.profile} element={<ProfilePage />} />
+          <Route path={NAV_PATHS.account} element={<AccountView />} />
           <Route path="*" element={<Navigate to={NAV_PATHS.overview} replace />} />
         </Routes>
       </AppShell>
     </>
+  );
+}
+
+function AccountView() {
+  return (
+    <div className="mx-auto max-w-4xl space-y-8 pb-24">
+      <AccountTab />
+    </div>
   );
 }
 
@@ -158,8 +166,6 @@ function getViewConfig(pathname: string, inputs: ViewConfigInputs): ViewConfig {
       return { title: "Mon profil", subtitle: "Ce que Tangent doit savoir pour calculer juste" };
     case NAV_PATHS.account:
       return { title: "Mon compte", subtitle: "Connexion, sécurité, banques et briefing" };
-    case NAV_PATHS.settings:
-      return { title: "Réglages", subtitle: "Options avancées de calcul" };
     default:
       return { title: "Aperçu", subtitle: "Ton patrimoine en un coup d'œil" };
   }
@@ -171,8 +177,12 @@ function InvestmentsTab({
   dashboard: NonNullable<ReturnType<typeof useDashboard>["data"]>;
 }) {
   const [profile] = useProfile();
+  const wealth = useWealthSummary();
   const age = profile ? ageFromBirthDate(profile.birth_date) : null;
   const hasProfile = !!profile && age !== null && profile.fiscal_shares > 0;
+  // Livret balances come from the synced accounts; the profile's manual
+  // values are only a fallback when nothing is synced.
+  const ceilingsUsed = ceilingsFromEnvelopes(wealth.data?.envelopes) ?? profile?.ceilings_used;
 
   const profileMaxVol = hasProfile && profile ? profile.max_annual_volatility : 10;
   const profileTargetReturn = hasProfile && profile ? profile.target_annual_return : 7;
@@ -223,7 +233,7 @@ function InvestmentsTab({
           age: age!,
           rfr: profile.rfr_n_minus_2,
           fiscal_shares: profile.fiscal_shares,
-          ceilings_used: profile.ceilings_used,
+          ceilings_used: ceilingsUsed,
         }
       : {}),
     ...(typeof totalCapital === "number" && totalCapital > 0

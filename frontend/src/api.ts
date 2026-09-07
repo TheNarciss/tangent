@@ -391,6 +391,22 @@ export function useLogout() {
 
 /* ── Query hooks ────────────────────────────────────────────────────── */
 
+/** One position of the profile's « prudent ↔ dynamique » slider (config/risk_levels.yaml). */
+export interface RiskLevel {
+  level: number;
+  label: string;
+  target_annual_return: number; // fraction
+  max_annual_volatility: number; // fraction
+}
+
+export function useRiskLevels() {
+  return useQuery({
+    queryKey: ["profile", "risk-levels"],
+    queryFn: () => http<RiskLevel[]>("/profile/risk-levels"),
+    staleTime: Infinity,
+  });
+}
+
 /** Patrimony snapshot from the DB only (no market data): the one
  *  "patrimoine net" of the app, read by Aperçu and Comptes alike. */
 export function useWealthSummary() {
