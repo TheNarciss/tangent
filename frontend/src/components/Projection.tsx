@@ -1,12 +1,11 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { ApiError, useBrokers, useProjection, type ProjectionResponse } from "@/api";
-import { formatDateTick, linePath, linearScale, niceTicks, pickIndices } from "@/lib/chart";
+import { linePath, linearScale, niceTicks, pickIndices } from "@/lib/chart";
 import { useDebouncedValue } from "@/lib/hooks";
 import { fmt } from "@/lib/format";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChartTooltip } from "@/components/ChartTooltip";
-import { useIsMobile } from "@/lib/responsive";
+import { Chart, Crosshair, XAxis, YAxis, indexAt, type ChartFrame } from "@/components/ui/chart";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -16,13 +15,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-// Chart geometry (viewBox units). The mobile variant keeps SVG text legible
-// once the SVG is scaled down to a ~360px-wide phone screen.
-const DIMS = {
-  desktop: { W: 720, H: 360, PAD: { left: 64, right: 24, top: 16, bottom: 36 }, ticks: 6 },
-  mobile: { W: 400, H: 280, PAD: { left: 48, right: 12, top: 12, bottom: 32 }, ticks: 4 },
-} as const;
 
 const COLOR = {
   band: "hsl(var(--foreground))",
@@ -272,234 +264,161 @@ interface FanProps {
 }
 
 function FanChart({ data }: FanProps) {
-  const isMobile = useIsMobile();
-  const { W, H, PAD, ticks } = isMobile ? DIMS.mobile : DIMS.desktop;
-  const innerW = W - PAD.left - PAD.right;
-  const innerH = H - PAD.top - PAD.bottom;
-
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const [wrapW, setWrapW] = useState<number>(W);
+  const n = data.months.length;
 
-  const { xScale, yScale, yTicks, xTicks } = useMemo(() => {
-    const lastIdx = data.months.length - 1;
-    const allValues = [...data.bands.p10, ...data.bands.p90, ...data.invested];
-    const yMin = 0;
-    const yMax = Math.max(...allValues);
+  const yMax = useMemo(
+    () => Math.max(...data.bands.p10, ...data.bands.p90, ...data.invested),
+    [data],
+  );
 
-    const xScale = linearScale([0, lastIdx], [PAD.left, PAD.left + innerW]);
-    const yScale = linearScale([yMin, yMax * 1.05], [PAD.top + innerH, PAD.top]);
-
-    return {
-      xScale,
-      yScale,
-      yTicks: niceTicks(yMin, yMax, ticks),
-      xTicks: pickIndices(data.months.length, ticks),
-    };
-  }, [data, innerW, innerH, PAD, ticks]);
-
-  const xAt = (i: number) => xScale(i);
-
-  // pointer (mouse or touch) → nearest month index
-  const handleMove = (e: React.PointerEvent<SVGSVGElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    setWrapW(rect.width);
-    const px = ((e.clientX - rect.left) / rect.width) * W;
-    if (px < PAD.left || px > W - PAD.right) {
-      setHoverIdx(null);
-      return;
-    }
-    const lastIdx = data.months.length - 1;
-    const t = (px - PAD.left) / innerW;
-    const i = Math.round(t * lastIdx);
-    setHoverIdx(Math.max(0, Math.min(lastIdx, i)));
-  };
-
-  // For the band, we draw P10→P90 as an envelope, then P25→P75 as a darker inner one.
-  const envelopePath = (lo: number[], hi: number[]) => {
-    let p = `M${xAt(0).toFixed(2)},${yScale(lo[0]).toFixed(2)} `;
-    for (let i = 1; i < lo.length; i++) p += `L${xAt(i).toFixed(2)},${yScale(lo[i]).toFixed(2)} `;
-    for (let i = hi.length - 1; i >= 0; i--)
-      p += `L${xAt(i).toFixed(2)},${yScale(hi[i]).toFixed(2)} `;
-    return p + "Z";
-  };
-
-  const goalPx = data.goal !== null ? yScale(data.goal) : null;
+  const scales = (frame: ChartFrame) => ({
+    xScale: linearScale([0, n - 1], [frame.left, frame.right]),
+    yScale: linearScale([0, yMax * 1.05], [frame.bottom, frame.top]),
+  });
 
   return (
-    <div ref={wrapRef} className="relative w-full">
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        className="h-auto w-full touch-pan-y"
-        role="img"
-        aria-label="Projection DCA"
-        onPointerMove={handleMove}
-        onPointerLeave={(e) => {
-          // On touch, keep the last tapped point visible after the finger lifts.
-          if (e.pointerType === "mouse") setHoverIdx(null);
+    <div>
+      <Chart
+        ariaLabel="Projection DCA"
+        height={(_w, compact) => (compact ? 260 : 360)}
+        pad={(compact) =>
+          compact
+            ? { left: 44, right: 12, top: 12, bottom: 34 }
+            : { left: 64, right: 24, top: 16, bottom: 36 }
+        }
+        onPointer={(p, frame) => setHoverIdx(p ? indexAt(p.x, frame, n) : null)}
+        tooltip={(frame) => {
+          if (hoverIdx === null) return null;
+          const { xScale, yScale } = scales(frame);
+          return {
+            x: xScale(hoverIdx),
+            y: yScale(data.bands.p50[hoverIdx]),
+            content: <FanTooltipContent data={data} idx={hoverIdx} />,
+          };
         }}
       >
-        {/* Grid */}
-        <g stroke="hsl(var(--border))" strokeWidth="0.5" opacity="0.5">
-          {yTicks.map((t) => (
-            <line
-              key={`yg-${t}`}
-              x1={PAD.left}
-              x2={PAD.left + innerW}
-              y1={yScale(t)}
-              y2={yScale(t)}
-            />
-          ))}
-        </g>
+        {(frame) => {
+          const { xScale, yScale } = scales(frame);
+          const ticks = frame.compact ? 4 : 6;
+          const xAt = (i: number) => xScale(i);
+          // P10→P90 as an envelope, then P25→P75 as a darker inner one.
+          const envelopePath = (lo: number[], hi: number[]) => {
+            let p = `M${xAt(0).toFixed(2)},${yScale(lo[0]).toFixed(2)} `;
+            for (let i = 1; i < lo.length; i++)
+              p += `L${xAt(i).toFixed(2)},${yScale(lo[i]).toFixed(2)} `;
+            for (let i = hi.length - 1; i >= 0; i--)
+              p += `L${xAt(i).toFixed(2)},${yScale(hi[i]).toFixed(2)} `;
+            return p + "Z";
+          };
+          const goalPx = data.goal !== null ? yScale(data.goal) : null;
 
-        {/* P10-P90 envelope */}
-        <path
-          d={envelopePath(data.bands.p10, data.bands.p90)}
-          fill={COLOR.band}
-          fillOpacity={0.08}
-        />
-        {/* P25-P75 envelope */}
-        <path
-          d={envelopePath(data.bands.p25, data.bands.p75)}
-          fill={COLOR.band}
-          fillOpacity={0.14}
-        />
-
-        {/* Goal line */}
-        {goalPx !== null && (
-          <g>
-            <line
-              x1={PAD.left}
-              x2={PAD.left + innerW}
-              y1={goalPx}
-              y2={goalPx}
-              stroke={COLOR.goal}
-              strokeDasharray="4 4"
-              strokeWidth="1"
-            />
-            <text
-              x={PAD.left + innerW - 4}
-              y={goalPx - 4}
-              textAnchor="end"
-              className="font-mono text-[10px]"
-              fill={COLOR.goal}
-            >
-              Objectif {fmt.eur(data.goal!)}
-            </text>
-          </g>
-        )}
-
-        {/* Deterministic lines */}
-        <path
-          d={linePath(data.bands.base, xAt, yScale)}
-          fill="none"
-          stroke={COLOR.base}
-          strokeWidth="2"
-        />
-
-        {/* Gross P50 (without fees) — dashed overlay for comparison */}
-        <path
-          d={linePath(data.gross_p50, xAt, yScale)}
-          fill="none"
-          stroke={COLOR.gross}
-          strokeDasharray="4 4"
-          strokeWidth="1.2"
-          strokeOpacity={0.65}
-        />
-
-        {/* Invested line */}
-        <path
-          d={linePath(data.invested, xAt, yScale)}
-          fill="none"
-          stroke={COLOR.invested}
-          strokeDasharray="3 3"
-          strokeWidth="1.2"
-        />
-
-        {/* Axes */}
-        <g stroke="hsl(var(--foreground))" strokeWidth="1">
-          <line x1={PAD.left} x2={PAD.left} y1={PAD.top} y2={PAD.top + innerH} />
-          <line x1={PAD.left} x2={PAD.left + innerW} y1={PAD.top + innerH} y2={PAD.top + innerH} />
-        </g>
-
-        {/* Y ticks */}
-        <g className="font-mono text-[10px] fill-current text-muted-foreground">
-          {yTicks.map((t) => (
-            <g key={`yt-${t}`}>
-              <line
-                x1={PAD.left - 4}
-                x2={PAD.left}
-                y1={yScale(t)}
-                y2={yScale(t)}
-                stroke="currentColor"
+          return (
+            <>
+              <YAxis
+                frame={frame}
+                ticks={niceTicks(0, yMax, ticks)}
+                scale={yScale}
+                format={compactEur}
+                grid
               />
-              <text x={PAD.left - 8} y={yScale(t) + 3} textAnchor="end">
-                {compactEur(t)}
-              </text>
-            </g>
-          ))}
-        </g>
 
-        {/* X ticks (years) */}
-        <g className="font-mono text-[10px] fill-current text-muted-foreground">
-          {xTicks.map((i) => (
-            <g key={`xt-${i}`}>
-              <line
-                x1={xAt(i)}
-                x2={xAt(i)}
-                y1={PAD.top + innerH}
-                y2={PAD.top + innerH + 4}
-                stroke="currentColor"
+              {/* P10-P90 envelope */}
+              <path
+                d={envelopePath(data.bands.p10, data.bands.p90)}
+                fill={COLOR.band}
+                fillOpacity={0.08}
               />
-              <text x={xAt(i)} y={PAD.top + innerH + 16} textAnchor="middle">
-                {data.months[i] / 12 < 1
-                  ? `${data.months[i]}m`
-                  : `${Math.round(data.months[i] / 12)}a`}
-              </text>
-            </g>
-          ))}
-          <text
-            x={PAD.left + innerW / 2}
-            y={H - 6}
-            textAnchor="middle"
-            className="font-sans text-xs"
-          >
-            Horizon
-          </text>
-        </g>
+              {/* P25-P75 envelope */}
+              <path
+                d={envelopePath(data.bands.p25, data.bands.p75)}
+                fill={COLOR.band}
+                fillOpacity={0.14}
+              />
 
-        {/* Hover crosshair */}
-        {hoverIdx !== null && (
-          <g>
-            <line
-              x1={xAt(hoverIdx)}
-              x2={xAt(hoverIdx)}
-              y1={PAD.top}
-              y2={PAD.top + innerH}
-              stroke="hsl(var(--foreground))"
-              strokeDasharray="2 3"
-              strokeWidth="0.8"
-              opacity={0.5}
-            />
-            <circle
-              cx={xAt(hoverIdx)}
-              cy={yScale(data.bands.p50[hoverIdx])}
-              r="4"
-              fill={COLOR.base}
-            />
-          </g>
-        )}
-      </svg>
+              {/* Goal line */}
+              {goalPx !== null && (
+                <g>
+                  <line
+                    x1={frame.left}
+                    x2={frame.right}
+                    y1={goalPx}
+                    y2={goalPx}
+                    stroke={COLOR.goal}
+                    strokeDasharray="4 4"
+                    strokeWidth="1"
+                  />
+                  <text
+                    x={frame.right - 4}
+                    y={goalPx - 4}
+                    textAnchor="end"
+                    className="font-mono text-[11px]"
+                    fill={COLOR.goal}
+                  >
+                    Objectif {fmt.eur(data.goal!)}
+                  </text>
+                </g>
+              )}
 
-      {hoverIdx !== null && (
-        <ChartTooltip
-          x={(xAt(hoverIdx) / W) * wrapW}
-          y={(yScale(data.bands.p50[hoverIdx]) / H) * ((wrapW * H) / W)}
-          containerWidth={wrapW}
-        >
-          <FanTooltipContent data={data} idx={hoverIdx} />
-        </ChartTooltip>
-      )}
+              {/* Deterministic lines */}
+              <path
+                d={linePath(data.bands.base, xAt, yScale)}
+                fill="none"
+                stroke={COLOR.base}
+                strokeWidth="2"
+              />
+
+              {/* Gross P50 (without fees) — dashed overlay for comparison */}
+              <path
+                d={linePath(data.gross_p50, xAt, yScale)}
+                fill="none"
+                stroke={COLOR.gross}
+                strokeDasharray="4 4"
+                strokeWidth="1.2"
+                strokeOpacity={0.65}
+              />
+
+              {/* Invested line */}
+              <path
+                d={linePath(data.invested, xAt, yScale)}
+                fill="none"
+                stroke={COLOR.invested}
+                strokeDasharray="3 3"
+                strokeWidth="1.2"
+              />
+
+              {/* Axes */}
+              <g stroke="hsl(var(--foreground))" strokeWidth="1">
+                <line x1={frame.left} x2={frame.left} y1={frame.top} y2={frame.bottom} />
+              </g>
+              <XAxis
+                frame={frame}
+                ticks={pickIndices(n, ticks)}
+                scale={xScale}
+                format={(i) =>
+                  data.months[i] / 12 < 1
+                    ? `${data.months[i]}m`
+                    : `${Math.round(data.months[i] / 12)}a`
+                }
+                label="Horizon"
+              />
+
+              {/* Hover crosshair */}
+              {hoverIdx !== null && (
+                <g>
+                  <Crosshair frame={frame} x={xAt(hoverIdx)} />
+                  <circle
+                    cx={xAt(hoverIdx)}
+                    cy={yScale(data.bands.p50[hoverIdx])}
+                    r="4"
+                    fill={COLOR.base}
+                  />
+                </g>
+              )}
+            </>
+          );
+        }}
+      </Chart>
 
       <Legend />
     </div>
@@ -617,6 +536,3 @@ function compactEur(v: number): string {
   if (Math.abs(v) >= 1000) return `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)} k€`;
   return `${v.toFixed(0)} €`;
 }
-
-// silence unused-import for formatDateTick (kept available if we re-add date axis)
-void formatDateTick;
