@@ -2,8 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Banknote,
   Building2,
-  ChevronDown,
-  ChevronRight,
   Landmark,
   PiggyBank,
   RefreshCw,
@@ -13,55 +11,30 @@ import {
 
 import {
   useBankAccounts,
-  useWealthSummary,
-  useAccountHoldings,
-  useAccountTransactions,
-  useUpdateHoldingTer,
   useRefreshBankAccounts,
   useSyncBankAccounts,
+  useWealthSummary,
   type BankAccountResponse,
-  type BankAccountType,
-  type LoanResponse,
 } from "@/api";
+import {
+  GROUP_LABELS,
+  GROUP_ORDER,
+  TYPE_LABELS,
+  accountValue,
+  cleanName,
+  groupOf,
+  groupTotal,
+  longDate,
+  relativeTime,
+  type AccountGroup,
+} from "@/lib/accounts";
 import { fmt } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { DataField } from "@/components/ui/data-field";
+import { AccountDetailSheet } from "@/components/AccountDetailSheet";
+import { BanksCard } from "@/components/BanksCard";
 
-/* ── Categories & labels ──────────────────────────────────────────────────── */
-
-type Category = "cash" | "savings" | "invest" | "retirement" | "employee" | "loan" | "other";
-
-const CATEGORY_LABELS: Record<Category, string> = {
-  cash: "Comptes courants",
-  savings: "Épargne",
-  invest: "Investissement",
-  retirement: "Retraite",
-  employee: "Épargne salariale",
-  loan: "Prêts",
-  other: "Autres",
-};
-
-const CATEGORY_ORDER: Category[] = [
-  "cash",
-  "savings",
-  "invest",
-  "retirement",
-  "employee",
-  "loan",
-  "other",
-];
-
-const CATEGORY_ICON: Record<Category, typeof Wallet> = {
+const GROUP_ICON: Record<AccountGroup, typeof Wallet> = {
   cash: Wallet,
   savings: PiggyBank,
   invest: TrendingUp,
@@ -71,203 +44,22 @@ const CATEGORY_ICON: Record<Category, typeof Wallet> = {
   other: Banknote,
 };
 
-const TYPE_LABELS: Record<BankAccountType, string> = {
-  checking: "Courant",
-  card: "Carte",
-  joint: "Joint",
-  savings: "Épargne",
-  livret_a: "Livret A",
-  livret_b: "Livret B",
-  ldds: "LDDS",
-  lep: "LEP",
-  pel: "PEL",
-  cel: "CEL",
-  csl: "CSL",
-  cat: "CAT",
-  deposit: "Dépôt",
-  pea: "PEA",
-  cto: "CTO",
-  life_insurance: "Assurance vie",
-  capitalisation: "Capitalisation",
-  real_estate: "Immobilier",
-  crowdlending: "Crowdlending",
-  per: "PER",
-  perp: "PERP",
-  perco: "PERCO",
-  madelin: "Madelin",
-  article_83: "Art. 83",
-  pee: "PEE",
-  rsp: "RSP",
-  loan: "Prêt",
-  mortgage: "Prêt immo",
-  consumer_credit: "Crédit conso",
-  revolving_credit: "Revolving",
-  crypto: "Crypto",
-  other: "Autre",
-};
-
-const INVESTMENT_TYPES: BankAccountType[] = [
-  "pea",
-  "cto",
-  "life_insurance",
-  "capitalisation",
-  "per",
-  "perp",
-  "perco",
-  "madelin",
-  "article_83",
-  "pee",
-  "rsp",
-  "real_estate",
-  "crowdlending",
-];
-
-const TRANSACTION_TYPES: BankAccountType[] = [
-  "checking",
-  "savings",
-  "card",
-  "joint",
-  "livret_a",
-  "livret_b",
-  "ldds",
-  "lep",
-  "pel",
-  "cel",
-  "csl",
-  "cat",
-  "deposit",
-];
-
-function categorize(type: BankAccountType): Category {
-  switch (type) {
-    case "checking":
-    case "card":
-    case "joint":
-      return "cash";
-    case "savings":
-    case "livret_a":
-    case "livret_b":
-    case "ldds":
-    case "lep":
-    case "pel":
-    case "cel":
-    case "csl":
-    case "cat":
-    case "deposit":
-      return "savings";
-    case "pea":
-    case "cto":
-    case "life_insurance":
-    case "capitalisation":
-    case "real_estate":
-    case "crowdlending":
-      return "invest";
-    case "per":
-    case "perp":
-    case "perco":
-    case "madelin":
-    case "article_83":
-      return "retirement";
-    case "pee":
-    case "rsp":
-      return "employee";
-    case "loan":
-    case "mortgage":
-    case "consumer_credit":
-    case "revolving_credit":
-      return "loan";
-    default:
-      return "other";
-  }
-}
-
-/* ── Helpers ──────────────────────────────────────────────────────────────── */
-
-function cleanName(name: string): string {
-  const words = name.split(/\s+/);
-  const seen = new Set<string>();
-  return words
-    .filter((w) => {
-      const k = w.toLowerCase();
-      if (seen.has(k)) return false;
-      seen.add(k);
-      return true;
-    })
-    .join(" ");
-}
-
-function maskedIban(iban: string | null): string {
-  if (!iban) return "—";
-  return `•••• ${iban.slice(-4)}`;
-}
-
-function relativeTime(iso: string | null): string {
-  if (!iso) return "—";
-  const diff = Date.now() - new Date(iso).getTime();
-  const minutes = Math.floor(diff / 60_000);
-  if (minutes < 1) return "à l'instant";
-  if (minutes < 60) return `${minutes}min`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
-  return `${Math.floor(hours / 24)}j`;
-}
-
-const MONTH_FR = [
-  "janv.",
-  "févr.",
-  "mars",
-  "avr.",
-  "mai",
-  "juin",
-  "juil.",
-  "août",
-  "sept.",
-  "oct.",
-  "nov.",
-  "déc.",
-];
-
-function monthYear(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return `${MONTH_FR[d.getMonth()]} ${d.getFullYear()}`;
-}
-
-function formatRate(rate: number): string {
-  return `${rate.toFixed(2).replace(".", ",")} %`;
-}
-
-function categoryTotal(accounts: BankAccountResponse[], category: Category): number {
-  return accounts.reduce((sum, a) => {
-    if (category === "invest" || category === "retirement" || category === "employee") {
-      return sum + (a.valuation ?? a.balance);
-    }
-    if (category === "loan") {
-      return sum + (a.loan?.used_amount ?? Math.abs(a.balance));
-    }
-    return sum + a.balance;
-  }, 0);
-}
-
-/* ── Root component ───────────────────────────────────────────────────────── */
-
+/**
+ * Comptes — « Ton patrimoine » (one figure, from GET /wealth), then one card
+ * per account grouped by family, one column on phones / two on desktop.
+ * Tap a card for its detail (movements, positions, loan schedule) in a
+ * bottom sheet. Banks are managed at the bottom of the page.
+ */
 export function Accounts() {
   const accounts = useBankAccounts();
-  // Same figure as the Aperçu tile: computed once, server-side (GET /wealth).
   const wealth = useWealthSummary();
   const refresh = useRefreshBankAccounts();
   const sync = useSyncBankAccounts();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<BankAccountResponse | null>(null);
 
-  // Synchronous in-flight guard — closes the race window between
-  // refresh.mutate() being called and React Query's isPending state
-  // propagating to the next render. Without it, two rapid sources
-  // (double-click, touchscreen, manual click while the auto-refresh
-  // useEffect is in flight) can both pass the disabled/isPending check
-  // and trigger two parallel POST /accounts/refresh. Cf Bug 2 of
-  // SESSION_RECAP_2026-05-31.md.
+  // Synchronous in-flight guard: two rapid taps must not fire two POST /refresh.
   const syncInFlight = useRef(false);
-  const startSync = useCallback(() => {
+  const startRefresh = useCallback(() => {
     if (syncInFlight.current) return;
     syncInFlight.current = true;
     refresh.mutate(undefined, {
@@ -277,30 +69,27 @@ export function Accounts() {
     });
   }, [refresh]);
 
-  // Auto-sync au mount si stale (oldest last_synced_at > 5 min) via /accounts/sync
-  // (cache 5 min côté back) — /accounts/refresh (force Powens) reste réservé au bouton.
+  // Auto-sync on mount when stale (> 5 min) via /accounts/sync (cached 5 min
+  // server-side). /accounts/refresh (forces the bank) stays behind the button.
   const STALENESS_MINUTES = 5;
-  const didAutoRefresh = useRef(false);
+  const didAutoSync = useRef(false);
   useEffect(() => {
-    if (didAutoRefresh.current || sync.isPending) return;
+    if (didAutoSync.current || sync.isPending) return;
     if (!accounts.data || accounts.data.length === 0) return;
-
-    const syncTimes = accounts.data
+    const times = accounts.data
       .map((a) => a.last_synced_at)
       .filter((ts): ts is string => ts !== null)
       .map((ts) => new Date(ts).getTime());
-
-    const isStale =
-      syncTimes.length === 0 || (Date.now() - Math.min(...syncTimes)) / 60_000 > STALENESS_MINUTES;
-
-    if (isStale) {
-      didAutoRefresh.current = true;
+    const stale =
+      times.length === 0 || (Date.now() - Math.min(...times)) / 60_000 > STALENESS_MINUTES;
+    if (stale) {
+      didAutoSync.current = true;
       sync.mutate();
     }
   }, [accounts.data, sync]);
 
   const grouped = useMemo(() => {
-    const out: Record<Category, BankAccountResponse[]> = {
+    const out: Record<AccountGroup, BankAccountResponse[]> = {
       cash: [],
       savings: [],
       invest: [],
@@ -309,507 +98,206 @@ export function Accounts() {
       loan: [],
       other: [],
     };
-    for (const a of accounts.data ?? []) {
-      out[categorize(a.type)].push(a);
-    }
+    for (const a of accounts.data ?? []) out[groupOf(a.type)].push(a);
     return out;
   }, [accounts.data]);
 
+  const lastSyncedAt = useMemo(() => {
+    const times = (accounts.data ?? [])
+      .map((a) => a.last_synced_at)
+      .filter((ts): ts is string => ts !== null);
+    return times.length ? times.sort().at(-1)! : null;
+  }, [accounts.data]);
+
   const isSyncing = refresh.isPending || sync.isPending;
-  const lastReport = refresh.data ?? sync.data;
+  const syncError = refresh.error ?? sync.error;
+  const newMovements = refresh.data?.transactions_persisted ?? 0;
+  const hasAccounts = !!accounts.data && accounts.data.length > 0;
 
   return (
-    <div className="space-y-4">
-      {/* ── Header ──────────────────────────────────────────────────────── */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-2">
-          <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-            Mes comptes
-          </CardTitle>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={startSync}
-            disabled={isSyncing}
-            className="gap-2"
-            title="Force la banque à renvoyer les dernières données (10-30s)"
-          >
-            <RefreshCw className={cn("h-4 w-4", isSyncing && "animate-spin")} />
-            {isSyncing ? "Mise à jour…" : "Mettre à jour"}
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {refresh.isError && (
-            <p className="text-sm text-[hsl(var(--loss))] mb-3">
-              Erreur sync : {refresh.error instanceof Error ? refresh.error.message : "inconnue"}
-            </p>
-          )}
-          {lastReport && lastReport.success && (
-            <p className="text-xs text-muted-foreground mb-3">
-              {lastReport.from_cache ? "Cache · " : ""}
-              {lastReport.accounts_persisted} comptes, {lastReport.holdings_persisted} positions,{" "}
-              {lastReport.transactions_persisted} nouvelles transactions
-            </p>
-          )}
-
-          {accounts.data && accounts.data.length > 0 && wealth.data && (
-            <div className="grid grid-cols-1 gap-3 pt-2 sm:grid-cols-3 sm:gap-4">
-              <NetWorthTile label="Actifs" value={wealth.data.total_assets} />
-              <NetWorthTile label="Dettes" value={-wealth.data.total_liabilities} negative />
-              <NetWorthTile label="Patrimoine net" value={wealth.data.net_worth} bold />
+    <div className="space-y-6">
+      {/* ── Ton patrimoine ─────────────────────────────────────────────── */}
+      <section className="rounded-xl border bg-card p-4 md:p-6">
+        <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          Ton patrimoine
+        </div>
+        {wealth.data ? (
+          <>
+            <div
+              className={cn(
+                "mt-1 font-mono text-3xl font-semibold tabular md:text-4xl",
+                wealth.data.net_worth < 0 && "text-[hsl(var(--loss))]",
+              )}
+            >
+              {signedEur(wealth.data.net_worth)}
             </div>
-          )}
-
-          {accounts.isLoading && <p className="text-sm text-muted-foreground">Chargement…</p>}
-          {accounts.isError && (
-            <p className="text-sm text-[hsl(var(--loss))]">
-              Erreur : {accounts.error instanceof Error ? accounts.error.message : "inconnue"}
-            </p>
-          )}
-          {accounts.data && accounts.data.length === 0 && (
-            <div className="text-center py-12 space-y-2">
-              <Banknote className="h-8 w-8 mx-auto text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">
-                Aucune banque connectée pour l&apos;instant.
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Clique sur <strong>+ Ajouter une banque</strong> en haut de la page pour commencer.
-              </p>
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+              <span>
+                Ce que tu as :{" "}
+                <span className="font-mono tabular text-foreground">
+                  {fmt.eur(wealth.data.total_assets)}
+                </span>
+              </span>
+              {wealth.data.total_liabilities > 0 && (
+                <span>
+                  Ce que tu dois :{" "}
+                  <span className="font-mono tabular text-[hsl(var(--loss))]">
+                    {fmt.eur(wealth.data.total_liabilities)}
+                  </span>
+                </span>
+              )}
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </>
+        ) : (
+          <div className="mt-2 h-9 w-48 animate-pulse rounded bg-muted/30" />
+        )}
 
-      {/* ── Sections by category ────────────────────────────────────────── */}
-      {accounts.data &&
-        accounts.data.length > 0 &&
-        CATEGORY_ORDER.map((cat) => {
-          const list = grouped[cat];
-          if (list.length === 0) return null;
-          return (
-            <AccountSection
-              key={cat}
-              category={cat}
-              accounts={list}
-              selectedId={selectedId}
-              onToggle={(id) => setSelectedId((prev) => (prev === id ? null : id))}
-            />
-          );
-        })}
-    </div>
-  );
-}
-
-/* ── Net worth tile ───────────────────────────────────────────────────────── */
-
-function NetWorthTile({
-  label,
-  value,
-  negative,
-  bold,
-}: {
-  label: string;
-  value: number;
-  negative?: boolean;
-  bold?: boolean;
-}) {
-  const colorClass = negative || value < 0 ? "text-[hsl(var(--loss))]" : "text-foreground";
-  return (
-    <div className="flex items-baseline justify-between gap-2 sm:block">
-      <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className={cn("font-mono text-lg tabular", colorClass, bold && "font-semibold")}>
-        {value < 0 ? `−${fmt.eur(-value)}` : fmt.eur(value)}
-      </div>
-    </div>
-  );
-}
-
-/* ── Section ──────────────────────────────────────────────────────────────── */
-
-function AccountSection({
-  category,
-  accounts,
-  selectedId,
-  onToggle,
-}: {
-  category: Category;
-  accounts: BankAccountResponse[];
-  selectedId: string | null;
-  onToggle: (id: string) => void;
-}) {
-  const Icon = CATEGORY_ICON[category];
-  const total = categoryTotal(accounts, category);
-  const isDebt = category === "loan";
-
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-baseline justify-between py-3">
-        <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-          <Icon className="h-4 w-4" />
-          {CATEGORY_LABELS[category]}
-          <span className="text-xs text-muted-foreground/70 normal-case">({accounts.length})</span>
-        </CardTitle>
-        <span className={cn("text-sm font-mono tabular", isDebt && "text-[hsl(var(--loss))]")}>
-          {isDebt ? `−${fmt.eur(total)}` : fmt.eur(total)}
-        </span>
-      </CardHeader>
-      <CardContent className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-8" />
-              <TableHead>Nom</TableHead>
-              <TableHead className="hidden md:table-cell">Banque</TableHead>
-              <TableHead className="text-right">
-                {category === "loan" ? "Capital restant" : "Solde"}
-              </TableHead>
-              <SecondaryColumnHead category={category} />
-              <TableHead className="hidden text-right text-xs md:table-cell">Sync</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {accounts.map((a) => (
-              <AccountRowGroup
-                key={a.id}
-                account={a}
-                category={category}
-                isOpen={selectedId === a.id}
-                onToggle={() => onToggle(a.id)}
-              />
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
-  );
-}
-
-function SecondaryColumnHead({ category }: { category: Category }) {
-  if (category === "invest" || category === "retirement" || category === "employee") {
-    return <TableHead className="hidden md:table-cell">Gain / perte</TableHead>;
-  }
-  if (category === "loan") {
-    return <TableHead className="hidden md:table-cell">Taux · Échéance</TableHead>;
-  }
-  return <TableHead className="hidden text-muted-foreground md:table-cell">IBAN</TableHead>;
-}
-
-/* ── Row + inline accordion ───────────────────────────────────────────────── */
-
-function AccountRowGroup({
-  account,
-  category,
-  isOpen,
-  onToggle,
-}: {
-  account: BankAccountResponse;
-  category: Category;
-  isOpen: boolean;
-  onToggle: () => void;
-}) {
-  const expandable =
-    INVESTMENT_TYPES.includes(account.type) ||
-    TRANSACTION_TYPES.includes(account.type) ||
-    category === "loan";
-
-  return (
-    <>
-      <TableRow
-        onClick={expandable ? onToggle : undefined}
-        className={cn("min-h-[44px]", expandable && "cursor-pointer", isOpen && "bg-accent/30")}
-      >
-        <TableCell className="w-8">
-          {expandable ? (
-            isOpen ? (
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            )
-          ) : null}
-        </TableCell>
-        <TableCell className="w-full max-w-0 font-medium">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="truncate">{cleanName(account.name)}</span>
-            <span className="shrink-0 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-              {TYPE_LABELS[account.type]}
+        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 border-t pt-3 text-xs text-muted-foreground">
+          <span>
+            {isSyncing
+              ? "Mise à jour en cours…"
+              : hasAccounts
+                ? `Mis à jour ${relativeTime(lastSyncedAt)}`
+                : "Aucun compte pour l'instant"}
+          </span>
+          {newMovements > 0 && !isSyncing && (
+            <span className="text-foreground">
+              {newMovements} nouveau{newMovements > 1 ? "x" : ""} mouvement
+              {newMovements > 1 ? "s" : ""}
             </span>
-          </div>
-        </TableCell>
-        <TableCell className="hidden text-sm text-muted-foreground md:table-cell">
-          {account.institution_name ?? "—"}
-        </TableCell>
-        <PrimaryValueCell account={account} category={category} />
-        <SecondaryCell account={account} category={category} />
-        <TableCell className="hidden text-right text-xs text-muted-foreground md:table-cell">
-          {relativeTime(account.last_synced_at)}
-        </TableCell>
-      </TableRow>
-
-      {isOpen && (
-        <TableRow className="bg-muted/30 hover:bg-muted/30">
-          <TableCell colSpan={6} className="p-0">
-            <ExpandedRow account={account} category={category} />
-          </TableCell>
-        </TableRow>
-      )}
-    </>
-  );
-}
-
-function PrimaryValueCell({
-  account,
-  category,
-}: {
-  account: BankAccountResponse;
-  category: Category;
-}) {
-  if (category === "loan") {
-    const owed = account.loan?.used_amount ?? Math.abs(account.balance);
-    return (
-      <TableCell className="text-right font-mono tabular text-[hsl(var(--loss))]">
-        −{fmt.eur(owed)}
-      </TableCell>
-    );
-  }
-  if (category === "invest" || category === "retirement" || category === "employee") {
-    const value = account.valuation ?? account.balance;
-    return <TableCell className="text-right font-mono tabular">{fmt.eur(value)}</TableCell>;
-  }
-  return <TableCell className="text-right font-mono tabular">{fmt.eur(account.balance)}</TableCell>;
-}
-
-function SecondaryCell({
-  account,
-  category,
-}: {
-  account: BankAccountResponse;
-  category: Category;
-}) {
-  if (category === "loan") {
-    const loan = account.loan;
-    if (!loan)
-      return (
-        <TableCell className="hidden text-xs text-muted-foreground md:table-cell">—</TableCell>
-      );
-    const parts: string[] = [];
-    if (loan.rate !== null) parts.push(formatRate(loan.rate));
-    if (loan.maturity_date) parts.push(monthYear(loan.maturity_date));
-    return (
-      <TableCell className="hidden font-mono text-xs tabular text-muted-foreground md:table-cell">
-        {parts.join(" · ") || "—"}
-      </TableCell>
-    );
-  }
-  if (category === "invest" || category === "retirement" || category === "employee") {
-    if (account.diff === null || account.diff_percent === null) {
-      return (
-        <TableCell className="hidden text-xs text-muted-foreground md:table-cell">—</TableCell>
-      );
-    }
-    const positive = account.diff >= 0;
-    return (
-      <TableCell className="hidden md:table-cell">
-        <span
-          className={cn(
-            "inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded text-xs font-mono tabular",
-            positive
-              ? "bg-[hsl(var(--gain))]/10 text-[hsl(var(--gain))]"
-              : "bg-[hsl(var(--loss))]/10 text-[hsl(var(--loss))]",
           )}
-        >
-          <span>{fmt.signedEur(account.diff)}</span>
-          <span className="opacity-70">{fmt.signedPct(account.diff_percent)}</span>
-        </span>
-      </TableCell>
-    );
-  }
-  return (
-    <TableCell className="hidden font-mono text-xs tabular text-muted-foreground md:table-cell">
-      {maskedIban(account.iban)}
-    </TableCell>
-  );
-}
-
-/* ── Expanded inline content (drill-down) ─────────────────────────────────── */
-
-function ExpandedRow({ account, category }: { account: BankAccountResponse; category: Category }) {
-  if (category === "loan" && account.loan) {
-    return <LoanDetails loan={account.loan} />;
-  }
-  if (INVESTMENT_TYPES.includes(account.type)) {
-    return <HoldingsInline accountId={account.id} />;
-  }
-  if (TRANSACTION_TYPES.includes(account.type)) {
-    return <TransactionsInline accountId={account.id} />;
-  }
-  return <div className="p-4 text-sm text-muted-foreground">Aucun détail disponible.</div>;
-}
-
-function LoanDetails({ loan }: { loan: LoanResponse }) {
-  const progress =
-    loan.nb_payments_done !== null && loan.nb_payments_total !== null && loan.nb_payments_total > 0
-      ? (loan.nb_payments_done / loan.nb_payments_total) * 100
-      : null;
-
-  return (
-    <div className="p-4 space-y-3">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-        {loan.total_amount !== null && (
-          <Stat label="Capital initial" value={fmt.eur(loan.total_amount)} />
-        )}
-        {loan.used_amount !== null && (
-          <Stat label="Capital restant" value={fmt.eur(loan.used_amount)} />
-        )}
-        {loan.rate !== null && <Stat label="Taux" value={formatRate(loan.rate)} />}
-        {loan.duration_months !== null && (
-          <Stat label="Durée totale" value={`${loan.duration_months} mois`} />
-        )}
-        {loan.next_payment_amount !== null && loan.next_payment_amount > 0 && (
-          <Stat label="Mensualité" value={fmt.eur(loan.next_payment_amount)} />
-        )}
-        {loan.nb_payments_left !== null && (
-          <Stat label="Échéances restantes" value={`${loan.nb_payments_left} mois`} />
-        )}
-        {loan.maturity_date && <Stat label="Fin du prêt" value={monthYear(loan.maturity_date)} />}
-        {loan.insurance_amount !== null && loan.insurance_amount > 0 && (
-          <Stat label="Assurance / mois" value={fmt.eur(loan.insurance_amount)} />
-        )}
-      </div>
-
-      {loan.deferred && (
-        <div className="text-xs text-muted-foreground italic">
-          Prêt différé
-          {loan.start_repayment_date &&
-            ` · début remboursement : ${monthYear(loan.start_repayment_date)}`}
+          {hasAccounts && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={startRefresh}
+              disabled={isSyncing}
+              className="ml-auto gap-2"
+            >
+              <RefreshCw className={cn("h-4 w-4", isSyncing && "animate-spin")} />
+              Mettre à jour
+            </Button>
+          )}
         </div>
-      )}
+        {syncError && !isSyncing && (
+          <p className="mt-2 text-sm text-[hsl(var(--loss))]">
+            La mise à jour a échoué : {syncError instanceof Error ? syncError.message : "erreur"}.
+            Réessaie dans un instant.
+          </p>
+        )}
+      </section>
 
-      {progress !== null && (
-        <div className="space-y-1">
-          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-            <div className="h-full bg-primary" style={{ width: `${progress}%` }} />
-          </div>
-          <div className="text-xs text-muted-foreground">
-            Progression : {loan.nb_payments_done} / {loan.nb_payments_total} échéances (
-            {progress.toFixed(1).replace(".", ",")} %)
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0">
-      <div className="text-muted-foreground uppercase tracking-wider text-[10px]">{label}</div>
-      <div className="font-mono tabular truncate">{value}</div>
-    </div>
-  );
-}
-
-function HoldingsInline({ accountId }: { accountId: string }) {
-  const holdings = useAccountHoldings(accountId);
-  const updateTer = useUpdateHoldingTer(accountId);
-
-  if (holdings.isLoading) return <p className="p-4 text-sm text-muted-foreground">Chargement…</p>;
-  if (!holdings.data || holdings.data.length === 0)
-    return <p className="p-4 text-sm text-muted-foreground">Aucune position.</p>;
-
-  const formatTer = (v: number | string) =>
-    typeof v === "number" ? (v * 100).toFixed(2) + " %" : String(v);
-
-  return (
-    <div className="p-2">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="hidden md:table-cell">Ticker</TableHead>
-            <TableHead>Libellé</TableHead>
-            <TableHead className="hidden text-right md:table-cell">Quantité</TableHead>
-            <TableHead className="hidden text-right md:table-cell">PRU</TableHead>
-            <TableHead className="text-right">Valorisation</TableHead>
-            <TableHead className="text-right">TER</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {holdings.data.map((h) => (
-            <TableRow key={h.id}>
-              <TableCell className="hidden font-mono font-medium md:table-cell">
-                {h.ticker}
-              </TableCell>
-              <TableCell className="text-muted-foreground">{h.label}</TableCell>
-              <TableCell className="hidden text-right font-mono tabular md:table-cell">
-                {fmt.num(h.quantity)}
-              </TableCell>
-              <TableCell className="hidden text-right font-mono tabular md:table-cell">
-                {fmt.eur(h.unit_price)}
-              </TableCell>
-              <TableCell className="text-right font-mono tabular">
-                {fmt.eur(h.current_value)}
-              </TableCell>
-              <TableCell className="text-right">
-                <DataField
-                  value={h.ter}
-                  source={h.ter_source}
-                  formatValue={formatTer}
-                  editable
-                  inputStep="0.0001"
-                  inputMin="0"
-                  inputMax="0.02"
-                  validate={(v) => v >= 0 && v <= 0.02}
-                  onEdit={(ter) => updateTer.mutate({ holdingId: h.id, ter })}
-                />
-              </TableCell>
-            </TableRow>
+      {accounts.isLoading && (
+        <div className="grid gap-3 md:grid-cols-2">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-24 animate-pulse rounded-xl bg-muted/30" />
           ))}
-        </TableBody>
-      </Table>
-    </div>
-  );
-}
+        </div>
+      )}
+      {accounts.isError && (
+        <p className="text-sm text-[hsl(var(--loss))]">
+          Impossible de charger tes comptes :{" "}
+          {accounts.error instanceof Error ? accounts.error.message : "erreur"}
+        </p>
+      )}
+      {accounts.data && accounts.data.length === 0 && (
+        <div className="rounded-xl border border-dashed py-12 text-center">
+          <Banknote className="mx-auto h-8 w-8 text-muted-foreground" />
+          <p className="mt-2 text-sm text-muted-foreground">Aucune banque connectée.</p>
+          <p className="text-xs text-muted-foreground">
+            Utilise <strong>+ Ajouter une banque</strong> en haut de la page pour commencer.
+          </p>
+        </div>
+      )}
 
-function TransactionsInline({ accountId }: { accountId: string }) {
-  const txs = useAccountTransactions(accountId, 50);
-  if (txs.isLoading) return <p className="p-4 text-sm text-muted-foreground">Chargement…</p>;
-  if (!txs.data || txs.data.length === 0)
-    return <p className="p-4 text-sm text-muted-foreground">Aucune transaction.</p>;
-  return (
-    <div className="p-2">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Date</TableHead>
-            <TableHead>Libellé</TableHead>
-            <TableHead className="hidden md:table-cell">Catégorie</TableHead>
-            <TableHead className="text-right">Montant</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {txs.data.map((t) => {
-            const positive = t.amount >= 0;
-            return (
-              <TableRow key={t.id}>
-                <TableCell className="font-mono tabular text-xs">
-                  {new Date(t.transaction_date).toLocaleDateString("fr-FR")}
-                </TableCell>
-                <TableCell className="w-full max-w-0 truncate">{t.description}</TableCell>
-                <TableCell className="hidden text-xs text-muted-foreground md:table-cell">
-                  {t.category ?? "—"}
-                </TableCell>
-                <TableCell
+      {/* ── Groups of cards ────────────────────────────────────────────── */}
+      {hasAccounts &&
+        GROUP_ORDER.map((g) => {
+          const list = grouped[g];
+          if (list.length === 0) return null;
+          const Icon = GROUP_ICON[g];
+          const total = groupTotal(list);
+          return (
+            <section key={g} className="space-y-2">
+              <div className="flex items-baseline justify-between px-1">
+                <h2 className="flex items-center gap-2 text-sm font-medium uppercase tracking-wider text-muted-foreground">
+                  <Icon className="h-4 w-4" />
+                  {GROUP_LABELS[g]}
+                </h2>
+                <span
                   className={cn(
-                    "text-right font-mono tabular",
-                    positive ? "text-[hsl(var(--gain))]" : "text-[hsl(var(--loss))]",
+                    "font-mono text-sm tabular",
+                    g === "loan" && "text-[hsl(var(--loss))]",
                   )}
                 >
-                  {fmt.signedEur(t.amount)}
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
+                  {g === "loan" ? `−${fmt.eur(total)}` : fmt.eur(total)}
+                </span>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                {list.map((a) => (
+                  <AccountCard key={a.id} account={a} onOpen={() => setSelected(a)} />
+                ))}
+              </div>
+            </section>
+          );
+        })}
+
+      <BanksCard />
+
+      <AccountDetailSheet account={selected} onClose={() => setSelected(null)} />
     </div>
   );
+}
+
+/* ── Card ─────────────────────────────────────────────────────────────── */
+
+function AccountCard({ account, onOpen }: { account: BankAccountResponse; onOpen: () => void }) {
+  const group = groupOf(account.type);
+  const value = accountValue(account);
+  const isLoan = group === "loan";
+  const gain = !isLoan && group !== "cash" && group !== "savings" ? account.diff : null;
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex min-h-[72px] w-full items-center gap-3 rounded-xl border bg-card px-4 py-3 text-left transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <div className="min-w-0 flex-1">
+        <div className="truncate font-medium">{cleanName(account.name)}</div>
+        <div className="truncate text-xs text-muted-foreground">
+          {TYPE_LABELS[account.type]}
+          {account.institution_name ? ` · ${account.institution_name}` : ""}
+        </div>
+        {isLoan && account.loan?.next_payment_date && account.loan.next_payment_amount ? (
+          <div className="mt-0.5 truncate text-xs text-muted-foreground">
+            Prochaine mensualité {fmt.eur(account.loan.next_payment_amount)} le{" "}
+            {longDate(account.loan.next_payment_date)}
+          </div>
+        ) : null}
+      </div>
+      <div className="shrink-0 text-right">
+        <div className={cn("font-mono text-base tabular", isLoan && "text-[hsl(var(--loss))]")}>
+          {isLoan ? `−${fmt.eur(value)}` : fmt.eur(value)}
+        </div>
+        {gain !== null && gain !== undefined && (
+          <div
+            className={cn(
+              "font-mono text-xs tabular",
+              gain >= 0 ? "text-[hsl(var(--gain))]" : "text-[hsl(var(--loss))]",
+            )}
+          >
+            {fmt.signedEur(gain)}
+            {account.diff_percent !== null && (
+              <span className="hidden sm:inline"> ({fmt.signedPct(account.diff_percent)})</span>
+            )}
+          </div>
+        )}
+      </div>
+    </button>
+  );
+}
+
+function signedEur(v: number): string {
+  return v < 0 ? `−${fmt.eur(-v)}` : fmt.eur(v);
 }
