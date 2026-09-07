@@ -106,23 +106,6 @@ export interface ProjectionResponse {
   weighted_ter?: number; // ADR-021: weighted average TER, ratio (0.0025 = 0.25%/an)
 }
 
-export interface BengenRequest {
-  target_monthly_income: number;
-  withdrawal_rate?: number; // default 0.04
-  current_capital?: number; // default 0
-  monthly_dca?: number; // default 0
-  expected_return?: number; // default 0.08
-}
-
-export interface BengenResponse {
-  target_monthly_income: number;
-  yearly_passive_income: number;
-  capital_needed: number;
-  years_to_reach: number | null;
-  months_to_reach: number | null;
-  rationale: string;
-}
-
 export interface BrokerInfo {
   id: string;
   name: string;
@@ -441,7 +424,13 @@ export function useTimeseries() {
   });
 }
 
-export function useProjection(monthly: number, years: number, goal?: number, brokerId?: string) {
+export function useProjection(
+  monthly: number,
+  years: number,
+  goal?: number,
+  brokerId?: string,
+  options: { enabled?: boolean } = {},
+) {
   return useQuery({
     queryKey: ["projection", monthly, years, goal ?? null, brokerId ?? null],
     queryFn: () => {
@@ -450,7 +439,7 @@ export function useProjection(monthly: number, years: number, goal?: number, bro
       if (brokerId) params.set("broker", brokerId);
       return http<ProjectionResponse>(`/projection?${params.toString()}`);
     },
-    enabled: monthly >= 0 && years > 0,
+    enabled: (options.enabled ?? true) && monthly >= 0 && years > 0,
   });
 }
 
@@ -473,18 +462,6 @@ export function useOptimizer(req: OptimizerRequest) {
     enabled:
       req.objective !== "target_volatility" ||
       (req.max_volatility !== undefined && req.max_volatility >= 0),
-  });
-}
-
-export function useBengen(req: BengenRequest) {
-  return useQuery({
-    queryKey: ["bengen", req],
-    queryFn: () =>
-      http<BengenResponse>("/bengen", {
-        method: "POST",
-        body: JSON.stringify(req),
-      }),
-    enabled: req.target_monthly_income > 0,
   });
 }
 
