@@ -33,22 +33,11 @@ export function Metrics({ metrics }: Props) {
         <MetricCard label="Sharpe" value={fmt.num(metrics.sharpe)} sub="vs. r_f = 2,5 %" />
       </div>
 
-      {/* Métriques de risque de queue : drawdown théorique, CVaR, max DD observé */}
-      <div className="grid gap-3 rounded-lg border bg-muted/20 p-3 sm:grid-cols-3">
+      <div className="grid gap-3 rounded-lg border bg-muted/20 p-3">
         <RiskCard
-          label="Drawdown théorique"
-          value={fmt.signedPct(metrics.drawdown_estimate)}
-          hint="−2σ · perte possible 1 année sur 40 selon loi normale"
-        />
-        <RiskCard
-          label="CVaR 95 %"
-          value={fmt.signedPct(metrics.cvar_95)}
-          hint="Perte moyenne des 5 % pires jours, annualisée"
-        />
-        <RiskCard
-          label="Max DD observé"
+          label="Pire baisse vécue"
           value={fmt.signedPct(metrics.max_drawdown_observed)}
-          hint="Pire chute peak-to-trough vécue par ton panier sur l'historique"
+          hint="Plus forte chute entre un plus-haut et le creux suivant, sur l'historique de ton panier"
         />
       </div>
     </div>

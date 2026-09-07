@@ -59,9 +59,12 @@ def build(
     qty_by_ticker: dict[str, float] = {}
     avg_cost_by_ticker: dict[str, float] = {}
     cost_by_ticker: dict[str, float] = {}
+    label_by_ticker: dict[str, str] = {}
     for p in positions:
         qty_by_ticker[p.ticker] = qty_by_ticker.get(p.ticker, 0.0) + p.quantity
         cost_by_ticker[p.ticker] = cost_by_ticker.get(p.ticker, 0.0) + p.cost_basis
+        if p.label and p.label != p.ticker:
+            label_by_ticker.setdefault(p.ticker, p.label)
     for t in qty_by_ticker:
         avg_cost_by_ticker[t] = cost_by_ticker[t] / qty_by_ticker[t] if qty_by_ticker[t] else 0.0
 
@@ -101,6 +104,7 @@ def build(
     assets = [
         _asset_metric(
             t,
+            label_by_ticker.get(t),
             qty_by_ticker[t],
             avg_cost_by_ticker[t],
             w,
@@ -145,6 +149,7 @@ def build(
 
 def _asset_metric(
     ticker: str,
+    label: str | None,
     quantity: float,
     avg_cost: float,
     weight: float,
@@ -158,6 +163,7 @@ def _asset_metric(
     pnl = value - cost
     return AssetMetrics(
         ticker=ticker,
+        label=label,
         price=price,
         weight=weight,
         value=value,
