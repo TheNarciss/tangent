@@ -199,11 +199,9 @@ def test_system_prompt_contains_required_structure():
     """System prompt must instruct the model on the daily-briefing section structure."""
     sp = prompt_builder.SYSTEM_PROMPT
     for section in (
-        "# Briefing du jour",
-        "# Actualités marché clés",
-        "# Impact sur tes positions",
-        "# À surveiller cette semaine",
-        "# Risques court terme",
+        "# Ce qui a bougé chez toi",
+        "# Ce que ça veut dire",
+        "# À faire cette semaine",
         "# Sources",
         "# Avertissement",
     ):
@@ -212,3 +210,20 @@ def test_system_prompt_contains_required_structure():
 
 def test_system_prompt_mentions_web_search_requirement():
     assert "web_search" in prompt_builder.SYSTEM_PROMPT
+
+
+def test_system_prompt_is_written_for_a_passive_saver():
+    sp = prompt_builder.SYSTEM_PROMPT
+    assert "continue tes versements" in sp
+    assert "jamais d'acheter ou de vendre" in sp
+    for jargon in ("Sharpe", "risk-on", "EUR/USD", "10Y"):
+        assert jargon not in sp.replace("Pas de rendement attendu, volatilité, Sharpe", ""), jargon
+
+
+def test_user_prompt_has_no_markowitz_block():
+    wealth = _make_wealth()
+    profile = _make_profile()
+    snap = prompt_builder.build_anonymized_snapshot(wealth, profile)
+    prompt = prompt_builder.build_user_prompt(snap)
+    assert "Markowitz" not in prompt
+    assert "μ=" not in prompt
