@@ -1,43 +1,26 @@
-import { LayoutDashboard, MoreHorizontal, PieChart, TrendingUp, Wallet } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
+import { NavLink } from "react-router-dom";
 
 import { cn } from "@/lib/utils";
 
-import { type NavView } from "./Sidebar";
+import { NAV_ITEMS, NAV_PATHS } from "./Sidebar";
 
 interface BottomNavProps {
-  currentView: NavView;
-  onViewChange: (v: NavView) => void;
   onOpenMore: () => void;
   isMoreOpen?: boolean;
 }
 
-interface BottomNavItem {
-  view: NavView | "more";
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-}
-
-const NAV_ITEMS: BottomNavItem[] = [
-  { view: "overview", label: "Aperçu", icon: LayoutDashboard },
-  { view: "accounts", label: "Comptes", icon: Wallet },
-  { view: "investments", label: "Placements", icon: PieChart },
-  { view: "projection", label: "Projection", icon: TrendingUp },
-  { view: "more", label: "Plus", icon: MoreHorizontal },
-];
+const ITEM_CLASS =
+  "flex min-h-[44px] flex-1 flex-col items-center justify-center gap-1 text-xs transition-colors";
 
 /**
  * Mobile-only bottom navigation bar (md:hidden).
  *
- * 5 items: 4 main views + a "Plus" trigger that opens a MoreSheet
- * containing the equivalent of the desktop UserMenu (profile / settings /
- * Google link / legal / logout).
+ * 5 items: the 4 main views (same list as the Sidebar) + a "Plus" trigger
+ * that opens a MoreSheet containing the equivalent of the desktop UserMenu
+ * (profile / settings / Google link / legal / logout).
  */
-export function BottomNav({
-  currentView,
-  onViewChange,
-  onOpenMore,
-  isMoreOpen = false,
-}: BottomNavProps) {
+export function BottomNav({ onOpenMore, isMoreOpen = false }: BottomNavProps) {
   return (
     <nav
       aria-label="Navigation principale"
@@ -45,23 +28,38 @@ export function BottomNav({
     >
       {NAV_ITEMS.map((item) => {
         const Icon = item.icon;
-        const isMore = item.view === "more";
-        const active = isMore ? isMoreOpen : currentView === item.view;
         return (
-          <button
+          <NavLink
             key={item.view}
-            type="button"
-            onClick={() => (isMore ? onOpenMore() : onViewChange(item.view as NavView))}
-            className={cn(
-              "flex min-h-[44px] flex-1 flex-col items-center justify-center gap-1 text-xs transition-colors",
-              active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
-            )}
+            to={NAV_PATHS[item.view]}
+            end={item.view === "overview"}
+            className={({ isActive }) =>
+              cn(
+                ITEM_CLASS,
+                isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+              )
+            }
           >
-            <Icon className={cn("h-5 w-5", active && "text-primary")} />
-            <span className={cn(active && "font-medium")}>{item.label}</span>
-          </button>
+            {({ isActive }) => (
+              <>
+                <Icon className={cn("h-5 w-5", isActive && "text-primary")} />
+                <span className={cn(isActive && "font-medium")}>{item.label}</span>
+              </>
+            )}
+          </NavLink>
         );
       })}
+      <button
+        type="button"
+        onClick={onOpenMore}
+        className={cn(
+          ITEM_CLASS,
+          isMoreOpen ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+        )}
+      >
+        <MoreHorizontal className={cn("h-5 w-5", isMoreOpen && "text-primary")} />
+        <span className={cn(isMoreOpen && "font-medium")}>Plus</span>
+      </button>
     </nav>
   );
 }

@@ -46,7 +46,12 @@ const LIVRETS = [
  * footer save : tant que des modifs sont en attente, un bandeau bas propose Annuler /
  * Enregistrer. Le titre de page est porté par AppShell.
  */
-export function ProfilePage() {
+interface ProfilePageProps {
+  /** Tab opened on mount: /profil → identity, /compte → account. */
+  tab?: "identity" | "fiscal" | "strategy" | "account";
+}
+
+export function ProfilePage({ tab = "identity" }: ProfilePageProps) {
   const [profile, setProfile] = useProfile();
   const [draft, setDraft] = useState<UserProfile>(profile ?? EMPTY_PROFILE);
 
@@ -64,7 +69,7 @@ export function ProfilePage() {
     <div>
       <div className="mx-auto max-w-4xl pb-24">
         {/* Sub-tabs */}
-        <Tabs defaultValue="identity" className="space-y-6">
+        <Tabs defaultValue={tab} className="space-y-6">
           <TabsList className="grid h-auto w-full grid-cols-4">
             <TabsTrigger
               value="identity"

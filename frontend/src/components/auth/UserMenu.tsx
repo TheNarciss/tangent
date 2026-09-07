@@ -1,5 +1,6 @@
 import { Settings as SettingsIcon, Link2, LogOut, User as UserIcon } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 
 import { listOAuthAccounts, useCurrentUser, useLogout } from "@/api";
 import { Button } from "@/components/ui/button";
@@ -12,12 +13,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { startGoogleAssociate } from "@/api";
+import { NAV_PATHS } from "@/components/Sidebar";
 
-interface UserMenuProps {
-  onNavigate: (v: "dashboard" | "profile" | "settings") => void;
-}
-
-export function UserMenu({ onNavigate }: UserMenuProps) {
+export function UserMenu() {
+  const navigate = useNavigate();
   const { data: user } = useCurrentUser();
   const logout = useLogout();
   const oauthAccounts = useQuery({
@@ -79,11 +78,11 @@ export function UserMenu({ onNavigate }: UserMenuProps) {
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => onNavigate("profile")} className="cursor-pointer">
+        <DropdownMenuItem onClick={() => navigate(NAV_PATHS.profile)} className="cursor-pointer">
           <UserIcon className="mr-2 h-3.5 w-3.5" />
           <span>Mon profil</span>
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onNavigate("settings")} className="cursor-pointer">
+        <DropdownMenuItem onClick={() => navigate(NAV_PATHS.settings)} className="cursor-pointer">
           <SettingsIcon className="mr-2 h-3.5 w-3.5" />
           <span>Réglages</span>
         </DropdownMenuItem>
