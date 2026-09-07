@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import type { TimeseriesResponse } from "@/api";
 import { fmt } from "@/lib/format";
@@ -12,23 +12,43 @@ import {
   type Scale,
 } from "@/lib/chart";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChartTooltip } from "@/components/ChartTooltip";
+import { Chart, Crosshair, XAxis, YAxis, indexAt, type ChartFrame } from "@/components/ui/chart";
 
 interface Props {
   ts: TimeseriesResponse;
 }
 
-const W = 720;
-const PAD = { left: 56, right: 24, top: 12, bottom: 24 };
+const TITLE_H = 36; // room for a panel title above each panel
+const AXIS_H = 30; // date axis below the last panel
 
-// vertical layout: y-origin and height for each panel + the shared date axis
-const PANELS = {
-  perf: { y: 36, h: 200, title: "Performance" },
-  dd: { y: 280, h: 110, title: "Drawdown" },
-  rs: { y: 426, h: 110, title: "Rolling Sharpe" },
-};
-const AXIS_Y = 552;
-const TOTAL_H = AXIS_Y + 24;
+interface Panel {
+  y: number;
+  h: number;
+}
+interface Layout {
+  perf: Panel;
+  dd: Panel;
+  rs: Panel;
+  axisY: number;
+}
+
+/** Panel heights: shorter on phones so the three panels fit one screen. */
+function panelHeights(compact: boolean) {
+  return compact ? { perf: 150, dd: 80, rs: 80 } : { perf: 200, dd: 110, rs: 110 };
+}
+
+function totalHeight(_width: number, compact: boolean) {
+  const h = panelHeights(compact);
+  return 3 * TITLE_H + h.perf + h.dd + h.rs + AXIS_H;
+}
+
+function layout(frame: ChartFrame): Layout {
+  const h = panelHeights(frame.compact);
+  const perf = { y: TITLE_H, h: h.perf };
+  const dd = { y: perf.y + perf.h + TITLE_H, h: h.dd };
+  const rs = { y: dd.y + dd.h + TITLE_H, h: h.rs };
+  return { perf, dd, rs, axisY: rs.y + rs.h };
+}
 
 /**
  * Three vertically-stacked panels sharing the X axis (date):
@@ -38,31 +58,10 @@ const TOTAL_H = AXIS_Y + 24;
  */
 export function Timeline({ ts }: Props) {
   const n = ts.dates.length;
-
-  // Shared X scale: index → pixel
-  const xScale = useMemo(
-    () => linearScale([0, Math.max(n - 1, 1)], [PAD.left, W - PAD.right]),
-    [n],
-  );
-
-  // Date ticks (~6 evenly spaced)
-  const dateTicks = useMemo(() => pickIndices(n, 6), [n]);
-
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
-  const [wrapW, setWrapW] = useState(W);
 
-  const handleMove = (e: React.PointerEvent<SVGSVGElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    setWrapW(rect.width);
-    const px = ((e.clientX - rect.left) / rect.width) * W;
-    if (px < PAD.left || px > W - PAD.right) {
-      setHoverIdx(null);
-      return;
-    }
-    const t = (px - PAD.left) / (W - PAD.left - PAD.right);
-    const i = Math.round(t * (n - 1));
-    setHoverIdx(Math.max(0, Math.min(n - 1, i)));
-  };
+  const xScaleFor = (frame: ChartFrame) =>
+    linearScale([0, Math.max(n - 1, 1)], [frame.left, frame.right]);
 
   return (
     <Card>
@@ -72,53 +71,58 @@ export function Timeline({ ts }: Props) {
         </CardTitle>
         <CardDescription>
           Positions actuelles maintenues sur la fenêtre (vue "as-if-held", utile pour les tendances
-          et le risque, pas pour le PnL réel). Survole un point pour voir tous les chiffres au jour
-          donné.
+          et le risque, pas pour le PnL réel). Touche ou survole un point pour voir tous les
+          chiffres au jour donné.
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="relative w-full overflow-x-auto">
-          <svg
-            viewBox={`0 0 ${W} ${TOTAL_H}`}
-            className="h-auto w-full touch-pan-y"
-            role="img"
-            aria-label="Évolution historique"
-            onPointerMove={handleMove}
-            onPointerLeave={(e) => {
-              if (e.pointerType === "mouse") setHoverIdx(null);
-            }}
-          >
-            <PerformancePanel ts={ts} xScale={xScale} />
-            <DrawdownPanel ts={ts} xScale={xScale} />
-            <RollingSharpePanel ts={ts} xScale={xScale} />
-            <DateAxis ts={ts} xScale={xScale} indices={dateTicks} />
-
-            {/* Hover crosshair across all panels */}
-            {hoverIdx !== null && (
-              <line
-                x1={xScale(hoverIdx)}
-                x2={xScale(hoverIdx)}
-                y1={PANELS.perf.y}
-                y2={PANELS.rs.y + PANELS.rs.h}
-                stroke="hsl(var(--foreground))"
-                strokeDasharray="2 3"
-                strokeWidth="0.8"
-                opacity={0.5}
-                pointerEvents="none"
-              />
-            )}
-          </svg>
-
-          {hoverIdx !== null && (
-            <ChartTooltip
-              x={(xScale(hoverIdx) / W) * wrapW}
-              y={(PANELS.perf.y / TOTAL_H) * ((wrapW * TOTAL_H) / W)}
-              containerWidth={wrapW}
-            >
-              <TimelineTooltipContent ts={ts} idx={hoverIdx} />
-            </ChartTooltip>
-          )}
-        </div>
+        <Chart
+          ariaLabel="Évolution historique"
+          height={totalHeight}
+          pad={(compact) => ({
+            left: compact ? 44 : 56,
+            right: compact ? 12 : 24,
+            top: 0,
+            bottom: 0,
+          })}
+          onPointer={(p, frame) => setHoverIdx(p ? indexAt(p.x, frame, n) : null)}
+          tooltip={(frame) => {
+            if (hoverIdx === null) return null;
+            const perf = layout(frame).perf;
+            return {
+              x: xScaleFor(frame)(hoverIdx),
+              y: perf.y + perf.h / 2,
+              content: <TimelineTooltipContent ts={ts} idx={hoverIdx} />,
+            };
+          }}
+        >
+          {(frame) => {
+            const l = layout(frame);
+            const xScale = xScaleFor(frame);
+            return (
+              <>
+                <PerformancePanel ts={ts} frame={frame} panel={l.perf} xScale={xScale} />
+                <DrawdownPanel ts={ts} frame={frame} panel={l.dd} xScale={xScale} />
+                <RollingSharpePanel ts={ts} frame={frame} panel={l.rs} xScale={xScale} />
+                <XAxis
+                  frame={frame}
+                  ticks={pickIndices(n, frame.compact ? 3 : 6)}
+                  scale={xScale}
+                  format={(i) => formatDateTick(ts.dates[i])}
+                  y={l.axisY}
+                />
+                {hoverIdx !== null && (
+                  <Crosshair
+                    frame={frame}
+                    x={xScale(hoverIdx)}
+                    y1={l.perf.y}
+                    y2={l.rs.y + l.rs.h}
+                  />
+                )}
+              </>
+            );
+          }}
+        </Chart>
 
         <PerformanceLegend ts={ts} />
       </CardContent>
@@ -172,24 +176,26 @@ function TimelineRow({ label, value, muted }: { label: string; value: string; mu
 
 interface PanelProps {
   ts: TimeseriesResponse;
+  frame: ChartFrame;
+  panel: Panel;
   xScale: Scale;
 }
 
-function PerformancePanel({ ts, xScale }: PanelProps) {
-  const { y: yTop, h, title } = PANELS.perf;
+function PerformancePanel({ ts, frame, panel, xScale }: PanelProps) {
+  const { y: yTop, h } = panel;
   const series = ts.benchmark ? [...ts.portfolio, ...ts.benchmark] : ts.portfolio;
   const yMin = Math.min(...series);
   const yMax = Math.max(...series);
   const pad = (yMax - yMin) * 0.08;
   const yScale = linearScale([yMin - pad, yMax + pad], [yTop + h, yTop]);
-  const ticks = niceTicks(yMin, yMax, 4);
+  const ticks = niceTicks(yMin, yMax, frame.compact ? 3 : 4);
   const xAt = (i: number) => xScale(i);
 
   return (
     <g>
-      <PanelTitle y={yTop - 14} text={title} />
-      <PanelFrame y={yTop} h={h} />
-      <YAxis ticks={ticks} yScale={yScale} format={(v) => v.toFixed(0)} />
+      <PanelTitle frame={frame} y={yTop - 12} text="Performance" />
+      <PanelFrame frame={frame} panel={panel} />
+      <YAxis frame={frame} ticks={ticks} scale={yScale} format={(v) => v.toFixed(0)} />
 
       {/* Benchmark first (under) */}
       {ts.benchmark && (
@@ -212,19 +218,18 @@ function PerformancePanel({ ts, xScale }: PanelProps) {
   );
 }
 
-function DrawdownPanel({ ts, xScale }: PanelProps) {
-  const { y: yTop, h, title } = PANELS.dd;
+function DrawdownPanel({ ts, frame, panel, xScale }: PanelProps) {
+  const { y: yTop, h } = panel;
   const yMin = Math.min(...ts.drawdown);
   const yScale = linearScale([yMin * 1.05, 0], [yTop + h, yTop]);
-  const ticks = niceTicks(yMin, 0, 3);
+  const ticks = niceTicks(yMin, 0, frame.compact ? 2 : 3);
   const xAt = (i: number) => xScale(i);
-  const maxDD = yMin;
 
   return (
     <g>
-      <PanelTitle y={yTop - 14} text={title} />
-      <PanelFrame y={yTop} h={h} />
-      <YAxis ticks={ticks} yScale={yScale} format={(v) => fmt.pct(v)} />
+      <PanelTitle frame={frame} y={yTop - 12} text="Drawdown" />
+      <PanelFrame frame={frame} panel={panel} />
+      <YAxis frame={frame} ticks={ticks} scale={yScale} format={(v) => fmt.pct(v)} />
 
       <path d={areaPath(ts.drawdown, xAt, yScale, 0)} fill="hsl(var(--loss))" fillOpacity={0.18} />
       <path
@@ -236,40 +241,44 @@ function DrawdownPanel({ ts, xScale }: PanelProps) {
 
       {/* Max DD annotation */}
       <text
-        x={W - PAD.right - 4}
+        x={frame.right - 4}
         y={yTop + 14}
         textAnchor="end"
-        className="font-mono text-[10px] fill-[hsl(var(--loss))]"
+        className="font-mono text-[11px] fill-[hsl(var(--loss))]"
       >
-        Max : {fmt.pct(maxDD)}
+        Max : {fmt.pct(yMin)}
       </text>
     </g>
   );
 }
 
-function RollingSharpePanel({ ts, xScale }: PanelProps) {
-  const { y: yTop, h, title } = PANELS.rs;
+function RollingSharpePanel({ ts, frame, panel, xScale }: PanelProps) {
+  const { y: yTop, h } = panel;
   const finite = ts.rolling_sharpe.filter((v): v is number => v !== null && isFinite(v));
   const yMin = finite.length ? Math.min(...finite, 0) : -0.5;
   const yMax = finite.length ? Math.max(...finite, 1) : 1.5;
   const yScale = linearScale([yMin - 0.1, yMax + 0.1], [yTop + h, yTop]);
-  const ticks = niceTicks(yMin, yMax, 3);
+  const ticks = niceTicks(yMin, yMax, frame.compact ? 2 : 3);
   const xAt = (i: number) => xScale(i);
   const latest = [...ts.rolling_sharpe].reverse().find((v) => v !== null);
 
   return (
     <g>
-      <PanelTitle y={yTop - 14} text={`${title} (${ts.rolling_window_days}j)`} />
-      <PanelFrame y={yTop} h={h} />
-      <YAxis ticks={ticks} yScale={yScale} format={(v) => v.toFixed(2)} />
+      <PanelTitle
+        frame={frame}
+        y={yTop - 12}
+        text={`Rolling Sharpe (${ts.rolling_window_days}j)`}
+      />
+      <PanelFrame frame={frame} panel={panel} />
+      <YAxis frame={frame} ticks={ticks} scale={yScale} format={(v) => v.toFixed(2)} />
 
       {/* Reference at 0 (and at 1 if visible) */}
       {[0, 1].map((ref) =>
         ref >= yMin - 0.1 && ref <= yMax + 0.1 ? (
           <line
             key={ref}
-            x1={PAD.left}
-            x2={W - PAD.right}
+            x1={frame.left}
+            x2={frame.right}
             y1={yScale(ref)}
             y2={yScale(ref)}
             stroke="hsl(var(--border))"
@@ -288,10 +297,10 @@ function RollingSharpePanel({ ts, xScale }: PanelProps) {
 
       {latest !== undefined && latest !== null && (
         <text
-          x={W - PAD.right - 4}
+          x={frame.right - 4}
           y={yTop + 14}
           textAnchor="end"
-          className="font-mono text-[10px] fill-current text-muted-foreground"
+          className="font-mono text-[11px] fill-current text-muted-foreground"
         >
           Dernier : {latest.toFixed(2)}
         </text>
@@ -300,12 +309,12 @@ function RollingSharpePanel({ ts, xScale }: PanelProps) {
   );
 }
 
-/* ─── Shared axis & framing ──────────────────────────────────────────────── */
+/* ─── Shared framing ─────────────────────────────────────────────────────── */
 
-function PanelTitle({ y, text }: { y: number; text: string }) {
+function PanelTitle({ frame, y, text }: { frame: ChartFrame; y: number; text: string }) {
   return (
     <text
-      x={PAD.left}
+      x={frame.left}
       y={y}
       className="font-sans text-xs font-medium fill-current text-muted-foreground uppercase tracking-wider"
     >
@@ -314,70 +323,17 @@ function PanelTitle({ y, text }: { y: number; text: string }) {
   );
 }
 
-function PanelFrame({ y, h }: { y: number; h: number }) {
+function PanelFrame({ frame, panel }: { frame: ChartFrame; panel: Panel }) {
   return (
     <rect
-      x={PAD.left}
-      y={y}
-      width={W - PAD.left - PAD.right}
-      height={h}
+      x={frame.left}
+      y={panel.y}
+      width={frame.innerW}
+      height={panel.h}
       fill="none"
       stroke="hsl(var(--border))"
       strokeWidth="0.5"
     />
-  );
-}
-
-function YAxis({
-  ticks,
-  yScale,
-  format,
-}: {
-  ticks: number[];
-  yScale: Scale;
-  format: (v: number) => string;
-}) {
-  return (
-    <g className="font-mono text-[10px] fill-current text-muted-foreground">
-      {ticks.map((t) => (
-        <g key={t}>
-          <line
-            x1={PAD.left - 4}
-            x2={PAD.left}
-            y1={yScale(t)}
-            y2={yScale(t)}
-            stroke="currentColor"
-          />
-          <text x={PAD.left - 8} y={yScale(t) + 3} textAnchor="end">
-            {format(t)}
-          </text>
-        </g>
-      ))}
-    </g>
-  );
-}
-
-function DateAxis({
-  ts,
-  xScale,
-  indices,
-}: {
-  ts: TimeseriesResponse;
-  xScale: Scale;
-  indices: number[];
-}) {
-  return (
-    <g className="font-mono text-[10px] fill-current text-muted-foreground">
-      <line x1={PAD.left} x2={W - PAD.right} y1={AXIS_Y} y2={AXIS_Y} stroke="hsl(var(--border))" />
-      {indices.map((i) => (
-        <g key={i}>
-          <line x1={xScale(i)} x2={xScale(i)} y1={AXIS_Y} y2={AXIS_Y + 4} stroke="currentColor" />
-          <text x={xScale(i)} y={AXIS_Y + 16} textAnchor="middle">
-            {formatDateTick(ts.dates[i])}
-          </text>
-        </g>
-      ))}
-    </g>
   );
 }
 

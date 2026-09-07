@@ -2,7 +2,9 @@ import { useMemo, useState } from "react";
 
 import type { EnvelopePoint, FrontierCurve, PortfolioMetrics } from "@/api";
 import { fmt } from "@/lib/format";
+import { linearScale, niceTicks } from "@/lib/chart";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Chart, XAxis, YAxis, type ChartFrame } from "@/components/ui/chart";
 
 interface Props {
   metrics: PortfolioMetrics;
@@ -11,14 +13,13 @@ interface Props {
   envelopePoints?: EnvelopePoint[];
 }
 
-type Hover =
-  | { kind: "point"; x: number; y: number; label: string; sigma: number; mu: number }
-  | { kind: "envelopes"; x: number; y: number; items: EnvelopePoint[] }
-  | null;
+/** Everything that can be tapped on the map, in data space. */
+type Marker =
+  | { kind: "etf"; label: string; sigma: number; mu: number; color: string }
+  | { kind: "portfolio"; label: string; sigma: number; mu: number }
+  | { kind: "optimal"; label: string; sigma: number; mu: number }
+  | { kind: "envelopes"; sigma: number; mu: number; items: EnvelopePoint[] };
 
-const W = 720;
-const H = 440;
-const PAD = { top: 20, right: 30, bottom: 60, left: 90 };
 const ETF_COLORS = [
   "#60a5fa",
   "#f97316",
@@ -29,18 +30,19 @@ const ETF_COLORS = [
   "#10b981",
   "#ef4444",
 ];
+const HIT_RADIUS = 24; // px around a marker that selects it (finger-friendly)
 
 export function RiskReturn({ metrics, smoothFrontier, optimal, envelopePoints }: Props) {
-  const [hover, setHover] = useState<Hover>(null);
-  const innerW = W - PAD.left - PAD.right;
-  const innerH = H - PAD.top - PAD.bottom;
+  const [hover, setHover] = useState<Marker | null>(null);
 
-  const envelopes = (envelopePoints ?? [])
-    .slice()
-    .sort((a, b) => b.expected_return - a.expected_return);
+  const envelopes = useMemo(
+    () => (envelopePoints ?? []).slice().sort((a, b) => b.expected_return - a.expected_return),
+    [envelopePoints],
+  );
   const hasEnvelopes = envelopes.length > 0;
 
-  const { xScale, yScale, xTicks, yTicks, envBand } = useMemo(() => {
+  // Data-space domain + the markers to draw / hit-test
+  const { xMin, xMax, yMin, yMax, markers } = useMemo(() => {
     const sigmas = [
       ...metrics.assets.map((a) => a.annual_vol),
       ...envelopes.map((e) => e.volatility),
@@ -55,48 +57,42 @@ export function RiskReturn({ metrics, smoothFrontier, optimal, envelopePoints }:
       ...(optimal ? [optimal.mu] : []),
       ...(smoothFrontier?.ret ?? []),
     ];
-    const xMin = hasEnvelopes ? 0 : Math.max(0, Math.min(...sigmas) - 0.005);
-    const xMax = Math.max(...sigmas) + 0.015;
-    const yMin = Math.min(...mus) - 0.015;
-    const yMax = Math.max(...mus) + 0.015;
-
-    const xS = (x: number) => PAD.left + (innerW * (x - xMin)) / Math.max(xMax - xMin, 1e-9);
-    const yS = (y: number) =>
-      PAD.top + innerH - (innerH * (y - yMin)) / Math.max(yMax - yMin, 1e-9);
-
-    let band: { x: number; y: number; w: number; h: number; muMin: number; muMax: number } | null =
-      null;
+    const markers: Marker[] = [
+      ...metrics.assets.map<Marker>((a, i) => ({
+        kind: "etf",
+        label: a.ticker,
+        sigma: a.annual_vol,
+        mu: a.annual_return,
+        color: ETF_COLORS[i % ETF_COLORS.length],
+      })),
+      {
+        kind: "portfolio",
+        label: "Position actuelle",
+        sigma: metrics.volatility,
+        mu: metrics.expected_return,
+      },
+    ];
+    if (optimal) markers.push({ kind: "optimal", ...optimal });
     if (hasEnvelopes) {
-      const muMinEnv = Math.min(...envelopes.map((e) => e.expected_return));
-      const muMaxEnv = Math.max(...envelopes.map((e) => e.expected_return));
-      const y1 = yS(muMaxEnv) - 4;
-      const y2 = yS(muMinEnv) + 4;
-      band = { x: xS(0) - 8, y: y1, w: 16, h: y2 - y1, muMin: muMinEnv, muMax: muMaxEnv };
+      const mid =
+        (Math.min(...envelopes.map((e) => e.expected_return)) +
+          Math.max(...envelopes.map((e) => e.expected_return))) /
+        2;
+      markers.push({ kind: "envelopes", sigma: 0, mu: mid, items: envelopes });
     }
-
     return {
-      xScale: xS,
-      yScale: yS,
-      xTicks: niceTicks(xMin, xMax, 6),
-      yTicks: niceTicks(yMin, yMax, 6),
-      envBand: band,
+      xMin: hasEnvelopes ? 0 : Math.max(0, Math.min(...sigmas) - 0.005),
+      xMax: Math.max(...sigmas) + 0.015,
+      yMin: Math.min(...mus) - 0.015,
+      yMax: Math.max(...mus) + 0.015,
+      markers,
     };
-  }, [metrics, envelopes, optimal, smoothFrontier, hasEnvelopes, innerW, innerH]);
+  }, [metrics, envelopes, optimal, smoothFrontier, hasEnvelopes]);
 
-  const frontierPath =
-    smoothFrontier && smoothFrontier.vol.length > 1
-      ? smoothFrontier.vol
-          .map(
-            (v, i) =>
-              `${i === 0 ? "M" : "L"}${xScale(v).toFixed(2)},${yScale(smoothFrontier.ret[i]).toFixed(2)}`,
-          )
-          .join(" ")
-      : null;
-
-  const portfolioCx = xScale(metrics.volatility);
-  const portfolioCy = yScale(metrics.expected_return);
-  const optimalCx = optimal ? xScale(optimal.sigma) : 0;
-  const optimalCy = optimal ? yScale(optimal.mu) : 0;
+  const scales = (frame: ChartFrame) => ({
+    xScale: linearScale([xMin, xMax], [frame.left, frame.right]),
+    yScale: linearScale([yMin, yMax], [frame.bottom, frame.top]),
+  });
 
   return (
     <Card>
@@ -105,7 +101,7 @@ export function RiskReturn({ metrics, smoothFrontier, optimal, envelopePoints }:
           Risque–Rendement
         </CardTitle>
         <CardDescription>
-          Carte (σ, μ) de ton univers. Survole un point pour voir ses détails.
+          Carte (σ, μ) de ton univers. Touche ou survole un point pour voir ses détails.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -114,326 +110,206 @@ export function RiskReturn({ metrics, smoothFrontier, optimal, envelopePoints }:
             {smoothFrontier.unavailable_reason}
           </div>
         )}
-        <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img">
-          {/* Grid */}
-          <g
-            stroke="hsl(var(--border))"
-            strokeWidth="0.5"
-            opacity="0.3"
-            style={{ pointerEvents: "none" }}
-          >
-            {xTicks.map((t) => (
-              <line
-                key={`gx-${t}`}
-                x1={xScale(t)}
-                x2={xScale(t)}
-                y1={PAD.top}
-                y2={PAD.top + innerH}
-              />
-            ))}
-            {yTicks.map((t) => (
-              <line
-                key={`gy-${t}`}
-                x1={PAD.left}
-                x2={PAD.left + innerW}
-                y1={yScale(t)}
-                y2={yScale(t)}
-              />
-            ))}
-          </g>
-
-          {/* Axes */}
-          <g stroke="hsl(var(--foreground))" strokeWidth="1" style={{ pointerEvents: "none" }}>
-            <line x1={PAD.left} x2={PAD.left} y1={PAD.top} y2={PAD.top + innerH} />
-            <line
-              x1={PAD.left}
-              x2={PAD.left + innerW}
-              y1={PAD.top + innerH}
-              y2={PAD.top + innerH}
-            />
-          </g>
-
-          {/* X labels */}
-          <g
-            className="font-mono text-[10px] fill-current text-muted-foreground"
-            style={{ pointerEvents: "none" }}
-          >
-            {xTicks.map((t) => (
-              <g key={`xl-${t}`}>
-                <line
-                  x1={xScale(t)}
-                  x2={xScale(t)}
-                  y1={PAD.top + innerH}
-                  y2={PAD.top + innerH + 4}
-                  stroke="currentColor"
-                />
-                <text x={xScale(t)} y={PAD.top + innerH + 18} textAnchor="middle">
-                  {fmt.pct(t)}
-                </text>
-              </g>
-            ))}
-            <text
-              x={PAD.left + innerW / 2}
-              y={H - 14}
-              textAnchor="middle"
-              className="font-sans text-xs"
-            >
-              Volatilité σ (annualisée)
-            </text>
-          </g>
-
-          {/* Y labels */}
-          <g
-            className="font-mono text-[10px] fill-current text-muted-foreground"
-            style={{ pointerEvents: "none" }}
-          >
-            {yTicks.map((t) => (
-              <g key={`yl-${t}`}>
-                <line
-                  x1={PAD.left - 4}
-                  x2={PAD.left}
-                  y1={yScale(t)}
-                  y2={yScale(t)}
-                  stroke="currentColor"
-                />
-                <text x={PAD.left - 8} y={yScale(t) + 3} textAnchor="end">
-                  {fmt.pct(t)}
-                </text>
-              </g>
-            ))}
-            <text
-              x={-(PAD.top + innerH / 2)}
-              y={28}
-              textAnchor="middle"
-              transform="rotate(-90)"
-              className="font-sans text-xs"
-            >
-              Rendement μ annualisé
-            </text>
-          </g>
-
-          {/* Frontière */}
-          {frontierPath && (
-            <path
-              d={frontierPath}
-              fill="none"
-              stroke="hsl(var(--foreground))"
-              strokeWidth="2"
-              opacity="0.7"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{ pointerEvents: "none" }}
-            />
-          )}
-
-          {/* Zone livrets unique */}
-          {envBand && (
-            <g>
-              <rect
-                x={envBand.x}
-                y={envBand.y}
-                width={envBand.w}
-                height={envBand.h}
-                fill="#10b981"
-                opacity={0.7}
-                rx={3}
-                stroke="hsl(var(--background))"
-                strokeWidth={1.5}
-                className="cursor-pointer"
-                onMouseEnter={() =>
-                  setHover({
-                    kind: "envelopes",
-                    x: envBand.x + envBand.w / 2,
-                    y: envBand.y + envBand.h / 2,
-                    items: envelopes,
-                  })
-                }
-                onMouseLeave={() => setHover(null)}
-              />
-              <text
-                x={envBand.x + envBand.w + 6}
-                y={envBand.y + envBand.h / 2 + 4}
-                className="font-mono text-[10px] fill-current"
-                style={{ pointerEvents: "none" }}
-              >
-                {envelopes.length}× livrets
-              </text>
-            </g>
-          )}
-
-          {/* ETFs */}
-          {metrics.assets.map((a, i) => {
-            const cx = xScale(a.annual_vol);
-            const cy = yScale(a.annual_return);
-            const color = ETF_COLORS[i % ETF_COLORS.length];
-            return (
-              <g
-                key={`etf-${i}`}
-                onMouseEnter={() =>
-                  setHover({
-                    kind: "point",
-                    x: cx,
-                    y: cy,
-                    label: a.ticker,
-                    sigma: a.annual_vol,
-                    mu: a.annual_return,
-                  })
-                }
-                onMouseLeave={() => setHover(null)}
-              >
-                <circle
-                  cx={cx}
-                  cy={cy}
-                  r={10}
-                  fill={color}
-                  stroke="hsl(var(--background))"
-                  strokeWidth={2}
-                  className="cursor-pointer"
-                />
-                <text
-                  x={cx + 15}
-                  y={cy + 4}
-                  className="font-mono text-[11px] fill-current"
-                  style={{ pointerEvents: "none" }}
-                >
-                  {a.ticker.replace(".PA", "")}
-                </text>
-              </g>
-            );
-          })}
-
-          {/* Position actuelle */}
-          <g
-            onMouseEnter={() =>
-              setHover({
-                kind: "point",
-                x: portfolioCx,
-                y: portfolioCy,
-                label: "Position actuelle",
-                sigma: metrics.volatility,
-                mu: metrics.expected_return,
-              })
-            }
-            onMouseLeave={() => setHover(null)}
-          >
-            <polygon
-              points={`${portfolioCx},${portfolioCy - 11} ${portfolioCx + 11},${portfolioCy} ${portfolioCx},${portfolioCy + 11} ${portfolioCx - 11},${portfolioCy}`}
-              fill="#22c55e"
-              stroke="hsl(var(--background))"
-              strokeWidth={2}
-              className="cursor-pointer"
-            />
-          </g>
-
-          {/* Optimal */}
-          {optimal && (
-            <g
-              onMouseEnter={() =>
-                setHover({
-                  kind: "point",
-                  x: optimalCx,
-                  y: optimalCy,
-                  label: optimal.label,
-                  sigma: optimal.sigma,
-                  mu: optimal.mu,
-                })
+        <Chart
+          ariaLabel="Carte risque-rendement"
+          height={(_w, compact) => (compact ? 300 : 440)}
+          pad={(compact) =>
+            compact
+              ? { top: 16, right: 16, bottom: 46, left: 52 }
+              : { top: 20, right: 30, bottom: 60, left: 90 }
+          }
+          onPointer={(p, frame) => {
+            if (!p) return setHover(null);
+            const { xScale, yScale } = scales(frame);
+            // Nearest marker within HIT_RADIUS px, else nothing
+            let best: Marker | null = null;
+            let bestD = HIT_RADIUS;
+            for (const m of markers) {
+              const d = Math.hypot(xScale(m.sigma) - p.x, yScale(m.mu) - p.y);
+              if (d < bestD) {
+                bestD = d;
+                best = m;
               }
-              onMouseLeave={() => setHover(null)}
-              className="cursor-pointer"
-            >
-              {drawStar(optimalCx, optimalCy, 13, "#fbbf24", "hsl(var(--background))", 2)}
-            </g>
-          )}
+            }
+            setHover(best);
+          }}
+          tooltip={(frame) => {
+            if (!hover) return null;
+            const { xScale, yScale } = scales(frame);
+            return {
+              x: xScale(hover.sigma),
+              y: yScale(hover.mu),
+              content: <MarkerTooltip marker={hover} />,
+            };
+          }}
+        >
+          {(frame) => {
+            const { xScale, yScale } = scales(frame);
+            const nTicks = frame.compact ? 4 : 6;
+            const xTicks = niceTicks(xMin, xMax, nTicks);
+            const yTicks = niceTicks(yMin, yMax, nTicks);
+            const frontierPath =
+              smoothFrontier && smoothFrontier.vol.length > 1
+                ? smoothFrontier.vol
+                    .map(
+                      (v, i) =>
+                        `${i === 0 ? "M" : "L"}${xScale(v).toFixed(2)},${yScale(smoothFrontier.ret[i]).toFixed(2)}`,
+                    )
+                    .join(" ")
+                : null;
+            const env = markers.find((m) => m.kind === "envelopes");
+            const isHovered = (m: Marker) => hover === m;
 
-          {/* Tooltip — point simple OU liste livrets */}
-          {hover && hover.kind === "point" && (
-            <g style={{ pointerEvents: "none" }}>
-              <rect
-                x={Math.min(hover.x + 14, PAD.left + innerW - 160)}
-                y={Math.max(hover.y - 40, PAD.top + 4)}
-                width={155}
-                height={40}
-                fill="hsl(var(--card))"
-                stroke="hsl(var(--border))"
-                strokeWidth={1}
-                rx={4}
-                opacity={0.96}
-              />
-              <text
-                x={Math.min(hover.x + 22, PAD.left + innerW - 152)}
-                y={Math.max(hover.y - 22, PAD.top + 22)}
-                className="font-semibold text-[12px] fill-current"
-              >
-                {hover.label}
-              </text>
-              <text
-                x={Math.min(hover.x + 22, PAD.left + innerW - 152)}
-                y={Math.max(hover.y - 8, PAD.top + 36)}
-                className="font-mono text-[10px] fill-current text-muted-foreground"
-              >
-                σ {fmt.pct(hover.sigma)} · μ {fmt.pct(hover.mu)}
-              </text>
-            </g>
-          )}
-
-          {hover &&
-            hover.kind === "envelopes" &&
-            (() => {
-              const lineH = 16;
-              const headerH = 22;
-              const padding = 8;
-              const tooltipW = 200;
-              const tooltipH = headerH + hover.items.length * lineH + padding;
-              const tx = Math.min(hover.x + 14, PAD.left + innerW - tooltipW - 4);
-              const ty = Math.min(
-                Math.max(hover.y - tooltipH / 2, PAD.top + 4),
-                PAD.top + innerH - tooltipH - 4,
-              );
-              return (
-                <g style={{ pointerEvents: "none" }}>
-                  <rect
-                    x={tx}
-                    y={ty}
-                    width={tooltipW}
-                    height={tooltipH}
-                    fill="hsl(var(--card))"
-                    stroke="hsl(var(--border))"
-                    strokeWidth={1}
-                    rx={4}
-                    opacity={0.97}
-                  />
-                  <text
-                    x={tx + 10}
-                    y={ty + 16}
-                    className="font-semibold text-[12px] fill-current"
-                    style={{ fill: "#10b981" }}
-                  >
-                    {hover.items.length} livret{hover.items.length > 1 ? "s" : ""} · σ ≈ 0
-                  </text>
-                  {hover.items.map((e, i) => (
-                    <g key={i}>
-                      <text
-                        x={tx + 10}
-                        y={ty + headerH + (i + 1) * lineH - 4}
-                        className="font-mono text-[10px] fill-current"
-                      >
-                        {e.label.length > 24 ? e.label.slice(0, 22) + "…" : e.label}
-                      </text>
-                      <text
-                        x={tx + tooltipW - 10}
-                        y={ty + headerH + (i + 1) * lineH - 4}
-                        textAnchor="end"
-                        className="font-mono text-[10px] font-semibold fill-current"
-                        style={{ fill: "#10b981" }}
-                      >
-                        {fmt.pct(e.expected_return)}
-                      </text>
-                    </g>
+            return (
+              <>
+                {/* Grid */}
+                <g stroke="hsl(var(--border))" strokeWidth="0.5" opacity="0.3">
+                  {xTicks.map((t) => (
+                    <line
+                      key={`gx-${t}`}
+                      x1={xScale(t)}
+                      x2={xScale(t)}
+                      y1={frame.top}
+                      y2={frame.bottom}
+                    />
+                  ))}
+                  {yTicks.map((t) => (
+                    <line
+                      key={`gy-${t}`}
+                      x1={frame.left}
+                      x2={frame.right}
+                      y1={yScale(t)}
+                      y2={yScale(t)}
+                    />
                   ))}
                 </g>
-              );
-            })()}
-        </svg>
+
+                {/* Axes */}
+                <line
+                  x1={frame.left}
+                  x2={frame.left}
+                  y1={frame.top}
+                  y2={frame.bottom}
+                  stroke="hsl(var(--foreground))"
+                />
+                <XAxis
+                  frame={frame}
+                  ticks={xTicks}
+                  scale={xScale}
+                  format={(t) => fmt.pct(t)}
+                  label={frame.compact ? "Volatilité σ" : "Volatilité σ (annualisée)"}
+                />
+                <YAxis frame={frame} ticks={yTicks} scale={yScale} format={(t) => fmt.pct(t)} />
+                {!frame.compact && (
+                  <text
+                    x={-(frame.top + frame.innerH / 2)}
+                    y={16}
+                    textAnchor="middle"
+                    transform="rotate(-90)"
+                    className="font-sans text-xs fill-current text-muted-foreground"
+                  >
+                    Rendement μ annualisé
+                  </text>
+                )}
+
+                {/* Frontière */}
+                {frontierPath && (
+                  <path
+                    d={frontierPath}
+                    fill="none"
+                    stroke="hsl(var(--foreground))"
+                    strokeWidth="2"
+                    opacity="0.7"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                )}
+
+                {/* Zone livrets (σ ≈ 0) */}
+                {env && env.kind === "envelopes" && (
+                  <g>
+                    <rect
+                      x={xScale(0) - 8}
+                      y={yScale(Math.max(...env.items.map((e) => e.expected_return))) - 4}
+                      width={16}
+                      height={
+                        yScale(Math.min(...env.items.map((e) => e.expected_return))) -
+                        yScale(Math.max(...env.items.map((e) => e.expected_return))) +
+                        8
+                      }
+                      fill="#10b981"
+                      opacity={isHovered(env) ? 1 : 0.7}
+                      rx={3}
+                      stroke="hsl(var(--background))"
+                      strokeWidth={1.5}
+                    />
+                    <text
+                      x={xScale(0) + 14}
+                      y={yScale(env.mu) + 4}
+                      className="font-mono text-[11px] fill-current"
+                    >
+                      {env.items.length}× livrets
+                    </text>
+                  </g>
+                )}
+
+                {/* ETFs */}
+                {markers.map((m, i) => {
+                  if (m.kind !== "etf") return null;
+                  const cx = xScale(m.sigma);
+                  const cy = yScale(m.mu);
+                  return (
+                    <g key={`etf-${i}`}>
+                      <circle
+                        cx={cx}
+                        cy={cy}
+                        r={isHovered(m) ? 9 : 7}
+                        fill={m.color}
+                        stroke="hsl(var(--background))"
+                        strokeWidth={2}
+                      />
+                      <text x={cx + 12} y={cy + 4} className="font-mono text-[11px] fill-current">
+                        {m.label.replace(".PA", "")}
+                      </text>
+                    </g>
+                  );
+                })}
+
+                {/* Position actuelle */}
+                {markers.map((m, i) => {
+                  if (m.kind !== "portfolio") return null;
+                  const cx = xScale(m.sigma);
+                  const cy = yScale(m.mu);
+                  const r = isHovered(m) ? 12 : 10;
+                  return (
+                    <polygon
+                      key={`pf-${i}`}
+                      points={`${cx},${cy - r} ${cx + r},${cy} ${cx},${cy + r} ${cx - r},${cy}`}
+                      fill="#22c55e"
+                      stroke="hsl(var(--background))"
+                      strokeWidth={2}
+                    />
+                  );
+                })}
+
+                {/* Optimal */}
+                {markers.map((m, i) =>
+                  m.kind === "optimal"
+                    ? drawStar(
+                        xScale(m.sigma),
+                        yScale(m.mu),
+                        isHovered(m) ? 14 : 12,
+                        "#fbbf24",
+                        "hsl(var(--background))",
+                        2,
+                        `opt-${i}`,
+                      )
+                    : null,
+                )}
+              </>
+            );
+          }}
+        </Chart>
 
         {/* Legend */}
         <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground">
@@ -443,10 +319,40 @@ export function RiskReturn({ metrics, smoothFrontier, optimal, envelopePoints }:
           )}
           <LegendItem swatch={<Diamond />} label="Position actuelle" />
           {optimal && <LegendItem swatch={<StarSwatch />} label={optimal.label} />}
-          {frontierPath && <LegendItem swatch={<Line />} label="Frontière efficiente" />}
+          {smoothFrontier && smoothFrontier.vol.length > 1 && (
+            <LegendItem swatch={<Line />} label="Frontière efficiente" />
+          )}
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function MarkerTooltip({ marker }: { marker: Marker }) {
+  if (marker.kind === "envelopes") {
+    return (
+      <div className="space-y-1">
+        <div className="font-semibold" style={{ color: "#10b981" }}>
+          {marker.items.length} livret{marker.items.length > 1 ? "s" : ""} · σ ≈ 0
+        </div>
+        {marker.items.map((e, i) => (
+          <div key={i} className="flex justify-between gap-3 font-mono tabular">
+            <span className="truncate">{e.label}</span>
+            <span className="font-semibold" style={{ color: "#10b981" }}>
+              {fmt.pct(e.expected_return)}
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-0.5">
+      <div className="font-semibold text-foreground">{marker.label}</div>
+      <div className="font-mono tabular text-muted-foreground">
+        σ {fmt.pct(marker.sigma)} · μ {fmt.pct(marker.mu)}
+      </div>
+    </div>
   );
 }
 
@@ -493,6 +399,7 @@ function drawStar(
   fill: string,
   stroke?: string,
   strokeWidth?: number,
+  key?: string,
 ) {
   const pts: string[] = [];
   for (let i = 0; i < 10; i++) {
@@ -502,18 +409,13 @@ function drawStar(
       `${(cx + radius * Math.cos(angle)).toFixed(2)},${(cy + radius * Math.sin(angle)).toFixed(2)}`,
     );
   }
-  return <polygon points={pts.join(" ")} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />;
-}
-
-function niceTicks(min: number, max: number, n: number): number[] {
-  const range = Math.max(max - min, 1e-9);
-  const step0 = range / n;
-  const mag = 10 ** Math.floor(Math.log10(step0));
-  const norm = step0 / mag;
-  let step = norm < 1.5 ? 1 : norm < 3 ? 2 : norm < 7 ? 5 : 10;
-  step *= mag;
-  const start = Math.ceil(min / step) * step;
-  const out: number[] = [];
-  for (let v = start; v <= max + 1e-9; v += step) out.push(Math.round(v / step) * step);
-  return out;
+  return (
+    <polygon
+      key={key}
+      points={pts.join(" ")}
+      fill={fill}
+      stroke={stroke}
+      strokeWidth={strokeWidth}
+    />
+  );
 }
