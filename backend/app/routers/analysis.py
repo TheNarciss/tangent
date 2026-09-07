@@ -1,6 +1,7 @@
 """Analysis routes — optimizer, projection, scanner."""
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import User, current_active_user
@@ -25,7 +26,8 @@ async def read_optimizer(
     req: OptimizerRequest,
     wealth: Wealth = Depends(get_user_wealth),
 ) -> OptimizerResponse:
-    return optimizer.build(req, wealth=wealth)
+    # yfinance + SLSQP are blocking: keep them off the event loop.
+    return await run_in_threadpool(optimizer.build, req, wealth=wealth)
 
 
 @router.get("/projection", response_model=ProjectionResponse)
@@ -45,8 +47,14 @@ async def read_projection(
         effective_broker = profile.default_broker
     # ADR-021: subtract weighted TER as a monthly fee on top of broker fees
     weighted_ter = await holdings_repo.get_weighted_ter(session, user.id)
-    return projection.build(
-        monthly, years, goal, effective_broker, wealth=wealth, weighted_ter=weighted_ter
+    return await run_in_threadpool(
+        projection.build,
+        monthly,
+        years,
+        goal,
+        effective_broker,
+        wealth=wealth,
+        weighted_ter=weighted_ter,
     )
 
 
@@ -57,4 +65,4 @@ async def read_scan(
 ) -> ScanResponse:
     """Discovers PEA-eligible assets via dynamic yfinance screening,
     computes their marginal ΔSharpe against the current portfolio."""
-    return scanner.scan(req, wealth=wealth)
+    return await run_in_threadpool(scanner.scan, req, wealth=wealth)

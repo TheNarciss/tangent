@@ -1,6 +1,7 @@
 """Dashboard + timeseries — read-only analytics on the user's portfolio."""
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.concurrency import run_in_threadpool
 
 from ..deps import get_user_wealth
 from ..finance import dashboard, timeseries
@@ -35,7 +36,9 @@ async def read_dashboard(
         None, ge=0, le=0.20, description="Risk-free rate (fraction). Default: 0.025"
     ),
 ) -> DashboardResponse:
-    return dashboard.build(
+    # yfinance + numpy work is blocking: keep it off the event loop.
+    return await run_in_threadpool(
+        dashboard.build,
         cma_shrinkage=cma_shrinkage,
         historical_period=historical_period,
         risk_free=risk_free,
@@ -47,4 +50,4 @@ async def read_dashboard(
 async def read_timeseries(
     wealth: Wealth = Depends(get_user_wealth),
 ) -> TimeseriesResponse:
-    return timeseries.build(wealth=wealth)
+    return await run_in_threadpool(timeseries.build, wealth=wealth)

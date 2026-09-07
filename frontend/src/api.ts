@@ -49,12 +49,6 @@ export interface Insight {
   detail: string;
 }
 
-export interface FrontierCloud {
-  vol: number[];
-  ret: number[];
-  sharpe: number[];
-}
-
 export interface StressTestResult {
   id: string;
   label: string;
@@ -68,7 +62,6 @@ export interface StressTestResult {
 export interface DashboardResponse {
   as_of: string;
   metrics: PortfolioMetrics;
-  frontier: FrontierCloud;
   insights: Insight[];
   stress_tests: StressTestResult[];
 }

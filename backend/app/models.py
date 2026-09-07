@@ -35,12 +35,6 @@ class PortfolioMetrics(BaseModel):
     correlation: dict[str, dict[str, float]]
 
 
-class FrontierCloud(BaseModel):
-    vol: list[float]
-    ret: list[float]
-    sharpe: list[float]
-
-
 class Insight(BaseModel):
     severity: str  # "good" | "warning" | "critical"
     title: str
@@ -50,7 +44,6 @@ class Insight(BaseModel):
 class DashboardResponse(BaseModel):
     as_of: date
     metrics: PortfolioMetrics
-    frontier: FrontierCloud
     insights: list[Insight]
     stress_tests: list["StressTestResult"] = Field(default_factory=list)
 
