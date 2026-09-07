@@ -2,7 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
 import { fetchTermsVersion, useCurrentUser } from "@/api";
-import { useProfile } from "@/lib/profile";
 import { useProfileSync } from "@/lib/profile-sync";
 
 import { AppShell } from "@/components/AppShell";
@@ -13,7 +12,6 @@ import { Accounts } from "@/components/Accounts";
 import { AddBankButton } from "@/components/AddBankButton";
 import { AuthScreen } from "@/components/auth/AuthScreen";
 import { UserMenu } from "@/components/auth/UserMenu";
-import { BengenWidget } from "@/components/BengenWidget";
 import { Dashboard } from "@/components/Dashboard";
 import { OAuthCallbackHandler } from "@/components/OAuthCallback";
 import { Placements } from "@/components/Placements";
@@ -79,7 +77,7 @@ function Shell() {
           />
           <Route path={NAV_PATHS.accounts} element={<Accounts />} />
           <Route path={NAV_PATHS.investments} element={<Placements />} />
-          <Route path={NAV_PATHS.projection} element={<ProjectionView />} />
+          <Route path={NAV_PATHS.projection} element={<Projection />} />
           <Route path={NAV_PATHS.profile} element={<ProfilePage />} />
           <Route path={NAV_PATHS.account} element={<AccountView />} />
           <Route path="*" element={<Navigate to={NAV_PATHS.overview} replace />} />
@@ -93,16 +91,6 @@ function AccountView() {
   return (
     <div className="mx-auto max-w-4xl space-y-8 pb-24">
       <AccountTab />
-    </div>
-  );
-}
-
-function ProjectionView() {
-  const [profile] = useProfile();
-  return (
-    <div className="space-y-6">
-      <Projection />
-      {profile && <BengenWidget profile={profile} />}
     </div>
   );
 }
