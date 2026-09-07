@@ -87,16 +87,16 @@ export function BengenWidget({ profile }: Props) {
         {/* Résultats principaux */}
         {base && (
           <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
-            <div className="grid grid-cols-3 gap-4 text-center">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4 sm:text-center">
               <div>
                 <div className="text-xs text-muted-foreground">Capital nécessaire</div>
-                <div className="text-2xl font-mono tabular font-semibold">
+                <div className="font-mono text-xl font-semibold tabular sm:text-2xl">
                   {fmt.eur(base.capital_needed)}
                 </div>
               </div>
               <div>
                 <div className="text-xs text-muted-foreground">Atteint en</div>
-                <div className="text-2xl font-mono tabular font-semibold">
+                <div className="font-mono text-xl font-semibold tabular sm:text-2xl">
                   {base.years_to_reach === null
                     ? "—"
                     : base.years_to_reach === 0
@@ -106,7 +106,7 @@ export function BengenWidget({ profile }: Props) {
               </div>
               <div>
                 <div className="text-xs text-muted-foreground">Date estimée</div>
-                <div className="text-2xl font-mono tabular font-semibold capitalize">
+                <div className="font-mono text-xl font-semibold capitalize tabular sm:text-2xl">
                   {dateLabel(base.years_to_reach)}
                 </div>
               </div>
@@ -123,7 +123,7 @@ export function BengenWidget({ profile }: Props) {
             <Label className="text-xs text-muted-foreground">
               💡 Effet d'accélération si tu augmentes ton DCA
             </Label>
-            <div className="grid grid-cols-2 gap-2 text-sm">
+            <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
               <div className="rounded border p-3 space-y-1">
                 <div className="text-xs text-muted-foreground">DCA {altDca1} €/mois (×1,5)</div>
                 <div className="font-mono tabular">

@@ -6,6 +6,7 @@ import { useDebouncedValue } from "@/lib/hooks";
 import { fmt } from "@/lib/format";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartTooltip } from "@/components/ChartTooltip";
+import { useIsMobile } from "@/lib/responsive";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -16,9 +17,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const W = 720;
-const H = 360;
-const PAD = { left: 64, right: 24, top: 16, bottom: 36 };
+// Chart geometry (viewBox units). The mobile variant keeps SVG text legible
+// once the SVG is scaled down to a ~360px-wide phone screen.
+const DIMS = {
+  desktop: { W: 720, H: 360, PAD: { left: 64, right: 24, top: 16, bottom: 36 }, ticks: 6 },
+  mobile: { W: 400, H: 280, PAD: { left: 48, right: 12, top: 12, bottom: 32 }, ticks: 4 },
+} as const;
 
 const COLOR = {
   band: "hsl(var(--foreground))",
@@ -269,12 +273,14 @@ interface FanProps {
 }
 
 function FanChart({ data }: FanProps) {
+  const isMobile = useIsMobile();
+  const { W, H, PAD, ticks } = isMobile ? DIMS.mobile : DIMS.desktop;
   const innerW = W - PAD.left - PAD.right;
   const innerH = H - PAD.top - PAD.bottom;
 
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
-  const [wrapW, setWrapW] = useState(W);
+  const [wrapW, setWrapW] = useState<number>(W);
 
   const { xScale, yScale, yTicks, xTicks } = useMemo(() => {
     const lastIdx = data.months.length - 1;
@@ -288,15 +294,15 @@ function FanChart({ data }: FanProps) {
     return {
       xScale,
       yScale,
-      yTicks: niceTicks(yMin, yMax, 5),
-      xTicks: pickIndices(data.months.length, 6),
+      yTicks: niceTicks(yMin, yMax, ticks),
+      xTicks: pickIndices(data.months.length, ticks),
     };
-  }, [data, innerW, innerH]);
+  }, [data, innerW, innerH, PAD, ticks]);
 
   const xAt = (i: number) => xScale(i);
 
-  // mouse → nearest month index
-  const handleMove = (e: React.MouseEvent<SVGSVGElement>) => {
+  // pointer (mouse or touch) → nearest month index
+  const handleMove = (e: React.PointerEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     setWrapW(rect.width);
     const px = ((e.clientX - rect.left) / rect.width) * W;
@@ -325,11 +331,14 @@ function FanChart({ data }: FanProps) {
     <div ref={wrapRef} className="relative w-full">
       <svg
         viewBox={`0 0 ${W} ${H}`}
-        className="w-full h-auto"
+        className="h-auto w-full touch-pan-y"
         role="img"
         aria-label="Projection DCA"
-        onMouseMove={handleMove}
-        onMouseLeave={() => setHoverIdx(null)}
+        onPointerMove={handleMove}
+        onPointerLeave={(e) => {
+          // On touch, keep the last tapped point visible after the finger lifts.
+          if (e.pointerType === "mouse") setHoverIdx(null);
+        }}
       >
         {/* Grid */}
         <g stroke="hsl(var(--border))" strokeWidth="0.5" opacity="0.5">

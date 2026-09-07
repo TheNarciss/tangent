@@ -74,8 +74,8 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
   const handleReset = () => setDraft(profile ?? EMPTY_PROFILE);
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container max-w-4xl py-8 pb-32">
+    <div>
+      <div className="mx-auto max-w-4xl pb-24">
         {/* Header */}
         <header className="flex items-start gap-3 mb-8">
           <Button variant="ghost" size="sm" onClick={handleBack} className="gap-2 mt-0.5">
@@ -93,22 +93,34 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
 
         {/* Sub-tabs */}
         <Tabs defaultValue="identity" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
-            <TabsTrigger value="identity" className="gap-2">
+          <TabsList className="grid h-auto w-full grid-cols-4">
+            <TabsTrigger
+              value="identity"
+              className="flex-col gap-1 px-1 py-1.5 text-xs sm:flex-row sm:gap-2 sm:text-sm"
+            >
               <User className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Identité</span>
+              <span>Identité</span>
             </TabsTrigger>
-            <TabsTrigger value="fiscal" className="gap-2">
+            <TabsTrigger
+              value="fiscal"
+              className="flex-col gap-1 px-1 py-1.5 text-xs sm:flex-row sm:gap-2 sm:text-sm"
+            >
               <Calculator className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Fiscalité</span>
+              <span>Fiscalité</span>
             </TabsTrigger>
-            <TabsTrigger value="strategy" className="gap-2">
+            <TabsTrigger
+              value="strategy"
+              className="flex-col gap-1 px-1 py-1.5 text-xs sm:flex-row sm:gap-2 sm:text-sm"
+            >
               <Target className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Stratégie</span>
+              <span>Stratégie</span>
             </TabsTrigger>
-            <TabsTrigger value="account" className="gap-2">
+            <TabsTrigger
+              value="account"
+              className="flex-col gap-1 px-1 py-1.5 text-xs sm:flex-row sm:gap-2 sm:text-sm"
+            >
               <Shield className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Mon compte</span>
+              <span>Mon compte</span>
             </TabsTrigger>
           </TabsList>
 
@@ -132,8 +144,8 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
 
       {/* Sticky footer : visible uniquement si modifs */}
       {isDirty && (
-        <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur border-t z-50">
-          <div className="container max-w-4xl py-3 flex items-center justify-between gap-3">
+        <div className="fixed inset-x-0 bottom-16 z-40 border-t bg-background/95 backdrop-blur md:bottom-0 md:pb-[env(safe-area-inset-bottom)]">
+          <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-3">
             <p className="text-sm text-muted-foreground">Modifications non enregistrées</p>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={handleReset}>

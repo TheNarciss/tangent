@@ -359,7 +359,7 @@ export function Accounts() {
           )}
 
           {accounts.data && accounts.data.length > 0 && (
-            <div className="grid grid-cols-3 gap-4 pt-2">
+            <div className="grid grid-cols-1 gap-3 pt-2 sm:grid-cols-3 sm:gap-4">
               <NetWorthTile label="Actifs" value={netWorth.assets} />
               <NetWorthTile label="Dettes" value={-netWorth.debt} negative />
               <NetWorthTile label="Net" value={netWorth.net} bold />
@@ -421,10 +421,10 @@ function NetWorthTile({
 }) {
   const colorClass = negative || value < 0 ? "text-[hsl(var(--loss))]" : "text-foreground";
   return (
-    <div>
+    <div className="flex items-baseline justify-between gap-2 sm:block">
       <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className={cn("text-lg font-mono tabular", colorClass, bold && "font-semibold")}>
-        {fmt.signedEur(value)}
+      <div className={cn("font-mono text-lg tabular", colorClass, bold && "font-semibold")}>
+        {value < 0 ? `−${fmt.eur(-value)}` : fmt.eur(value)}
       </div>
     </div>
   );
@@ -465,10 +465,12 @@ function AccountSection({
             <TableRow>
               <TableHead className="w-8" />
               <TableHead>Nom</TableHead>
-              <TableHead>Banque</TableHead>
-              <TableHead>{category === "loan" ? "Capital restant" : "Solde"}</TableHead>
+              <TableHead className="hidden md:table-cell">Banque</TableHead>
+              <TableHead className="text-right">
+                {category === "loan" ? "Capital restant" : "Solde"}
+              </TableHead>
               <SecondaryColumnHead category={category} />
-              <TableHead className="text-right text-xs">Sync</TableHead>
+              <TableHead className="hidden text-right text-xs md:table-cell">Sync</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -490,12 +492,12 @@ function AccountSection({
 
 function SecondaryColumnHead({ category }: { category: Category }) {
   if (category === "invest" || category === "retirement" || category === "employee") {
-    return <TableHead>Gain / perte</TableHead>;
+    return <TableHead className="hidden md:table-cell">Gain / perte</TableHead>;
   }
   if (category === "loan") {
-    return <TableHead>Taux · Échéance</TableHead>;
+    return <TableHead className="hidden md:table-cell">Taux · Échéance</TableHead>;
   }
-  return <TableHead className="text-muted-foreground">IBAN</TableHead>;
+  return <TableHead className="hidden text-muted-foreground md:table-cell">IBAN</TableHead>;
 }
 
 /* ── Row + inline accordion ───────────────────────────────────────────────── */
@@ -531,20 +533,20 @@ function AccountRowGroup({
             )
           ) : null}
         </TableCell>
-        <TableCell className="font-medium">
-          <div className="flex items-center gap-2">
+        <TableCell className="w-full max-w-0 font-medium">
+          <div className="flex min-w-0 items-center gap-2">
             <span className="truncate">{cleanName(account.name)}</span>
             <span className="shrink-0 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
               {TYPE_LABELS[account.type]}
             </span>
           </div>
         </TableCell>
-        <TableCell className="text-muted-foreground text-sm">
+        <TableCell className="hidden text-sm text-muted-foreground md:table-cell">
           {account.institution_name ?? "—"}
         </TableCell>
         <PrimaryValueCell account={account} category={category} />
         <SecondaryCell account={account} category={category} />
-        <TableCell className="text-right text-xs text-muted-foreground">
+        <TableCell className="hidden text-right text-xs text-muted-foreground md:table-cell">
           {relativeTime(account.last_synced_at)}
         </TableCell>
       </TableRow>
@@ -591,23 +593,28 @@ function SecondaryCell({
 }) {
   if (category === "loan") {
     const loan = account.loan;
-    if (!loan) return <TableCell className="text-muted-foreground text-xs">—</TableCell>;
+    if (!loan)
+      return (
+        <TableCell className="hidden text-xs text-muted-foreground md:table-cell">—</TableCell>
+      );
     const parts: string[] = [];
     if (loan.rate !== null) parts.push(formatRate(loan.rate));
     if (loan.maturity_date) parts.push(monthYear(loan.maturity_date));
     return (
-      <TableCell className="text-xs font-mono tabular text-muted-foreground">
+      <TableCell className="hidden font-mono text-xs tabular text-muted-foreground md:table-cell">
         {parts.join(" · ") || "—"}
       </TableCell>
     );
   }
   if (category === "invest" || category === "retirement" || category === "employee") {
     if (account.diff === null || account.diff_percent === null) {
-      return <TableCell className="text-muted-foreground text-xs">—</TableCell>;
+      return (
+        <TableCell className="hidden text-xs text-muted-foreground md:table-cell">—</TableCell>
+      );
     }
     const positive = account.diff >= 0;
     return (
-      <TableCell>
+      <TableCell className="hidden md:table-cell">
         <span
           className={cn(
             "inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded text-xs font-mono tabular",
@@ -623,7 +630,7 @@ function SecondaryCell({
     );
   }
   return (
-    <TableCell className="text-muted-foreground text-xs font-mono tabular">
+    <TableCell className="hidden font-mono text-xs tabular text-muted-foreground md:table-cell">
       {maskedIban(account.iban)}
     </TableCell>
   );
@@ -723,10 +730,10 @@ function HoldingsInline({ accountId }: { accountId: string }) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Ticker</TableHead>
+            <TableHead className="hidden md:table-cell">Ticker</TableHead>
             <TableHead>Libellé</TableHead>
-            <TableHead className="text-right">Quantité</TableHead>
-            <TableHead className="text-right">PRU</TableHead>
+            <TableHead className="hidden text-right md:table-cell">Quantité</TableHead>
+            <TableHead className="hidden text-right md:table-cell">PRU</TableHead>
             <TableHead className="text-right">Valorisation</TableHead>
             <TableHead className="text-right">TER</TableHead>
           </TableRow>
@@ -734,10 +741,14 @@ function HoldingsInline({ accountId }: { accountId: string }) {
         <TableBody>
           {holdings.data.map((h) => (
             <TableRow key={h.id}>
-              <TableCell className="font-mono font-medium">{h.ticker}</TableCell>
+              <TableCell className="hidden font-mono font-medium md:table-cell">
+                {h.ticker}
+              </TableCell>
               <TableCell className="text-muted-foreground">{h.label}</TableCell>
-              <TableCell className="text-right font-mono tabular">{fmt.num(h.quantity)}</TableCell>
-              <TableCell className="text-right font-mono tabular">
+              <TableCell className="hidden text-right font-mono tabular md:table-cell">
+                {fmt.num(h.quantity)}
+              </TableCell>
+              <TableCell className="hidden text-right font-mono tabular md:table-cell">
                 {fmt.eur(h.unit_price)}
               </TableCell>
               <TableCell className="text-right font-mono tabular">
@@ -776,7 +787,7 @@ function TransactionsInline({ accountId }: { accountId: string }) {
           <TableRow>
             <TableHead>Date</TableHead>
             <TableHead>Libellé</TableHead>
-            <TableHead>Catégorie</TableHead>
+            <TableHead className="hidden md:table-cell">Catégorie</TableHead>
             <TableHead className="text-right">Montant</TableHead>
           </TableRow>
         </TableHeader>
@@ -788,8 +799,10 @@ function TransactionsInline({ accountId }: { accountId: string }) {
                 <TableCell className="font-mono tabular text-xs">
                   {new Date(t.transaction_date).toLocaleDateString("fr-FR")}
                 </TableCell>
-                <TableCell className="max-w-[300px] truncate">{t.description}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">{t.category ?? "—"}</TableCell>
+                <TableCell className="w-full max-w-0 truncate">{t.description}</TableCell>
+                <TableCell className="hidden text-xs text-muted-foreground md:table-cell">
+                  {t.category ?? "—"}
+                </TableCell>
                 <TableCell
                   className={cn(
                     "text-right font-mono tabular",

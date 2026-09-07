@@ -58,8 +58,8 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
   const handleResetDefaults = () => setDraft(DEFAULT_SETTINGS);
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container max-w-4xl py-8 pb-32">
+    <div>
+      <div className="mx-auto max-w-4xl pb-24">
         {/* Header */}
         <header className="flex items-start gap-3 mb-8">
           <Button variant="ghost" size="sm" onClick={handleBack} className="gap-2 mt-0.5">
@@ -76,22 +76,34 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
         </header>
 
         <Tabs defaultValue="scanner" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
-            <TabsTrigger value="scanner" className="gap-2">
+          <TabsList className="grid h-auto w-full grid-cols-4">
+            <TabsTrigger
+              value="scanner"
+              className="flex-col gap-1 px-1 py-1.5 text-xs sm:flex-row sm:gap-2 sm:text-sm"
+            >
               <Radar className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Scanner</span>
+              <span>Scanner</span>
             </TabsTrigger>
-            <TabsTrigger value="cma" className="gap-2">
+            <TabsTrigger
+              value="cma"
+              className="flex-col gap-1 px-1 py-1.5 text-xs sm:flex-row sm:gap-2 sm:text-sm"
+            >
               <Sliders className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Modèle CMA</span>
+              <span>Modèle CMA</span>
             </TabsTrigger>
-            <TabsTrigger value="overrides" className="gap-2">
+            <TabsTrigger
+              value="overrides"
+              className="flex-col gap-1 px-1 py-1.5 text-xs sm:flex-row sm:gap-2 sm:text-sm"
+            >
               <Settings2 className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Overrides</span>
+              <span>Overrides</span>
             </TabsTrigger>
-            <TabsTrigger value="prefs" className="gap-2">
+            <TabsTrigger
+              value="prefs"
+              className="flex-col gap-1 px-1 py-1.5 text-xs sm:flex-row sm:gap-2 sm:text-sm"
+            >
               <Palette className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Préférences</span>
+              <span>Préférences</span>
             </TabsTrigger>
           </TabsList>
 
@@ -127,8 +139,8 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
 
       {/* Sticky footer */}
       {isDirty && (
-        <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur border-t z-50">
-          <div className="container max-w-4xl py-3 flex items-center justify-between gap-3">
+        <div className="fixed inset-x-0 bottom-16 z-40 border-t bg-background/95 backdrop-blur md:bottom-0 md:pb-[env(safe-area-inset-bottom)]">
+          <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-3">
             <p className="text-sm text-muted-foreground">Modifications non enregistrées</p>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={handleReset}>
