@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 class AssetMetrics(BaseModel):
     ticker: str
+    label: str | None = None  # fund name as the provider labels it (shown instead of the ticker)
     price: float
     weight: float
     value: float

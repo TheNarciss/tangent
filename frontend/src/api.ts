@@ -13,6 +13,7 @@ const BACKEND_BASE = API_URL.replace(/\/api$/, "");
 
 export interface AssetMetrics {
   ticker: string;
+  label: string | null; // fund name as the provider labels it
   price: number;
   weight: number;
   value: number;
@@ -222,6 +223,7 @@ export interface OptimizerRequest {
   fiscal_shares?: number;
   ceilings_used?: CeilingsUsedDTO;
   total_capital?: number;
+  expert?: ExpertSettingsPayload;
 }
 
 export interface KellyLeverage {
@@ -417,10 +419,18 @@ export function useWealthSummary() {
   });
 }
 
-export function useDashboard() {
+/** Portfolio analytics. `expert` maps to the /dashboard query params (CMA
+ *  shrinkage, historical period, risk-free rate) from the advanced options. */
+export function useDashboard(expert?: ExpertSettingsPayload) {
+  const params = new URLSearchParams();
+  if (expert?.cma_shrinkage !== undefined)
+    params.set("cma_shrinkage", String(expert.cma_shrinkage));
+  if (expert?.historical_period) params.set("historical_period", expert.historical_period);
+  if (expert?.risk_free_rate !== undefined) params.set("risk_free", String(expert.risk_free_rate));
+  const qs = params.toString();
   return useQuery({
-    queryKey: ["dashboard"],
-    queryFn: () => http<DashboardResponse>("/dashboard"),
+    queryKey: ["dashboard", qs],
+    queryFn: () => http<DashboardResponse>(`/dashboard${qs ? `?${qs}` : ""}`),
   });
 }
 
