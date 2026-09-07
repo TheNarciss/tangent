@@ -13,9 +13,8 @@ interface Source {
 }
 
 /**
- * Renders the full markdown review of a portfolio. Extracted from AI.tsx
- * ReviewCard so it can be reused inside the Dashboard's AiBriefTile bottom
- * sheet without duplicating markdown rendering + sources display.
+ * Renders the full markdown briefing. Date and sources only: model,
+ * tokens and cost are audit data, not something the reader needs.
  */
 export function ReviewSheet({ review }: ReviewSheetProps) {
   const sources = (review.sources ?? []) as Source[];
@@ -29,21 +28,46 @@ export function ReviewSheet({ review }: ReviewSheetProps) {
             timeStyle: "short",
           })}
         </span>
-        <span>·</span>
-        <span>{review.model_used}</span>
-        <span>·</span>
-        <span>
-          {review.input_tokens.toLocaleString("fr-FR")} tok in /{" "}
-          {review.output_tokens.toLocaleString("fr-FR")} tok out
-        </span>
-        <span>·</span>
-        <span>{review.web_searches_count} recherches web</span>
-        <span>·</span>
-        <span>${review.cost_usd.toFixed(3)}</span>
+        {review.web_searches_count > 0 && (
+          <>
+            <span>·</span>
+            <span>
+              {review.web_searches_count} source{review.web_searches_count > 1 ? "s" : ""} consultée
+              {review.web_searches_count > 1 ? "s" : ""}
+            </span>
+          </>
+        )}
       </div>
 
-      <div className="prose prose-sm dark:prose-invert max-w-none">
-        <ReactMarkdown>{review.content}</ReactMarkdown>
+      <div className="space-y-3 text-sm leading-relaxed">
+        <ReactMarkdown
+          components={{
+            h1: ({ children }) => (
+              <h3 className="mt-5 text-base font-semibold first:mt-0">{children}</h3>
+            ),
+            h2: ({ children }) => (
+              <h3 className="mt-5 text-base font-semibold first:mt-0">{children}</h3>
+            ),
+            h3: ({ children }) => <h4 className="mt-4 text-sm font-semibold">{children}</h4>,
+            p: ({ children }) => <p className="text-muted-foreground">{children}</p>,
+            ul: ({ children }) => (
+              <ul className="list-disc space-y-1 pl-5 text-muted-foreground">{children}</ul>
+            ),
+            a: ({ href, children }) => (
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary underline"
+              >
+                {children}
+              </a>
+            ),
+            strong: ({ children }) => <strong className="text-foreground">{children}</strong>,
+          }}
+        >
+          {review.content}
+        </ReactMarkdown>
       </div>
 
       {sources.length > 0 && (

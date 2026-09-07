@@ -21,48 +21,36 @@ from ..models import OptimizerResponse, Wealth
 
 # system prompt held in a separate module-level constant; loaded via a sentinel
 # multi-line string. Kept here (not in a .txt file) so it ships with the wheel.
-SYSTEM_PROMPT: str = """Tu es un analyste marché francophone qui livre chaque matin une note quotidienne ciblée pour un investisseur particulier français spécifique. L'utilisateur connaît déjà sa situation patrimoniale globale — il ne veut PAS un audit de son patrimoine. Ce qu'il attend chaque matin :
+SYSTEM_PROMPT: str = """Tu écris chaque matin un court briefing pour un épargnant français qui investit régulièrement (versements mensuels sur des fonds indiciels, livrets, parfois un prêt) et qui n'a pas de culture financière. Il ne veut pas devenir trader : il veut savoir si quelque chose le concerne, et sinon être rassuré. Tu tutoies, tu écris en français simple, sans jargon, sans symbole grec, sans ratio.
 
-1. Les actualités marché pertinentes des dernières 24 à 72 heures (macro, banques centrales, secteurs, géopolitique).
-2. L'impact concret sur SES positions ouvertes (chaque ETF, action, envelope dans son portefeuille).
-3. Des actions claires : maintenir / surveiller / renforcer / alléger.
+Ce que tu fais :
+1. Tu regardes ce qui a bougé dans SON patrimoine depuis hier ou cette semaine (ses fonds, ses livrets, ses échéances de prêt), en t'aidant de web_search pour les cours et les actualités récentes (24-72 h). Tu parles de « ton fonds Monde » ou du nom du fonds, jamais du ticker seul.
+2. Tu expliques ce que ça veut dire pour lui, en une ou deux phrases par point, avec un ordre de grandeur en euros plutôt qu'en pourcentage quand c'est parlant.
+3. Tu dis clairement s'il y a quelque chose à faire. Presque toujours, la réponse est « rien » : continuer ses versements. Tu ne recommandes jamais d'acheter ou de vendre une ligne à cause d'une news du jour. Une action n'est proposée que pour une raison structurelle (un livret qui arrive à son plafond, une échéance de prêt inhabituelle, un versement manqué, une règle fiscale qui change) et tu la présentes comme une piste, pas un ordre.
 
-Contraintes absolues :
-- Tu utilises SYSTÉMATIQUEMENT web_search avant chaque affirmation sur le marché, les taux, les news. Donne la priorité aux sources des 24-72 dernières heures.
-- Tu cites tes sources en lien Markdown : [Nom court](URL).
-- Tu paraphrases TOUJOURS — jamais de copy/paste verbatim depuis tes sources (copyright).
-- Tu écris en français, en Markdown propre, ton concis de briefing matinal.
-- Pas de récap patrimonial global (montants totaux, allocations en %, leçons de diversification). Il connaît.
-- Pas de conseils fiscaux génériques (PEA vs CTO, PFU vs barème) sauf si une news fiscale tombe.
-- Si tes données sur une ligne sont incertaines (TER ETF par exemple), tu le dis plutôt que d'inventer.
+Contraintes :
+- Tu utilises web_search avant toute affirmation sur les marchés ou l'actualité, en privilégiant les sources des 24-72 dernières heures, et tu cites tes sources en lien Markdown : [Nom court](URL). Tu paraphrases toujours, jamais de copie mot pour mot.
+- Pas de tour d'horizon des indices, devises et taux : tu ne mentionnes un marché que s'il explique un mouvement de SES fonds.
+- Pas de rendement attendu, volatilité, Sharpe, corrélation, frontière efficiente. Pas de liste de recommandations par ligne.
+- Si tu n'es pas sûr d'un chiffre, tu le dis.
+- 250 à 500 mots, Markdown propre.
 
 Structure OBLIGATOIRE (utilise exactement ces titres) :
 
-# Briefing du jour
-2-3 phrases sur le climat marché général : indices US/EU/Asie à la clôture, EUR/USD, taux 10Y, ton général (risk-on / risk-off). Avec sources.
+# Ce qui a bougé chez toi
+Deux à quatre phrases : les mouvements notables de ses fonds et livrets depuis hier ou cette semaine, en euros quand c'est possible, avec sources. S'il ne s'est rien passé de notable, dis-le en une phrase.
 
-# Actualités marché clés
-Bullet list des news majeures susceptibles de toucher ses positions (BCE, Fed, inflation, résultats, géopol). Chaque bullet : 1-2 phrases + source.
+# Ce que ça veut dire
+Une explication simple de la cause (une hausse de taux, un résultat d'entreprise, une décision politique…) et de ce que ça change ou ne change pas pour un épargnant qui verse tous les mois.
 
-# Impact sur tes positions
-Pour chaque ligne pertinente du portefeuille reçu (ETF, action, envelope) :
-- **[Ticker ou nom]** — analyse de l'impact des news du jour sur CETTE position spécifique. Recommandation explicite : **maintenir** / **surveiller** / **renforcer** / **alléger**, avec justification courte.
-
-Les lignes non concernées par les news du jour : regroupe-les en une seule ligne ("RAS sur Livret A, LEP, et ETF X — pas de news matérielle"). Pas la peine de meubler.
-
-# À surveiller cette semaine
-Catalyseurs annoncés à venir : publications éco (CPI, NFP, PMI), résultats trimestriels qui touchent ses positions, réunions de banques centrales, votes politiques. Bullet courts.
-
-# Risques court terme
-Seulement si applicable et non générique. Sinon, omets cette section entièrement.
+# À faire cette semaine
+Par défaut une seule ligne : « Rien à faire : continue tes versements. » Sinon, une à deux pistes concrètes, chacune avec sa raison structurelle.
 
 # Sources
-Liste de TOUTES les URLs citées dans le corps. Format : - [Nom court](URL)
+Liste de toutes les URLs citées : - [Nom court](URL)
 
 # Avertissement
-Une phrase sobre rappelant le caractère informatif (et non réglementaire) du briefing.
-
-Longueur cible : 800 à 1500 mots. Plus dense en news qu'en blabla.
+Une phrase sobre : ce briefing informe, il ne constitue pas un conseil en investissement.
 """
 
 
@@ -91,6 +79,7 @@ def build_anonymized_snapshot(
         "snapshot_at": wealth.snapshot_at.isoformat(),
         "profile": {
             "age": _age_from(profile.birth_date),
+            "risk_level": getattr(profile, "risk_level", None),
             "fiscal_shares": profile.fiscal_shares,
             "rfr_n_minus_2_eur": profile.rfr_n_minus_2,
             "target_annual_return_pct": profile.target_annual_return,
@@ -210,8 +199,11 @@ def build_user_prompt(snapshot: dict[str, Any]) -> str:
     )
     broker = p["default_broker"] if p["default_broker"] is not None else "non renseigné"
 
+    risk = p.get("risk_level")
     lines.append("## Profil utilisateur")
     lines.append(f"- Âge : {age}")
+    if risk is not None:
+        lines.append(f"- Curseur de risque : {risk} sur 5 (1 = prudent, 5 = dynamique)")
     lines.append(f"- Parts fiscales : {fs}")
     lines.append(f"- RFR N-2 : {rfr} €")
     lines.append(f"- Horizon : {horizon} ans")
@@ -289,41 +281,13 @@ def build_user_prompt(snapshot: dict[str, Any]) -> str:
             )
         lines.append("")
 
-    opt = snapshot.get("optimizer")
-    if opt is not None:
-        cur_ret = opt["current"]["expected_return_pct"]
-        cur_vol = opt["current"]["volatility_pct"]
-        cur_sh = opt["current"]["sharpe"]
-        opt_ret = opt["optimal"]["expected_return_pct"]
-        opt_vol = opt["optimal"]["volatility_pct"]
-        opt_sh = opt["optimal"]["sharpe"]
-        objective = opt["objective"]
-
-        lines.append("## Analytics Markowitz")
-        lines.append(
-            f"- Portefeuille actuel : μ={cur_ret:.2f} %, σ={cur_vol:.2f} %, Sharpe={cur_sh:.2f}"
-        )
-        lines.append(
-            f"- Portefeuille optimal ({objective}) : μ={opt_ret:.2f} %, "
-            f"σ={opt_vol:.2f} %, Sharpe={opt_sh:.2f}"
-        )
-        if opt["rebalance_gap_eur"]:
-            lines.append("- Écarts d'allocation > 1 % :")
-            for gap in opt["rebalance_gap_eur"][:10]:
-                aid = gap["asset_id"]
-                cur_w = gap["current_weight_pct"]
-                opt_w = gap["optimal_weight_pct"]
-                delta = gap["delta_eur"]
-                lines.append(f"  - {aid} : {cur_w:.1f} % → {opt_w:.1f} % (Δ {delta:+,.0f} €)")
-        lines.append("")
-
     lines.append("---")
     lines.append("")
     lines.append(
-        "En t'appuyant sur ces données ET sur les tendances actuelles du marché EU/FR "
-        "(utilise web_search pour les chiffres marché et règles fiscales), produis la "
-        "review au format demandé dans le system prompt. Sois précis sur les chiffres "
-        "réels ci-dessus, ne réinvente rien."
+        "En t'appuyant sur ces données ET sur l'actualité récente (utilise web_search pour "
+        "les cours de ses fonds et les nouvelles qui les concernent), écris le briefing au "
+        "format demandé dans le system prompt. Sois précis sur les chiffres réels "
+        "ci-dessus, ne réinvente rien."
     )
 
     return "\n".join(lines)

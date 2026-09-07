@@ -11,6 +11,7 @@ import {
   useCurrentUser,
 } from "@/api";
 import { useProfile } from "@/lib/profile";
+import { BRIEFING_TIME } from "@/components/dashboard/AiBriefTile";
 import { Button } from "@/components/ui/button";
 import { Section } from "@/components/ui/section";
 import {
@@ -530,8 +531,8 @@ function AutoReviewSection() {
 
   return (
     <Section
-      title="Reviews IA matinales"
-      description="Reçois chaque matin (entre 4 h et 9 h) une analyse personnalisée de ton patrimoine, générée par Claude avec recherche web. Activable / désactivable à tout moment."
+      title="Briefing du matin"
+      description={`Chaque matin (${BRIEFING_TIME}), un court texte sur ce qui a bougé dans ton patrimoine, ce que ça veut dire et s'il y a quelque chose à faire. Écrit par une IA à partir de tes comptes ; activable et désactivable à tout moment.`}
     >
       <div className="flex items-start gap-3 rounded-md border bg-muted/30 px-3 py-3 hover:bg-muted/50 transition">
         <input
@@ -542,11 +543,11 @@ function AutoReviewSection() {
           className="mt-0.5 h-4 w-4 rounded border-input accent-primary cursor-pointer"
         />
         <label htmlFor="auto-review-toggle" className="flex-1 cursor-pointer">
-          <p className="text-sm font-medium">Activer les reviews automatiques</p>
+          <p className="text-sm font-medium">Recevoir le briefing du matin</p>
           <p className="text-xs text-muted-foreground mt-0.5">
             {enabled
-              ? "Activé — tu recevras une review chaque matin."
-              : "Désactivé — active pour recevoir ta première review demain matin."}
+              ? "Activé — ton briefing t'attend chaque matin sur l'Aperçu."
+              : "Désactivé — active pour recevoir ton premier briefing demain matin."}
           </p>
         </label>
       </div>

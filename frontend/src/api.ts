@@ -1027,6 +1027,16 @@ export interface PortfolioReviewResponse {
   created_at: string;
 }
 
+/** Past briefings, newest first (GET /reviews). Only fetched when a sheet needs them. */
+export function useReviews(enabled: boolean, limit = 30) {
+  return useQuery({
+    queryKey: ["reviews", "list", limit],
+    queryFn: () => http<PortfolioReviewResponse[]>(`/reviews?limit=${limit}`),
+    enabled,
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
 export function useTodayReview() {
   return useQuery({
     queryKey: ["reviews", "today"],
