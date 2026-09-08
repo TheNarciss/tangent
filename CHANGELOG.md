@@ -1,5 +1,86 @@
 # Changelog
 
+## [1.2.0](https://github.com/TheNarciss/tangent/compare/v1.1.0...v1.2.0) (2026-09-08)
+
+
+### Features
+
+* **accounts-v2:** account cards, detail sheet, banks in Comptes ([a9d1f31](https://github.com/TheNarciss/tangent/commit/a9d1f31c87e06191a562251a4ae3d5b142cc76fe))
+* **accounts-v2:** account cards, detail sheet, banks in Comptes ([0cd2e01](https://github.com/TheNarciss/tangent/commit/0cd2e0118c32596d596450f0763765b426107fde))
+* **accounts-v2:** account cards, detail sheet, banks in Comptes ([#98](https://github.com/TheNarciss/tangent/issues/98)) ([a9d1f31](https://github.com/TheNarciss/tangent/commit/a9d1f31c87e06191a562251a4ae3d5b142cc76fe))
+* **assets:** hide stats columns on mobile (keep ticker · weight · value · P/L) ([#80](https://github.com/TheNarciss/tangent/issues/80)) ([7433e75](https://github.com/TheNarciss/tangent/commit/7433e75f066491688ef91a65848c115bd253630d))
+* **briefing-v2:** a briefing for a passive saver, opt-in from the tile, history ([11d05ca](https://github.com/TheNarciss/tangent/commit/11d05cafafcf72bb7d1aefc1029d886abab7bdb4))
+* **briefing-v2:** a briefing for a passive saver, opt-in from the tile, history ([88e9a48](https://github.com/TheNarciss/tangent/commit/88e9a485571427378a7f8384907ef892016985cd))
+* **briefing-v2:** a briefing for a passive saver, opt-in from the tile, history ([#101](https://github.com/TheNarciss/tangent/issues/101)) ([11d05ca](https://github.com/TheNarciss/tangent/commit/11d05cafafcf72bb7d1aefc1029d886abab7bdb4))
+* **charts:** one responsive SVG chart component ([#96](https://github.com/TheNarciss/tangent/issues/96)) ([d180b4d](https://github.com/TheNarciss/tangent/commit/d180b4d2e0853c33a9f41d5d0b13b742062585f4))
+* **charts:** one responsive SVG chart component (Projection, Timeline, RiskReturn) ([d180b4d](https://github.com/TheNarciss/tangent/commit/d180b4d2e0853c33a9f41d5d0b13b742062585f4))
+* **charts:** one responsive SVG chart component for Projection, Timeline and RiskReturn ([b4cc01b](https://github.com/TheNarciss/tangent/commit/b4cc01b94604435804a5183883e5ed0446f5c42a))
+* **dashboard:** bento adaptive Dashboard replaces AI + Aperçu + Historique ([#74](https://github.com/TheNarciss/tangent/issues/74)) ([7d2432f](https://github.com/TheNarciss/tangent/commit/7d2432fe5519440f607347a9a63b71fc46986768))
+* **foundation:** bento adaptive layout — base components + recent txn endpoint ([#73](https://github.com/TheNarciss/tangent/issues/73)) ([c58cc23](https://github.com/TheNarciss/tangent/commit/c58cc2340d2e1a86e0ffa48351cce7c34c6e21b9))
+* **gap-filler:** Universal Gap-Filler foundation (ADR-021) ([#69](https://github.com/TheNarciss/tangent/issues/69)) ([3615cd3](https://github.com/TheNarciss/tangent/commit/3615cd3537de42161a6593699d6363795c7d0257))
+* **gap-filler:** web_search opt-in for TER + ISIN ([#70](https://github.com/TheNarciss/tangent/issues/70)) ([898566e](https://github.com/TheNarciss/tangent/commit/898566e304a6c743139cc1d0d52f45c1209f627a))
+* **investments:** merge portfolio analysis under unified Investissements view ([#76](https://github.com/TheNarciss/tangent/issues/76)) ([ccadcd6](https://github.com/TheNarciss/tangent/commit/ccadcd6c43460a09d91226f56d9c78cbf3a36e41))
+* **mobile:** tabs + bengen inputs responsive + touch targets ([#79](https://github.com/TheNarciss/tangent/issues/79)) ([3f948ca](https://github.com/TheNarciss/tangent/commit/3f948ca652caad17d9b1974f2d88474987bf1e31))
+* **nav:** mobile bottom nav + MoreSheet replaces hamburger drawer ([#75](https://github.com/TheNarciss/tangent/issues/75)) ([9f451e1](https://github.com/TheNarciss/tangent/commit/9f451e1b4a4ea75e418efb1f434853a5e2d0430e))
+* **nav:** plain-language navigation, single page header, one brand name ([0005be1](https://github.com/TheNarciss/tangent/commit/0005be1a44c5f79358ef0c959ce8e81a4a904821))
+* **placements-v2:** three questions, stress tests in euros, one proposal ([b21a37d](https://github.com/TheNarciss/tangent/commit/b21a37de475c455e662c2db62dc2a1c742c02332))
+* **placements-v2:** three questions, stress tests in euros, one proposal ([574934a](https://github.com/TheNarciss/tangent/commit/574934a4bb910b14a0b3eb90a6bd8d622076f154))
+* **placements-v2:** three questions, stress tests in euros, one proposal ([#99](https://github.com/TheNarciss/tangent/issues/99)) ([b21a37d](https://github.com/TheNarciss/tangent/commit/b21a37de475c455e662c2db62dc2a1c742c02332))
+* **profile-v2:** five-question profile, risk slider, Réglages folded into the Scanner ([ca6d9b1](https://github.com/TheNarciss/tangent/commit/ca6d9b1c89dadfb13bbbfa53bdbd789ae15c3863))
+* **profile-v2:** five-question profile, risk slider, Réglages folded into the Scanner ([d83feef](https://github.com/TheNarciss/tangent/commit/d83feef89465e244f6d5404929aa301efe1445bd))
+* **profile-v2:** five-question profile, risk slider, Réglages folded into the Scanner ([#97](https://github.com/TheNarciss/tangent/issues/97)) ([ca6d9b1](https://github.com/TheNarciss/tangent/commit/ca6d9b1c89dadfb13bbbfa53bdbd789ae15c3863))
+* **projection-v2:** one question, three rounded figures, « et si » slider ([7095641](https://github.com/TheNarciss/tangent/commit/7095641b376d4f1124ab564536b542d1f917dfe0))
+* **projection-v2:** one question, three rounded figures, « et si » slider ([51bd4f1](https://github.com/TheNarciss/tangent/commit/51bd4f1a295ccfb4e07742fd2f235cae02b58575))
+* **projection-v2:** one question, three rounded figures, « et si » slider ([#100](https://github.com/TheNarciss/tangent/issues/100)) ([7095641](https://github.com/TheNarciss/tangent/commit/7095641b376d4f1124ab564536b542d1f917dfe0))
+* **reviews:** add review_batches table + auto_review_enabled flag ([#55](https://github.com/TheNarciss/tangent/issues/55)) ([9104065](https://github.com/TheNarciss/tangent/commit/91040656776e2a882689f638a5338a4982a56d48))
+* **reviews:** APScheduler for nightly batch pipeline ([#57](https://github.com/TheNarciss/tangent/issues/57)) ([6b0caf1](https://github.com/TheNarciss/tangent/commit/6b0caf1612829ddda9c1aedd877b7a7f7b8e1588))
+* **reviews:** batch submitter + poller + admin endpoints ([#56](https://github.com/TheNarciss/tangent/issues/56)) ([cb77a78](https://github.com/TheNarciss/tangent/commit/cb77a78e19e19b294e6601dc7fcd05ce928e6020))
+* **reviews:** bounded retry on Anthropic 529/503 + overloaded UX ([#68](https://github.com/TheNarciss/tangent/issues/68)) ([f0b8ab8](https://github.com/TheNarciss/tangent/commit/f0b8ab885c894e92d05fb9f5b6ade3b73ca8d3f4))
+* **reviews:** refocus system prompt on market news + position impact ([#59](https://github.com/TheNarciss/tangent/issues/59)) ([b8790b2](https://github.com/TheNarciss/tangent/commit/b8790b2e2fafa29e38f75c03fe877096507acb84))
+* **reviews:** restrict manual generate to superusers + opt-in toggle UI ([#58](https://github.com/TheNarciss/tangent/issues/58)) ([c84e27c](https://github.com/TheNarciss/tangent/commit/c84e27c07edc8854042742ad5cc9e670a0fcb202))
+* **router:** URL-driven navigation with react-router ([c735e19](https://github.com/TheNarciss/tangent/commit/c735e19392600f579580d251d4a0c435fbeb1efc))
+* **router:** URL-driven navigation with react-router ([208ea7d](https://github.com/TheNarciss/tangent/commit/208ea7dadb02ae476b029507d33de23eca188f44))
+* **router:** URL-driven navigation with react-router ([#95](https://github.com/TheNarciss/tangent/issues/95)) ([c735e19](https://github.com/TheNarciss/tangent/commit/c735e19392600f579580d251d4a0c435fbeb1efc))
+* **scanner:** hide stat columns on mobile (keep ticker · name · ΔSharpe · action) ([#81](https://github.com/TheNarciss/tangent/issues/81)) ([833c49e](https://github.com/TheNarciss/tangent/commit/833c49ef9de6c87474d1968c5ee7562bfab1b3f4))
+* **ui:** Claude Console-style layout — sidebar + responsive shell ([#72](https://github.com/TheNarciss/tangent/issues/72)) ([7708f61](https://github.com/TheNarciss/tangent/commit/7708f616eb4ce21a903dff2559e5b45b2474c2a5))
+* **ui:** DataField + TER editable on holdings + Projection badge (ADR-021 PR2) ([#71](https://github.com/TheNarciss/tangent/issues/71)) ([0683f61](https://github.com/TheNarciss/tangent/commit/0683f61eee90193fef1fff99e5da9e3b11e75a46))
+
+
+### Bug Fixes
+
+* add /reviews* to the [@api](https://github.com/api) path matcher. ([8478685](https://github.com/TheNarciss/tangent/commit/847868599bf5f2f2e09ae16fb797138bc7c22d46))
+* **ai:** keep streamedContent visible until persisted review arrives ([#54](https://github.com/TheNarciss/tangent/issues/54)) ([d6caa9f](https://github.com/TheNarciss/tangent/commit/d6caa9f3d3097b8bd7bfee679b8e2b6fcf637a67))
+* **caddy:** route /reviews/* requests to backend ([#52](https://github.com/TheNarciss/tangent/issues/52)) ([8478685](https://github.com/TheNarciss/tangent/commit/847868599bf5f2f2e09ae16fb797138bc7c22d46))
+* **cma:** no default μ for unmapped tickers, arithmetic historical μ ([dc67036](https://github.com/TheNarciss/tangent/commit/dc67036b2e3953fec72619f27325c810724e8dbc))
+* **cma:** no default μ for unmapped tickers, arithmetic historical μ ([522a250](https://github.com/TheNarciss/tangent/commit/522a25073aa2cd5ae6e5b39d9632ca0d94d42d6b))
+* **compose,pre-commit:** bind ports to 127.0.0.1 + allow YAML custom tags ([d640408](https://github.com/TheNarciss/tangent/commit/d640408af0ea9e5a0652a855bf712cd9e7a74695))
+* **fees:** stop charging fund retrocessions to the user ([b3e8155](https://github.com/TheNarciss/tangent/commit/b3e81554f342531605051ee7f90f5d218c2023e5))
+* **fees:** stop charging fund retrocessions to the user ([a416afe](https://github.com/TheNarciss/tangent/commit/a416afed360852910a273b700814f35a82390bc4))
+* **llm:** render profile, envelope and loan rates as percents in the briefing prompt ([84538e7](https://github.com/TheNarciss/tangent/commit/84538e7765ef646bb0c9764c7b100686997efe90))
+* **llm:** render profile, envelope and loan rates as percents in the briefing prompt ([4c92c69](https://github.com/TheNarciss/tangent/commit/4c92c69dc1208fa95f19b24ee2494f0e3eb05638))
+* mobile layouts, nav wording, dead code, profile sync ([1505a55](https://github.com/TheNarciss/tangent/commit/1505a55f6cbbd2c1508cff3f77a4524ba98b457e))
+* mobile layouts, nav wording, dead code, profile sync ([#92](https://github.com/TheNarciss/tangent/issues/92)) ([1505a55](https://github.com/TheNarciss/tangent/commit/1505a55f6cbbd2c1508cff3f77a4524ba98b457e))
+* **mobile:** make Comptes, Projection, Investissements and Profil usable at 390px ([7034883](https://github.com/TheNarciss/tangent/commit/70348831e234011813b23b5ebd496f26da9508bc))
+* **optimizer:** check convergence for every objective, multi-start the non-convex ones ([267189d](https://github.com/TheNarciss/tangent/commit/267189db9446029f23aeec1b4567f36e174a1760))
+* **optimizer:** check convergence for every objective, multi-start the non-convex ones ([b9b3de1](https://github.com/TheNarciss/tangent/commit/b9b3de17189a4dc8e466f5450c59ae5fa2fce0f3))
+* **profile,accounts,projection:** sync the profile for real and stop lying to the UI ([0d7bd6f](https://github.com/TheNarciss/tangent/commit/0d7bd6fad42f693d5f484bb89790ccfa652c3cb3))
+* **profile:** align the five risk levels on one capital market line ([de78c5c](https://github.com/TheNarciss/tangent/commit/de78c5c1abf9e145529e1fefd8be4842dfc106ea))
+* **profile:** align the five risk levels on one capital market line ([66509de](https://github.com/TheNarciss/tangent/commit/66509de5db7e7a183a3e342614c13aedf6565e16))
+* **projection:** fold the uncertainty on the estimated return into the fan, say the amounts are nominal ([e45151a](https://github.com/TheNarciss/tangent/commit/e45151a336549a7ac1869b2b36678c7e640e7a3d))
+* **projection:** fold the uncertainty on the estimated return into the fan, say the amounts are nominal ([2d169dd](https://github.com/TheNarciss/tangent/commit/2d169dd8c65c29146859a17c9c20347c8ed8601b))
+* **stress:** score crisis windows on the full basket or not at all ([2c8452b](https://github.com/TheNarciss/tangent/commit/2c8452b661c74df0bf0f448349ed2de413b6d2a1))
+* **stress:** score crisis windows on the full basket or not at all ([2dfd151](https://github.com/TheNarciss/tangent/commit/2dfd1510027e0425d1c28f64b6305b5cc96b5bb6))
+* **wealth:** one net worth for the whole app ([545357a](https://github.com/TheNarciss/tangent/commit/545357a2948c924a726798aaa68b189161d55669))
+* **wealth:** one net worth for the whole app ([f21f992](https://github.com/TheNarciss/tangent/commit/f21f992e7b5349afd021e3f34fe7863492753378))
+* **wealth:** one net worth for the whole app ([#93](https://github.com/TheNarciss/tangent/issues/93)) ([545357a](https://github.com/TheNarciss/tangent/commit/545357a2948c924a726798aaa68b189161d55669))
+
+
+### Performance Improvements
+
+* **routes:** keep yfinance off the event loop, drop FrontierCloud, cache stress tests daily ([4140df4](https://github.com/TheNarciss/tangent/commit/4140df427aed5213c1bd3918a14c54ec921ed846))
+* **routes:** yfinance off the event loop, drop FrontierCloud, daily stress-test cache ([72a77ae](https://github.com/TheNarciss/tangent/commit/72a77ae753f7a9b17edd90521f708bd038d94233))
+* **routes:** yfinance off the event loop, drop FrontierCloud, daily stress-test cache ([#94](https://github.com/TheNarciss/tangent/issues/94)) ([72a77ae](https://github.com/TheNarciss/tangent/commit/72a77ae753f7a9b17edd90521f708bd038d94233))
+
 ## [1.1.0](https://github.com/TheNarciss/tangent/compare/v1.0.0...v1.1.0) (2026-06-02)
 
 
