@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 from ..db.models import Profile
 from ..errors import ConfigurationError, UnknownBrokerError
 from ..models import Verdict, VerdictsResponse, Wealth
-from . import envelopes, fees
+from . import envelopes, fees, risk_profile
 
 logger = logging.getLogger(__name__)
 
@@ -51,9 +51,23 @@ class NextEuroThresholds(BaseModel):
     tax_brackets: list[TaxBracket]
 
 
+class HorizonCap(BaseModel):
+    max_years: float | None
+    max_share: float = Field(ge=0, le=1)
+
+
+class RiskShareThresholds(BaseModel):
+    equity_premium: float = Field(gt=0)
+    equity_sigma: float = Field(gt=0)
+    band: float = Field(ge=0, le=1)
+    red_gap: float = Field(ge=0, le=1)
+    horizon_caps: list[HorizonCap]
+
+
 class VerdictsConfig(BaseModel):
     fees: FeesThresholds
     next_euro: NextEuroThresholds
+    risk_share: RiskShareThresholds
 
 
 def _load_config() -> VerdictsConfig:
@@ -601,6 +615,141 @@ def next_euro_verdict(
     )
 
 
+def merton_share(max_volatility: float, equity_sigma: float) -> float:
+    """Equity share that puts a two-asset portfolio (cash + world equities) at
+    `max_volatility`: the point of the capital market line the risk level picks.
+    Equal to Merton's (μ − r) / (γ σ²) for the γ implied by that level."""
+    return min(1.0, max(0.0, max_volatility / equity_sigma))
+
+
+def risk_share_verdict(
+    wealth: Wealth,
+    profile: Profile,
+    thresholds: RiskShareThresholds | None = None,
+) -> Verdict:
+    """« Part d'actions » : how much of the long-term pocket is in equities,
+    against the share the profile's risk level puts on the market line,
+    capped by the horizon (capacity for loss). Étude §5.2 principle 1, §8.1 point 3.
+
+    Equities = accounts whose lines Tangent prices (ETF and stocks in PEA,
+    CTO, AV units); the rest of the long-term pocket (fonds euros, PER or AV
+    valued as a whole, PEL) counts as non-equity.
+    """
+    cfg = thresholds or config().risk_share
+    title = "Part d'actions"
+
+    equity = sum(acc.positions_value for acc in wealth.investment_accounts if acc.positions)
+    non_equity = sum(acc.value for acc in wealth.investment_accounts if not acc.positions)
+    non_equity += sum(
+        e.balance for e in wealth.envelopes if e.envelope_type in ("pel", "cel", "cat")
+    )
+    pocket = equity + non_equity
+    if pocket <= 0:
+        return Verdict(
+            id="risk_share",
+            title=title,
+            status="unknown",
+            headline=(
+                "Pas de poche long terme connue (PEA, compte-titres, assurance vie, PER) : "
+                "la part d'actions ne peut pas être mesurée."
+            ),
+            action="Connecte tes comptes d'investissement dans Comptes.",
+        )
+
+    level = profile.risk_level
+    if level is None:
+        return Verdict(
+            id="risk_share",
+            title=title,
+            status="unknown",
+            headline=(
+                f"Tu as {_pct(equity / pocket, 0)} d'actions sur {_eur(pocket)} de placements long "
+                "terme, mais ton curseur prudent ↔ dynamique n'est pas réglé."
+            ),
+            action="Règle ton curseur dans Profil pour connaître la part qui te correspond.",
+            details={"equity_eur": equity, "pocket_eur": pocket, "actual_share": equity / pocket},
+        )
+
+    rl = risk_profile.resolve(level)
+    merton = merton_share(rl.max_annual_volatility, cfg.equity_sigma)
+    horizon = profile.horizon_years if profile.horizon_years is not None else 10
+    cap = next(
+        (c.max_share for c in cfg.horizon_caps if c.max_years is None or horizon <= c.max_years),
+        1.0,
+    )
+    target = min(merton, cap)
+    actual = equity / pocket
+    gap = actual - target
+    gamma = cfg.equity_premium / (merton * cfg.equity_sigma**2) if merton > 0 else None
+    # Expected drawdown of the equity pocket in a bad year (two sigmas), in euros.
+    bad_year_eur = 2 * cfg.equity_sigma * equity
+
+    details: dict[str, Any] = {
+        "actual_share": actual,
+        "target_share": target,
+        "merton_share": merton,
+        "horizon_cap": cap,
+        "horizon_years": horizon,
+        "risk_level": level,
+        "risk_label": rl.label,
+        "gamma": gamma,
+        "equity_eur": equity,
+        "non_equity_eur": non_equity,
+        "pocket_eur": pocket,
+        "bad_year_eur": bad_year_eur,
+        "band": cfg.band,
+        "equity_premium": cfg.equity_premium,
+        "equity_sigma": cfg.equity_sigma,
+    }
+    base = (
+        f"Tu as {_pct(actual, 0)} d'actions sur {_eur(pocket)} de placements long terme ; "
+        f"ton profil « {rl.label} » vise {_pct(target, 0)}"
+    )
+    if abs(gap) <= cfg.band:
+        return Verdict(
+            id="risk_share",
+            title=title,
+            status="green",
+            headline=base + " : tu es dans la bande, rien à changer.",
+            impact_eur_per_year=0.0,
+            details=details,
+        )
+    if gap < 0:
+        missing_eur = -gap * pocket
+        impact = cfg.equity_premium * missing_eur
+        return Verdict(
+            id="risk_share",
+            title=title,
+            status="red" if -gap >= cfg.red_gap else "amber",
+            headline=(
+                base + f" : {_eur(missing_eur)} de trop en produits de taux, soit environ "
+                f"{_eur(impact)} de rendement en moins par an."
+            ),
+            impact_eur_per_year=impact,
+            action=(
+                f"Oriente tes prochains versements vers ton ETF monde jusqu'à {_pct(target, 0)} "
+                "d'actions ; pas besoin de vendre quoi que ce soit."
+            ),
+            details=details,
+        )
+    excess_eur = gap * pocket
+    return Verdict(
+        id="risk_share",
+        title=title,
+        status="red" if gap >= cfg.red_gap else "amber",
+        headline=(
+            base + f" : {_eur(excess_eur)} d'actions au-delà de ton profil. Une mauvaise année "
+            f"peut te coûter {_eur(bad_year_eur)} sur cette poche."
+        ),
+        impact_eur_per_year=None,
+        action=(
+            "Dirige tes prochains versements vers le fonds euros ou un livret plutôt que vers "
+            "les actions, ou monte ton curseur si tu assumes ces variations."
+        ),
+        details=details,
+    )
+
+
 def compute_all(
     wealth: Wealth, profile: Profile, monthly_spending: float | None = None
 ) -> VerdictsResponse:
@@ -617,6 +766,7 @@ def compute_all(
     monthly = float(profile.monthly_dca or 0.0)
     verdicts = [
         next_euro_verdict(wealth, profile, monthly_spending),
+        risk_share_verdict(wealth, profile),
         fees_verdict(wealth, broker_fees, monthly),
     ]
     logger.info("verdicts computed: %s", {v.id: v.status for v in verdicts})

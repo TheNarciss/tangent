@@ -26,3 +26,18 @@ next_euro:
     - { up_to: 83823, rate: 0.30 }
     - { up_to: 180294, rate: 0.41 }
     - { up_to: null, rate: 0.45 }
+
+risk_share:
+  # Part d'actions de la poche long terme, sur la droite de marché de risk_levels.yaml :
+  # part visée = volatilité max du cran / volatilité des actions monde, plafonnée à 100 %.
+  # C'est la part de Merton w = (μ − r) / (γ σ²) avec γ implicite par cran (étude §5.2, §8.1).
+  equity_premium: 0.045      # actions monde 7 % − sans risque 2,5 % (cma.yaml, analytics.RISK_FREE)
+  equity_sigma: 0.15         # volatilité annuelle des actions monde (risk_levels.yaml)
+  band: 0.10                 # ±10 points autour de la cible : rien à faire
+  red_gap: 0.30              # au-delà de 30 points d'écart : rouge
+  # Plafond par horizon (capacité de perte) : argent dont on a besoin dans N ans.
+  horizon_caps:
+    - { max_years: 3, max_share: 0.10 }
+    - { max_years: 5, max_share: 0.30 }
+    - { max_years: 8, max_share: 0.60 }
+    - { max_years: null, max_share: 1.00 }

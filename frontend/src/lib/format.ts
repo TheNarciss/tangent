@@ -16,6 +16,11 @@ const pct = new Intl.NumberFormat("fr-FR", {
   maximumFractionDigits: 2,
 });
 
+const pct0 = new Intl.NumberFormat("fr-FR", {
+  style: "percent",
+  maximumFractionDigits: 0,
+});
+
 const signedPct = new Intl.NumberFormat("fr-FR", {
   style: "percent",
   minimumFractionDigits: 2,
@@ -55,6 +60,8 @@ export const fmt = {
   kEur,
   signedEur: (v: number) => signedEur.format(v),
   pct: (v: number) => pct.format(v),
+  /** Whole percent: « 80 % ». For shares of a portfolio, where decimals are noise. */
+  pct0: (v: number) => pct0.format(v),
   signedPct: (v: number) => signedPct.format(v),
   num: (v: number) => dec.format(v),
 };

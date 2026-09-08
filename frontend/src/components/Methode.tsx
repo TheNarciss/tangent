@@ -4,6 +4,7 @@ import {
   useVerdicts,
   type FeesVerdictDetails,
   type NextEuroVerdictDetails,
+  type RiskShareVerdictDetails,
   type Verdict,
 } from "@/api";
 import { fmt } from "@/lib/format";
@@ -52,6 +53,8 @@ export function Methode() {
             <FeesDetails details={v.details as FeesVerdictDetails} />
           ) : v.id === "next_euro" ? (
             <NextEuroDetails details={v.details as NextEuroVerdictDetails} />
+          ) : v.id === "risk_share" ? (
+            <RiskShareDetails details={v.details as RiskShareVerdictDetails} />
           ) : (
             <GenericDetails verdict={v} />
           )}
@@ -125,6 +128,78 @@ function NextEuroDetails({ details: d }: { details: NextEuroVerdictDetails }) {
         {d.tax?.tmi !== null && d.tax?.tmi !== undefined
           ? ` Ta tranche d'imposition estimée : ${fmt.pct(d.tax.tmi)}, d'après ton revenu fiscal et tes parts.`
           : ""}
+      </p>
+    </div>
+  );
+}
+
+/* ── Part d'actions ────────────────────────────────────────────────────── */
+
+function RiskShareDetails({ details: d }: { details: RiskShareVerdictDetails }) {
+  if (d.pocket_eur === undefined || d.actual_share === undefined) return null;
+  const actual = d.actual_share;
+  const target = d.target_share ?? actual;
+  const band = d.band ?? 0.1;
+  const lo = Math.max(0, target - band);
+  const hi = Math.min(1, target + band);
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Figure
+          label="Part d'actions"
+          value={fmt.pct0(actual)}
+          sub={`${fmt.eur0(d.equity_eur ?? 0)} en lignes cotées sur ${fmt.eur0(d.pocket_eur)}`}
+        />
+        <Figure
+          label="Part visée"
+          value={fmt.pct0(target)}
+          sub={
+            d.horizon_cap !== undefined &&
+            d.merton_share !== undefined &&
+            d.horizon_cap < d.merton_share
+              ? `plafonnée par ton horizon de ${d.horizon_years} ans (${fmt.pct0(d.merton_share)} sinon)`
+              : `profil « ${d.risk_label ?? "?"} », horizon ${d.horizon_years ?? 10} ans`
+          }
+        />
+        <Figure
+          label="Mauvaise année"
+          value={`−${fmt.eur0(d.bad_year_eur ?? 0)}`}
+          sub="deux fois la volatilité des actions sur ta poche actions"
+        />
+      </div>
+
+      {/* Gauge: actual vs target band, same on a phone and a desktop. */}
+      <div>
+        <div className="relative h-3 overflow-hidden rounded-full bg-muted">
+          <div
+            className="absolute inset-y-0 bg-[hsl(var(--gain))]/25"
+            style={{ left: `${lo * 100}%`, width: `${(hi - lo) * 100}%` }}
+          />
+          <div
+            className="absolute inset-y-0 w-0.5 bg-foreground"
+            style={{ left: `calc(${target * 100}% - 1px)` }}
+          />
+          <div
+            className="absolute inset-y-0 w-1 rounded-full bg-primary"
+            style={{ left: `calc(${actual * 100}% - 2px)` }}
+          />
+        </div>
+        <div className="mt-1 flex justify-between text-xs text-muted-foreground">
+          <span>0 % actions</span>
+          <span>
+            bande {fmt.pct0(lo)} – {fmt.pct0(hi)}
+          </span>
+          <span>100 %</span>
+        </div>
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        La part visée est le point de la droite de marché que ton curseur choisit (volatilité
+        maximale de ton cran divisée par celle des actions monde, {fmt.pct(d.equity_sigma ?? 0.15)}
+        ). C'est la part de Merton, avec une aversion au risque γ ≈{" "}
+        {d.gamma ? d.gamma.toFixed(1).replace(".", ",") : "?"}. Les lignes cotées comptent comme
+        actions ; fonds euros, PER ou assurance vie sans détail et PEL comptent comme produits de
+        taux.
       </p>
     </div>
   );
