@@ -1195,3 +1195,23 @@ export interface RiskShareVerdictDetails {
   equity_premium?: number;
   equity_sigma?: number;
 }
+
+/** `details` of the « taux d'épargne » verdict (id "savings_rate"). */
+export interface SavingsRateVerdictDetails {
+  income_monthly_eur?: number;
+  rfr_eur?: number;
+  monthly_dca_eur?: number;
+  monthly_saved_observed_eur?: number | null;
+  monthly_saved_used_eur?: number;
+  source?: "observed" | "declared";
+  rate?: number;
+  target_rate?: number;
+  target_monthly_eur?: number;
+  missing_monthly_eur?: number;
+  gap_at_horizon_eur?: number;
+  horizon_years?: number;
+  growth_for_horizon?: number;
+  escalation?: number;
+  escalated_next_year_eur?: number;
+  amber_min?: number;
+}

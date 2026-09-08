@@ -186,3 +186,50 @@ async def monthly_outflow(
     if total is None:
         return None
     return -float(total) / (days / 30.4375)
+
+
+# Accounts a transfer *into* is saving: regulated envelopes and investment wrappers.
+_SAVING_ACCOUNT_TYPES = (
+    "livret_a",
+    "livret_b",
+    "ldds",
+    "lep",
+    "pel",
+    "cel",
+    "csl",
+    "cat",
+    "pea",
+    "cto",
+    "life_insurance",
+    "per",
+    "capitalisation",
+)
+
+
+async def monthly_inflow_to_savings(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    *,
+    days: int = 90,
+) -> float | None:
+    """Average monthly credits on savings and investment accounts over `days` days.
+
+    Feeds the « taux d'épargne » verdict as the observed saving, next to the
+    monthly contribution the profile declares. Interest credited by the bank
+    counts too, which overstates it slightly. None when nothing was synced.
+    """
+    since = date.today() - timedelta(days=days)
+    stmt = (
+        select(func.sum(BankTransaction.amount))
+        .join(BankAccount, BankTransaction.bank_account_id == BankAccount.id)
+        .where(
+            BankTransaction.user_id == user_id,
+            BankTransaction.transaction_date >= since,
+            BankTransaction.amount > 0,
+            BankAccount.type.in_(_SAVING_ACCOUNT_TYPES),
+        )
+    )
+    total = (await session.execute(stmt)).scalar()
+    if total is None:
+        return None
+    return float(total) / (days / 30.4375)

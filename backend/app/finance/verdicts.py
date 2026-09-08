@@ -64,10 +64,19 @@ class RiskShareThresholds(BaseModel):
     horizon_caps: list[HorizonCap]
 
 
+class SavingsRateThresholds(BaseModel):
+    target: float = Field(gt=0, le=1)
+    amber_min: float = Field(ge=0, le=1)
+    escalation: float = Field(ge=0, le=1)
+    growth_for_20y: float = Field(ge=0)
+    horizon_years: int = Field(gt=0)
+
+
 class VerdictsConfig(BaseModel):
     fees: FeesThresholds
     next_euro: NextEuroThresholds
     risk_share: RiskShareThresholds
+    savings_rate: SavingsRateThresholds
 
 
 def _load_config() -> VerdictsConfig:
@@ -750,13 +759,123 @@ def risk_share_verdict(
     )
 
 
+def future_value_of_monthly(monthly: float, annual_rate: float, years: int) -> float:
+    """Capital reached by saving `monthly` every month for `years` at `annual_rate`."""
+    r = (1 + annual_rate) ** (1 / 12) - 1
+    n = years * 12
+    if r == 0:
+        return monthly * n
+    return monthly * ((1 + r) ** n - 1) / r
+
+
+def savings_rate_verdict(
+    profile: Profile,
+    monthly_saved: float | None,
+    thresholds: SavingsRateThresholds | None = None,
+) -> Verdict:
+    """« Taux d'épargne » : what goes to savings each month against income.
+
+    Income is the RFR N-2 spread over twelve months; saving is the monthly
+    contribution declared in the profile, replaced by the credits seen on
+    savings and investment accounts over 90 days when transactions exist.
+    Étude §1.1: at 20 years, 58 % of the final capital is contributions.
+    """
+    cfg = thresholds or config().savings_rate
+    title = "Taux d'épargne"
+    rfr = profile.rfr_n_minus_2
+    dca = float(profile.monthly_dca or 0.0)
+
+    if not rfr or rfr <= 0:
+        return Verdict(
+            id="savings_rate",
+            title=title,
+            status="unknown",
+            headline=(
+                "Ton revenu fiscal n'est pas renseigné : le taux d'épargne ne peut pas être "
+                "calculé."
+            ),
+            action="Renseigne ton revenu fiscal de référence dans Profil.",
+            details={"monthly_saved_observed_eur": monthly_saved, "monthly_dca_eur": dca},
+        )
+    income = rfr / 12.0
+    # The observed figure wins when we have one: it is what actually happens.
+    saved = monthly_saved if monthly_saved is not None else dca
+    source = "observed" if monthly_saved is not None else "declared"
+    rate = saved / income if income > 0 else 0.0
+    target_eur = cfg.target * income
+    missing = max(0.0, target_eur - saved)
+    at_horizon_gap = future_value_of_monthly(missing, cfg.growth_for_20y, cfg.horizon_years)
+    escalated_next_year = saved * (1 + cfg.escalation)
+
+    details: dict[str, Any] = {
+        "income_monthly_eur": income,
+        "rfr_eur": rfr,
+        "monthly_dca_eur": dca,
+        "monthly_saved_observed_eur": monthly_saved,
+        "monthly_saved_used_eur": saved,
+        "source": source,
+        "rate": rate,
+        "target_rate": cfg.target,
+        "target_monthly_eur": target_eur,
+        "missing_monthly_eur": missing,
+        "gap_at_horizon_eur": at_horizon_gap,
+        "horizon_years": cfg.horizon_years,
+        "growth_for_horizon": cfg.growth_for_20y,
+        "escalation": cfg.escalation,
+        "escalated_next_year_eur": escalated_next_year,
+        "amber_min": cfg.amber_min,
+    }
+    how = (
+        "d'après tes virements des 90 derniers jours"
+        if source == "observed"
+        else "d'après ton versement déclaré"
+    )
+    base = f"Tu épargnes {_eur(saved)} par mois, {_pct(rate, 0)} de ton revenu ({how})"
+
+    if rate >= cfg.target:
+        return Verdict(
+            id="savings_rate",
+            title=title,
+            status="green",
+            headline=base
+            + f" : au-dessus des {_pct(cfg.target, 0)} visés, c'est ce qui fait le capital.",
+            impact_eur_per_year=0.0,
+            action=(
+                f"Programme une hausse automatique de {_pct(cfg.escalation, 0)} par an : "
+                f"{_eur(escalated_next_year)} par mois l'an prochain, sans y penser."
+            ),
+            details=details,
+        )
+    status = "amber" if rate >= cfg.amber_min else "red"
+    return Verdict(
+        id="savings_rate",
+        title=title,
+        status=status,
+        headline=(
+            base + f" ; la cible est {_pct(cfg.target, 0)}, soit {_eur(target_eur)} par mois. "
+            f"L'écart vaut {_eur(at_horizon_gap)} dans {cfg.horizon_years} ans."
+        ),
+        impact_eur_per_year=missing * 12.0,
+        action=(
+            f"Monte ton virement automatique de {_eur(missing)} par mois, ou par paliers : "
+            f"+{_pct(cfg.escalation, 0)} à chaque augmentation de salaire jusqu'à "
+            f"{_eur(target_eur)}."
+        ),
+        details=details,
+    )
+
+
 def compute_all(
-    wealth: Wealth, profile: Profile, monthly_spending: float | None = None
+    wealth: Wealth,
+    profile: Profile,
+    monthly_spending: float | None = None,
+    monthly_saved: float | None = None,
 ) -> VerdictsResponse:
     """Every verdict the method can give on this patrimony, in display order.
 
-    `monthly_spending` is the average monthly debit on current accounts
-    (repositories.bank_transactions.monthly_outflow); None when unknown.
+    `monthly_spending` is the average monthly debit on current accounts,
+    `monthly_saved` the average monthly credit on savings and investment
+    accounts (repositories.bank_transactions); None when unknown.
     """
     try:
         _, broker_fees = fees.get(profile.default_broker)
@@ -765,6 +884,7 @@ def compute_all(
         _, broker_fees = fees.get(None)
     monthly = float(profile.monthly_dca or 0.0)
     verdicts = [
+        savings_rate_verdict(profile, monthly_saved),
         next_euro_verdict(wealth, profile, monthly_spending),
         risk_share_verdict(wealth, profile),
         fees_verdict(wealth, broker_fees, monthly),

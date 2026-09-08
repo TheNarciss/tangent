@@ -6,6 +6,8 @@ import { fmt } from "@/lib/format";
 import { useProfile } from "@/lib/profile";
 import { cn } from "@/lib/utils";
 import { FanChart } from "@/components/ProjectionChart";
+import { NAV_PATHS } from "@/components/Sidebar";
+import { VerdictLine } from "@/components/ui/verdict-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -71,6 +73,7 @@ export function Projection() {
 
   return (
     <div className="space-y-6">
+      <VerdictLine id="savings_rate" to={NAV_PATHS.method} />
       <section className="rounded-xl border bg-card p-4 md:p-6">
         <h2 className="text-base font-semibold">
           Si je continue à verser{" "}
