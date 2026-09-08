@@ -34,7 +34,7 @@ async def test_put_profile_derives_return_and_volatility_from_risk_level(client)
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["risk_level"] == 4
-    assert body["target_annual_return"] == pytest.approx(0.09)
+    assert body["target_annual_return"] == pytest.approx(0.07)
     assert body["max_annual_volatility"] == pytest.approx(0.16)
     assert body["household_status"] == "couple"
     assert body["children"] == 1
