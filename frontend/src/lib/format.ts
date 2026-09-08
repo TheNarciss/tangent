@@ -4,6 +4,12 @@ const eur = new Intl.NumberFormat("fr-FR", {
   maximumFractionDigits: 2,
 });
 
+const eur0 = new Intl.NumberFormat("fr-FR", {
+  style: "currency",
+  currency: "EUR",
+  maximumFractionDigits: 0,
+});
+
 const pct = new Intl.NumberFormat("fr-FR", {
   style: "percent",
   minimumFractionDigits: 2,
@@ -43,6 +49,8 @@ function kEur(v: number): string {
 
 export const fmt = {
   eur: (v: number) => eur.format(v),
+  /** Whole euros — yearly fees, amounts « en jeu ». */
+  eur0: (v: number) => eur0.format(v),
   approxEur,
   kEur,
   signedEur: (v: number) => signedEur.format(v),

@@ -13,6 +13,7 @@ import { AddBankButton } from "@/components/AddBankButton";
 import { AuthScreen } from "@/components/auth/AuthScreen";
 import { UserMenu } from "@/components/auth/UserMenu";
 import { Dashboard } from "@/components/Dashboard";
+import { Methode } from "@/components/Methode";
 import { OAuthCallbackHandler } from "@/components/OAuthCallback";
 import { Placements } from "@/components/Placements";
 import { PowensCallbackHandler } from "@/components/PowensCallback";
@@ -78,6 +79,7 @@ function Shell() {
           <Route path={NAV_PATHS.accounts} element={<Accounts />} />
           <Route path={NAV_PATHS.investments} element={<Placements />} />
           <Route path={NAV_PATHS.projection} element={<Projection />} />
+          <Route path={NAV_PATHS.method} element={<Methode />} />
           <Route path={NAV_PATHS.profile} element={<ProfilePage />} />
           <Route path={NAV_PATHS.account} element={<AccountView />} />
           <Route path="*" element={<Navigate to={NAV_PATHS.overview} replace />} />
@@ -121,6 +123,11 @@ function getViewConfig(pathname: string, inputs: ViewConfigInputs): ViewConfig {
       return {
         title: "Placements",
         subtitle: "Ce que tu détiens, le risque que tu prends, des pistes",
+      };
+    case NAV_PATHS.method:
+      return {
+        title: "Méthode",
+        subtitle: "Ce que la méthode dit de ton patrimoine, verdict par verdict",
       };
     case NAV_PATHS.profile:
       return { title: "Mon profil", subtitle: "Ce que Tangent doit savoir pour calculer juste" };

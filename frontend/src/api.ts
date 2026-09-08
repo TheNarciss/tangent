@@ -1094,3 +1094,61 @@ export function useUpdateHoldingTer(accountId: string | null) {
     },
   });
 }
+
+// ── Verdicts (ADR-023) ────────────────────────────────────────────────────
+
+export type VerdictStatus = "green" | "amber" | "red" | "unknown";
+
+/** One conclusion of the method: a status, one sentence, euros, an action. */
+export interface Verdict {
+  id: string;
+  title: string;
+  status: VerdictStatus;
+  headline: string;
+  /** What fixing the situation would earn per year; 0 when nothing to fix. */
+  impact_eur_per_year: number | null;
+  action: string | null;
+  /** Free-form breakdown for the Méthode tab; shape depends on `id`. */
+  details: Record<string, unknown>;
+}
+
+export interface VerdictsResponse {
+  computed_at: string;
+  verdicts: Verdict[];
+}
+
+export interface FeesVerdictLine {
+  ticker: string;
+  label: string;
+  account: string;
+  value_eur: number;
+  ter: number | null;
+  fund_fee_eur: number | null;
+}
+
+/** `details` of the « frais réels » verdict (id "fees"). */
+export interface FeesVerdictDetails {
+  positions_total_eur?: number;
+  total_fees_eur?: number;
+  total_fees_pct?: number;
+  fund_fees_eur?: number;
+  broker_fees_eur?: number;
+  broker_name?: string;
+  monthly_contribution_eur?: number;
+  reference_pct?: number;
+  reference_eur?: number;
+  coverage?: number;
+  lines?: FeesVerdictLine[];
+  missing_ter?: { ticker: string; label: string; value_eur: number }[];
+  uncovered_accounts?: { name: string; account_type: string; value_eur: number }[];
+  thresholds?: { green_max: number; amber_max: number };
+}
+
+/** The method's verdicts on the user's patrimony (GET /verdicts). */
+export function useVerdicts() {
+  return useQuery({
+    queryKey: ["verdicts"],
+    queryFn: () => http<VerdictsResponse>("/verdicts"),
+    staleTime: 60_000,
+  });
+}
