@@ -4,7 +4,6 @@ import logging
 from datetime import date
 
 import numpy as np
-import pandas as pd
 
 from ..errors import InsufficientHistoryError, PortfolioEmptyError
 from ..models import (
@@ -59,9 +58,12 @@ def build(
     qty_by_ticker: dict[str, float] = {}
     avg_cost_by_ticker: dict[str, float] = {}
     cost_by_ticker: dict[str, float] = {}
+    label_by_ticker: dict[str, str] = {}
     for p in positions:
         qty_by_ticker[p.ticker] = qty_by_ticker.get(p.ticker, 0.0) + p.quantity
         cost_by_ticker[p.ticker] = cost_by_ticker.get(p.ticker, 0.0) + p.cost_basis
+        if p.label and p.label != p.ticker:
+            label_by_ticker.setdefault(p.ticker, p.label)
     for t in qty_by_ticker:
         avg_cost_by_ticker[t] = cost_by_ticker[t] / qty_by_ticker[t] if qty_by_ticker[t] else 0.0
 
@@ -76,8 +78,9 @@ def build(
 
     # Blend μ historiques avec CMAs forward-looking. Shrinkage overridable.
     rf = risk_free if risk_free is not None else analytics.RISK_FREE
-    hist_mu = (returns.mean() * analytics.TRADING_DAYS).values
+    hist_mu = analytics.annualized_arithmetic_mu(returns).values
     blended = cma.blended_mu(tickers, hist_mu, shrinkage=cma_shrinkage)
+    unmapped = cma.unmapped_tickers(tickers)
     mu_override = {t: float(blended[i]) for i, t in enumerate(tickers)}
 
     asset_stats = analytics.annualized_stats(returns, risk_free=rf, mu_override=mu_override)
@@ -89,8 +92,8 @@ def build(
     pf_stats = analytics.portfolio_stats(returns, weights, risk_free=rf, mu_override=mu_override)
 
     # Risque de queue : CVaR 95 % et max drawdown observé sur la fenêtre choisie.
-    qty_per_ticker = pd.Series(qty_by_ticker)
-    equity_curve = (prices[tickers] * qty_per_ticker).sum(axis=1)
+    # NaN propagates: a date where one line has no price is not a portfolio value.
+    equity_curve = analytics.portfolio_value_series(prices, qty_by_ticker)
     pf_returns = returns @ weights
     pf_cvar = analytics.cvar_95(pf_returns)
     pf_max_dd = analytics.max_drawdown(equity_curve)
@@ -101,6 +104,7 @@ def build(
     assets = [
         _asset_metric(
             t,
+            label_by_ticker.get(t),
             qty_by_ticker[t],
             avg_cost_by_ticker[t],
             w,
@@ -126,6 +130,7 @@ def build(
         max_drawdown_observed=pf_max_dd,
         assets=assets,
         correlation=analytics.correlation_matrix(returns),
+        unmapped_tickers=unmapped,
     )
     logger.info(
         "dashboard built: %d assets, %.2f €, shrinkage=%s, period=%s, %d stress tests",
@@ -145,6 +150,7 @@ def build(
 
 def _asset_metric(
     ticker: str,
+    label: str | None,
     quantity: float,
     avg_cost: float,
     weight: float,
@@ -158,6 +164,7 @@ def _asset_metric(
     pnl = value - cost
     return AssetMetrics(
         ticker=ticker,
+        label=label,
         price=price,
         weight=weight,
         value=value,

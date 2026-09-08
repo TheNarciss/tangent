@@ -13,6 +13,7 @@ const BACKEND_BASE = API_URL.replace(/\/api$/, "");
 
 export interface AssetMetrics {
   ticker: string;
+  label: string | null; // fund name as the provider labels it
   price: number;
   weight: number;
   value: number;
@@ -39,6 +40,8 @@ export interface PortfolioMetrics {
   max_drawdown_observed: number;
   assets: AssetMetrics[];
   correlation: Record<string, Record<string, number>>;
+  /** Tickers with no long-term return assumption: their μ is historical only. */
+  unmapped_tickers: string[];
 }
 
 export type Severity = "good" | "warning" | "critical";
@@ -103,23 +106,6 @@ export interface ProjectionResponse {
   cumulative_fees: number[]; // €, per-month cumulative
   multi_broker_warning?: string | null;
   weighted_ter?: number; // ADR-021: weighted average TER, ratio (0.0025 = 0.25%/an)
-}
-
-export interface BengenRequest {
-  target_monthly_income: number;
-  withdrawal_rate?: number; // default 0.04
-  current_capital?: number; // default 0
-  monthly_dca?: number; // default 0
-  expected_return?: number; // default 0.08
-}
-
-export interface BengenResponse {
-  target_monthly_income: number;
-  yearly_passive_income: number;
-  capital_needed: number;
-  years_to_reach: number | null;
-  months_to_reach: number | null;
-  rationale: string;
 }
 
 export interface BrokerInfo {
@@ -222,6 +208,7 @@ export interface OptimizerRequest {
   fiscal_shares?: number;
   ceilings_used?: CeilingsUsedDTO;
   total_capital?: number;
+  expert?: ExpertSettingsPayload;
 }
 
 export interface KellyLeverage {
@@ -243,6 +230,7 @@ export interface OptimizerResponse {
   risk_contributions_optimal: RiskContribution;
   frontier_curve: FrontierCurve;
   envelope_points: EnvelopePoint[];
+  unmapped_tickers: string[];
   kelly_leverage: KellyLeverage | null;
 }
 
@@ -391,6 +379,22 @@ export function useLogout() {
 
 /* ── Query hooks ────────────────────────────────────────────────────── */
 
+/** One position of the profile's « prudent ↔ dynamique » slider (config/risk_levels.yaml). */
+export interface RiskLevel {
+  level: number;
+  label: string;
+  target_annual_return: number; // fraction
+  max_annual_volatility: number; // fraction
+}
+
+export function useRiskLevels() {
+  return useQuery({
+    queryKey: ["profile", "risk-levels"],
+    queryFn: () => http<RiskLevel[]>("/profile/risk-levels"),
+    staleTime: Infinity,
+  });
+}
+
 /** Patrimony snapshot from the DB only (no market data): the one
  *  "patrimoine net" of the app, read by Aperçu and Comptes alike. */
 export function useWealthSummary() {
@@ -401,10 +405,18 @@ export function useWealthSummary() {
   });
 }
 
-export function useDashboard() {
+/** Portfolio analytics. `expert` maps to the /dashboard query params (CMA
+ *  shrinkage, historical period, risk-free rate) from the advanced options. */
+export function useDashboard(expert?: ExpertSettingsPayload) {
+  const params = new URLSearchParams();
+  if (expert?.cma_shrinkage !== undefined)
+    params.set("cma_shrinkage", String(expert.cma_shrinkage));
+  if (expert?.historical_period) params.set("historical_period", expert.historical_period);
+  if (expert?.risk_free_rate !== undefined) params.set("risk_free", String(expert.risk_free_rate));
+  const qs = params.toString();
   return useQuery({
-    queryKey: ["dashboard"],
-    queryFn: () => http<DashboardResponse>("/dashboard"),
+    queryKey: ["dashboard", qs],
+    queryFn: () => http<DashboardResponse>(`/dashboard${qs ? `?${qs}` : ""}`),
   });
 }
 
@@ -415,7 +427,13 @@ export function useTimeseries() {
   });
 }
 
-export function useProjection(monthly: number, years: number, goal?: number, brokerId?: string) {
+export function useProjection(
+  monthly: number,
+  years: number,
+  goal?: number,
+  brokerId?: string,
+  options: { enabled?: boolean } = {},
+) {
   return useQuery({
     queryKey: ["projection", monthly, years, goal ?? null, brokerId ?? null],
     queryFn: () => {
@@ -424,7 +442,7 @@ export function useProjection(monthly: number, years: number, goal?: number, bro
       if (brokerId) params.set("broker", brokerId);
       return http<ProjectionResponse>(`/projection?${params.toString()}`);
     },
-    enabled: monthly >= 0 && years > 0,
+    enabled: (options.enabled ?? true) && monthly >= 0 && years > 0,
   });
 }
 
@@ -447,18 +465,6 @@ export function useOptimizer(req: OptimizerRequest) {
     enabled:
       req.objective !== "target_volatility" ||
       (req.max_volatility !== undefined && req.max_volatility >= 0),
-  });
-}
-
-export function useBengen(req: BengenRequest) {
-  return useQuery({
-    queryKey: ["bengen", req],
-    queryFn: () =>
-      http<BengenResponse>("/bengen", {
-        method: "POST",
-        body: JSON.stringify(req),
-      }),
-    enabled: req.target_monthly_income > 0,
   });
 }
 
@@ -1024,6 +1030,16 @@ export interface PortfolioReviewResponse {
   created_at: string;
 }
 
+/** Past briefings, newest first (GET /reviews). Only fetched when a sheet needs them. */
+export function useReviews(enabled: boolean, limit = 30) {
+  return useQuery({
+    queryKey: ["reviews", "list", limit],
+    queryFn: () => http<PortfolioReviewResponse[]>(`/reviews?limit=${limit}`),
+    enabled,
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
 export function useTodayReview() {
   return useQuery({
     queryKey: ["reviews", "today"],
@@ -1039,6 +1055,24 @@ export interface FieldOverrideResponse {
   value: number | string;
   source: "user";
   resolved_at: string;
+}
+
+/** Override the category of a movement (closed taxonomy, cf. lib/accounts.ts). */
+export function useUpdateTransactionCategory(accountId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ transactionId, category }: { transactionId: string; category: string }) =>
+      http<FieldOverrideResponse>(`/accounts/transactions/${transactionId}/category`, {
+        method: "PUT",
+        body: JSON.stringify({ category }),
+      }),
+    onSuccess: () => {
+      if (accountId) {
+        qc.invalidateQueries({ queryKey: ["bank-accounts", accountId, "transactions"] });
+      }
+      qc.invalidateQueries({ queryKey: ["transactions", "recent"] });
+    },
+  });
 }
 
 /**

@@ -49,3 +49,4 @@ Template : [`TEMPLATE.md`](./TEMPLATE.md).
 - Pas de "il faudrait" / "on pourrait" → décide ou ne décide pas
 
 - [ADR-021](021-universal-gap-filler.md) — Universal Gap-Filler for nullable provider fields
+- [ADR-022](022-profile-v2-risk-slider.md) — Profil v2 : cinq questions, curseur de risque en YAML, DB source de vérité

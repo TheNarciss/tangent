@@ -55,6 +55,18 @@ def daily_log_returns(prices: pd.DataFrame) -> pd.DataFrame:
     return rets
 
 
+def annualized_arithmetic_mu(returns: pd.DataFrame) -> pd.Series:
+    """Annualized *arithmetic* expected return per asset from daily log returns.
+
+    ``mean(log) × 252`` is the geometric drift; mean-variance inputs and the
+    CMA figures they are blended with are arithmetic. Under lognormality
+    E[R] = exp(m + s²/2) − 1 with m, s the annualized log mean and std.
+    """
+    m = returns.mean() * TRADING_DAYS
+    v = returns.var() * TRADING_DAYS
+    return np.exp(m + v / 2) - 1
+
+
 def annualized_stats(
     returns: pd.DataFrame,
     risk_free: float = RISK_FREE,
@@ -65,7 +77,7 @@ def annualized_stats(
     If `mu_override` provided, use those μ instead of the historical mean.
     σ is always computed from historical data (CMAs target μ, not σ).
     """
-    mu = returns.mean() * TRADING_DAYS
+    mu = annualized_arithmetic_mu(returns)
     if mu_override:
         for t in returns.columns:
             if t in mu_override:
@@ -88,12 +100,11 @@ def portfolio_stats(
 
     If `mu_override` given, asset μ are overridden before weighting.
     """
+    hist_mu = annualized_arithmetic_mu(returns)
     if mu_override:
-        mu_per_asset = np.array(
-            [mu_override.get(t, returns[t].mean() * TRADING_DAYS) for t in returns.columns]
-        )
+        mu_per_asset = np.array([mu_override.get(t, float(hist_mu[t])) for t in returns.columns])
     else:
-        mu_per_asset = returns.mean().values * TRADING_DAYS
+        mu_per_asset = hist_mu.values
     cov = returns.cov().values * TRADING_DAYS
     expected = float(weights @ mu_per_asset)
     vol = float(np.sqrt(weights @ cov @ weights))
@@ -258,12 +269,19 @@ def monte_carlo_projection(
     monthly_fee: "Callable[[float], float] | None" = None,
     n_paths: int = 1000,
     seed: int = 42,
+    parameter_uncertainty: bool = True,
 ) -> dict[str, list[float] | np.ndarray]:
     """Parametric Monte Carlo on monthly log-returns derived from daily history.
 
     Returns percentile bands p10/p25/p50/p75/p90 at each month, plus the
     probability of reaching `goal` at each month if provided via wrapper.
     Fees (if given) deducted per-path per-month and compound correctly.
+
+    With ``parameter_uncertainty`` each path draws its own drift from
+    N(μ̂, SE²), SE = σ_month / √(months of history): with 5 years of data
+    SE(μ̂) ≈ 8 %/year for an equity basket, larger than the dispersion the
+    return volatility alone produces at a 10-year horizon. A fan drawn from
+    σ only is about half as wide as the honest one.
     """
     if daily_log_returns is None or daily_log_returns.empty:
         raise ValueError("Aucun rendement historique pour la simulation Monte-Carlo.")
@@ -273,7 +291,13 @@ def monte_carlo_projection(
     mu = float(daily_log_returns.mean()) * days_per_month
     sigma = float(daily_log_returns.std()) * np.sqrt(days_per_month)
 
-    log_rets = rng.normal(mu, sigma, size=(n_paths, months))
+    if parameter_uncertainty:
+        months_of_history = max(len(daily_log_returns) / days_per_month, 1.0)
+        se_mu = sigma / np.sqrt(months_of_history)
+        mu_paths = rng.normal(mu, se_mu, size=(n_paths, 1))
+    else:
+        mu_paths = np.full((n_paths, 1), mu)
+    log_rets = rng.normal(mu_paths, sigma, size=(n_paths, months))
     gross = np.exp(log_rets)
 
     fee = monthly_fee or (lambda _v: 0.0)
@@ -315,7 +339,14 @@ def _solve_slsqp(
     max_vol: float | None,
     target_return: float | None = None,
 ) -> dict[str, float | list[float]]:
-    """Common SLSQP body. mu, cov, bounds already finalized (possibly augmented)."""
+    """Common SLSQP body. mu, cov, bounds already finalized (possibly augmented).
+
+    ``max_sharpe`` and ``from_strategy`` are non-convex: a single start can
+    report a local optimum as "optimal". They are solved from several starts
+    (equal weight, each vertex, a few Dirichlet draws with a fixed seed) and
+    the best converged solution is kept. The result's ``success`` flag is the
+    caller's to check: a non-converged solve must never be shown as optimal.
+    """
     from scipy.optimize import minimize
 
     n = len(mu)
@@ -368,15 +399,25 @@ def _solve_slsqp(
     else:
         raise ValueError(f"Unknown objective: {objective!r}")
 
-    res = minimize(
-        fn,
-        w0,
-        method="SLSQP",
-        bounds=bounds,
-        constraints=constraints,
-        options={"ftol": 1e-10, "maxiter": 200},
-    )
-    w_opt = res.x
+    starts = [w0]
+    if objective in ("max_sharpe", "from_strategy"):
+        starts += [np.eye(n)[i] for i in range(n)]
+        starts += list(np.random.default_rng(0).dirichlet(np.ones(n), size=4))
+
+    res = None
+    for start in starts:
+        cand = minimize(
+            fn,
+            _project_to_bounds(start, bounds),
+            method="SLSQP",
+            bounds=bounds,
+            constraints=constraints,
+            options={"ftol": 1e-10, "maxiter": 200},
+        )
+        if res is None or (cand.success and (not res.success or cand.fun < res.fun)):
+            res = cand
+    assert res is not None
+    w_opt = _project_to_bounds(res.x, bounds)
     vol = float(np.sqrt(w_opt @ cov @ w_opt))
     ret = float(w_opt @ mu)
     sharpe = (ret - risk_free) / vol if vol > 1e-10 else 0.0
@@ -387,6 +428,15 @@ def _solve_slsqp(
         "sharpe": sharpe,
         "success": bool(res.success),
     }
+
+
+def _project_to_bounds(w: np.ndarray, bounds: list[tuple[float, float]]) -> np.ndarray:
+    """Clip to the box and renormalize to sum 1 (SLSQP can return −1e-9 or 1 ± 1e-9)."""
+    lo = np.array([b[0] for b in bounds])
+    hi = np.array([b[1] for b in bounds])
+    w = np.clip(np.asarray(w, dtype=float), lo, hi)
+    total = float(w.sum())
+    return w / total if total > 0 else np.full(len(w), 1 / len(w))
 
 
 def build_asset_stats(

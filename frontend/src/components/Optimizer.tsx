@@ -1,7 +1,7 @@
 import type { UseQueryResult } from "@tanstack/react-query";
 import { ArrowRight, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 
-import type { KellyLeverage, OptimizerObjective, OptimizerResponse, RiskContribution } from "@/api";
+import type { OptimizerObjective, OptimizerResponse, RiskContribution } from "@/api";
 import { fmt } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -149,9 +149,14 @@ export function Optimizer({
         {query.data && (
           <>
             <ComparisonTable data={query.data} />
-            {query.data.kelly_leverage && <KellyIndicator kelly={query.data.kelly_leverage} />}
             <ActionsList data={query.data} />
             <RiskContributions data={query.data} />
+            {query.data.unmapped_tickers.length > 0 && (
+              <p className="text-xs text-muted-foreground italic border-l-2 border-muted pl-3">
+                Sans hypothèse de rendement long terme, estimé sur l'historique seul :{" "}
+                {query.data.unmapped_tickers.join(", ")}.
+              </p>
+            )}
             {includeEnvelopes && objective === "max_sharpe" && (
               <p className="text-xs text-muted-foreground italic border-l-2 border-muted pl-3">
                 Note : avec livrets et <em>max Sharpe</em> sans contrainte de risque, le solveur
@@ -506,40 +511,6 @@ function RiskBar({
           );
         })}
       </div>
-    </div>
-  );
-}
-
-/* ─── Kelly indicator ─────────────────────────────────────────────────────── */
-
-function KellyIndicator({ kelly }: { kelly: KellyLeverage }) {
-  const half = kelly.half_kelly_leverage;
-  // Sweet spot ~1.0 (vert), <0.95 (jaune = trop de cash), >1.05 (bleu = univers attractif)
-  const tone =
-    half >= 0.95 && half <= 1.05
-      ? "border-[hsl(var(--gain))]/40 bg-[hsl(var(--gain))]/5"
-      : half > 1.05
-        ? "border-blue-500/40 bg-blue-500/5"
-        : "border-amber-500/40 bg-amber-500/5";
-
-  return (
-    <div className={cn("rounded-lg border p-3 space-y-2", tone)}>
-      <div className="text-xs uppercase tracking-wider text-muted-foreground">
-        Indicateur Kelly — sanity check
-      </div>
-      <div className="grid grid-cols-2 gap-3 font-mono tabular">
-        <div>
-          <div className="text-xs text-muted-foreground">Full Kelly</div>
-          <div className="text-lg font-semibold">{kelly.full_kelly_leverage.toFixed(2)}×</div>
-        </div>
-        <div>
-          <div className="text-xs text-muted-foreground">Half Kelly (recommandé)</div>
-          <div className="text-lg font-semibold">{half.toFixed(2)}×</div>
-        </div>
-      </div>
-      <p className="text-xs text-muted-foreground italic border-l-2 border-muted pl-3">
-        {kelly.interpretation}
-      </p>
     </div>
   );
 }

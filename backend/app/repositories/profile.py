@@ -32,10 +32,14 @@ async def update(session: AsyncSession, user_id: uuid.UUID, updates: dict) -> Pr
     profile = await get_or_create(session, user_id)
     allowed_fields = {
         "birth_date",
+        "household_status",
+        "children",
         "fiscal_shares",
         "rfr_n_minus_2",
+        "risk_level",
         "target_annual_return",
         "max_annual_volatility",
+        "monthly_dca",
         "horizon_years",
         "default_broker",
         "ceilings_used",

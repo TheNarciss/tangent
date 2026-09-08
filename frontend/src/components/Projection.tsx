@@ -1,11 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ApiError, useBrokers, useProjection, type ProjectionResponse } from "@/api";
-import { linePath, linearScale, niceTicks, pickIndices } from "@/lib/chart";
 import { useDebouncedValue } from "@/lib/hooks";
 import { fmt } from "@/lib/format";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Chart, Crosshair, XAxis, YAxis, indexAt, type ChartFrame } from "@/components/ui/chart";
+import { useProfile } from "@/lib/profile";
+import { cn } from "@/lib/utils";
+import { FanChart } from "@/components/ProjectionChart";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -16,90 +16,288 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const COLOR = {
-  band: "hsl(var(--foreground))",
-  base: "hsl(var(--foreground))",
-  invested: "hsl(var(--muted-foreground))",
-  goal: "hsl(45 95% 55%)",
-  gross: "hsl(var(--muted-foreground))",
-};
+/** Bengen rule: a monthly income target becomes a capital goal at 4 %/an. */
+const WITHDRAWAL_RATE = 0.04;
+const MONTHLY_MAX = 2000;
 
-/* ─── Public component ───────────────────────────────────────────────────── */
-
+/**
+ * Projection — one question (« si je continue à verser X € par mois, j'aurai
+ * combien dans N ans ? »), pre-filled from the profile, answered with three
+ * rounded figures, a chart and a « et si… » slider on the only real lever.
+ * The maths (Monte-Carlo, quantiles, fee model) sit behind « Comment c'est calculé ? ».
+ */
 export function Projection() {
-  const [monthly, setMonthly] = useState(200);
-  const [years, setYears] = useState(10);
-  const [goal, setGoal] = useState<number | "">(25000);
+  const [profile] = useProfile();
+  const [monthly, setMonthly] = useState(profile?.monthly_dca ?? 200);
+  const [years, setYears] = useState(profile?.horizon_years ?? 10);
+  const [goalMode, setGoalMode] = useState<"capital" | "income">("capital");
+  const [goalCapital, setGoalCapital] = useState<number | "">(25000);
+  const [income, setIncome] = useState(500);
   const [broker, setBroker] = useState<string | undefined>(undefined);
+  const touched = useRef(false);
 
+  // Pre-fill from the profile once it is loaded, unless the user already moved something.
+  useEffect(() => {
+    if (touched.current || !profile) return;
+    setMonthly(profile.monthly_dca);
+    setYears(profile.horizon_years);
+  }, [profile]);
+
+  const goal = goalMode === "income" ? (income * 12) / WITHDRAWAL_RATE : goalCapital || 0;
   const dMonthly = useDebouncedValue(monthly, 350);
   const dYears = useDebouncedValue(years, 350);
-  const dGoal = useDebouncedValue(typeof goal === "number" ? goal : 0, 350);
+  const dGoal = useDebouncedValue(goal, 350);
 
   const brokers = useBrokers();
-  // No broker param until the user picks one: the backend then uses the
-  // profile's broker (auto-detected at sync) and echoes it back as broker_id.
   const q = useProjection(dMonthly, dYears, dGoal || undefined, broker);
+  // Fee comparison: same projection at another broker (the YAML default, else the next one).
+  const otherBroker = useMemo(() => {
+    const list = brokers.data?.brokers ?? [];
+    const current = q.data?.broker_id;
+    const preferred = brokers.data?.default;
+    if (preferred && preferred !== current) return preferred;
+    return list.find((b) => b.id !== current)?.id;
+  }, [brokers.data, q.data?.broker_id]);
+  const alt = useProjection(dMonthly, dYears, undefined, otherBroker, { enabled: !!otherBroker });
+
+  const onMonthly = (v: number) => {
+    touched.current = true;
+    setMonthly(v);
+  };
+  const onYears = (v: number) => {
+    touched.current = true;
+    setYears(v);
+  };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-          Projection DCA
-        </CardTitle>
-        <CardDescription>
-          Géométrie calibrée sur les rendements log quotidiens de ton portefeuille actuel : μ et σ
-          extraits, projetés en avant avec versement mensuel fixe. Monte Carlo paramétrique (1000
-          trajectoires gaussiennes). Frais broker appliqués au mois le mois (composés correctement)
-          — change de broker pour comparer.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+    <div className="space-y-6">
+      <section className="rounded-xl border bg-card p-4 md:p-6">
+        <h2 className="text-base font-semibold">
+          Si je continue à verser{" "}
+          <span className="font-mono tabular">{fmt.eur(monthly).replace(",00", "")}</span> par mois
+          pendant {years} an{years > 1 ? "s" : ""}…
+        </h2>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="monthly" className="text-xs text-muted-foreground">
+              Et si je versais… (€ par mois)
+            </Label>
+            <div className="flex items-center gap-3">
+              <input
+                id="monthly"
+                type="range"
+                min={0}
+                max={MONTHLY_MAX}
+                step={25}
+                value={Math.min(monthly, MONTHLY_MAX)}
+                onChange={(e) => onMonthly(Number(e.target.value))}
+                className="h-2 flex-1 cursor-pointer accent-primary"
+                aria-label="Versement mensuel"
+              />
+              <Input
+                type="number"
+                min={0}
+                step={25}
+                value={monthly}
+                onChange={(e) => onMonthly(Math.max(0, Number(e.target.value) || 0))}
+                className="w-28 font-mono tabular"
+              />
+            </div>
+          </div>
           <NumberField
-            label="Versement mensuel (€)"
-            value={monthly}
-            onChange={(v) => setMonthly(typeof v === "number" ? v : 0)}
-            min={0}
-            step={50}
-          />
-          <NumberField
-            label="Horizon (années)"
+            label="Pendant combien d'années"
             value={years}
-            onChange={(v) => setYears(typeof v === "number" ? Math.max(1, v) : 1)}
+            onChange={(v) => onYears(Math.min(50, Math.max(1, typeof v === "number" ? v : 1)))}
             min={1}
             max={50}
             step={1}
-          />
-          <NumberField
-            label="Objectif (€, optionnel)"
-            value={goal}
-            onChange={setGoal}
-            min={0}
-            step={5000}
-            allowEmpty
           />
           <BrokerField
             value={broker ?? q.data?.broker_id}
             onChange={setBroker}
             brokers={brokers.data}
           />
-          {q.data?.weighted_ter !== undefined && q.data.weighted_ter > 0 && (
-            <span
-              title="Total Expense Ratio pondéré, appliqué comme frais mensuels sur la projection"
-              className="ml-2 inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400"
-            >
-              Net de frais ETF · {(q.data.weighted_ter * 100).toFixed(2)} %/an
-            </span>
-          )}
+          <GoalField
+            mode={goalMode}
+            onModeChange={setGoalMode}
+            capital={goalCapital}
+            onCapitalChange={setGoalCapital}
+            income={income}
+            onIncomeChange={setIncome}
+          />
         </div>
+      </section>
 
-        {q.isLoading && <p className="text-sm text-muted-foreground">Calcul…</p>}
-        {q.isError && <ErrorBanner error={q.error} />}
-        {q.data && <FanChart data={q.data} />}
-        {q.data && <Stats data={q.data} />}
-      </CardContent>
-    </Card>
+      {q.isLoading && (
+        <div className="space-y-3">
+          <div className="h-28 animate-pulse rounded-xl bg-muted/30" />
+          <div className="h-72 animate-pulse rounded-xl bg-muted/30" />
+        </div>
+      )}
+      {q.isError && <ErrorState error={q.error} />}
+      {q.data && (
+        <>
+          <Headline data={q.data} years={dYears} goalMode={goalMode} income={income} />
+          <section className="rounded-xl border bg-card p-4 md:p-6">
+            <FanChart data={q.data} />
+          </section>
+          <FeesLine data={q.data} alt={alt.data} />
+          <HowItWorks data={q.data} />
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ─── Three figures ─────────────────────────────────────────────────────── */
+
+function Headline({
+  data,
+  years,
+  goalMode,
+  income,
+}: {
+  data: ProjectionResponse;
+  years: number;
+  goalMode: "capital" | "income";
+  income: number;
+}) {
+  const last = data.months.length - 1;
+  const median = data.bands.p50[last];
+  const lo = data.bands.p10[last];
+  const hi = data.bands.p90[last];
+  const invested = data.invested[last];
+  const reachedIdx = data.goal_prob_by_month?.findIndex((p) => p >= 0.5) ?? -1;
+  const reachedYear =
+    reachedIdx >= 0 ? new Date().getFullYear() + Math.round(data.months[reachedIdx] / 12) : null;
+  const chances = data.goal_prob_at_end !== null ? Math.round(data.goal_prob_at_end * 10) : null;
+
+  return (
+    <section className="grid gap-3 sm:grid-cols-3">
+      <Figure
+        label={`Dans ${years} an${years > 1 ? "s" : ""}, environ`}
+        value={fmt.approxEur(median)}
+        sub={`entre ${fmt.kEur(lo)} et ${fmt.kEur(hi)}, 8 fois sur 10`}
+      />
+      <Figure
+        label="Capital de départ + versements"
+        value={fmt.approxEur(invested)}
+        sub="ce que tu auras mis, sans gain ni perte"
+      />
+      {data.goal !== null && data.goal > 0 && chances !== null ? (
+        <Figure
+          label={
+            goalMode === "income"
+              ? `Pour ${fmt.eur(income).replace(",00", "")} par mois à vie`
+              : `Objectif ${fmt.approxEur(data.goal)}`
+          }
+          value={reachedYear !== null ? `vers ${reachedYear}` : "pas dans l'horizon"}
+          sub={
+            reachedYear !== null
+              ? `${chances} chance${chances > 1 ? "s" : ""} sur 10 à la fin`
+              : `${chances} chance${chances > 1 ? "s" : ""} sur 10 d'y être dans ${years} ans`
+          }
+        />
+      ) : (
+        <Figure
+          label="Objectif"
+          value="—"
+          sub="Indique un objectif pour savoir quand tu l'atteins"
+        />
+      )}
+    </section>
+  );
+}
+
+function Figure({ label, value, sub }: { label: string; value: string; sub: string }) {
+  return (
+    <div className="rounded-xl border bg-card p-4">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="mt-1 font-mono text-2xl font-semibold tabular">{value}</div>
+      <div className="mt-1 text-xs text-muted-foreground">{sub}</div>
+    </div>
+  );
+}
+
+/* ─── Fees ──────────────────────────────────────────────────────────────── */
+
+function FeesLine({
+  data,
+  alt,
+}: {
+  data: ProjectionResponse;
+  alt: ProjectionResponse | undefined;
+}) {
+  const last = data.months.length - 1;
+  const fees = data.cumulative_fees[last];
+  const altFees = alt ? alt.cumulative_fees[alt.months.length - 1] : null;
+  return (
+    <section className="rounded-xl border bg-card p-4 text-sm md:p-6">
+      <p>
+        Chez <strong>{data.broker}</strong>, les frais te coûtent environ{" "}
+        <strong className="font-mono tabular">{fmt.approxEur(fees)}</strong> sur la période
+        {alt && altFees !== null && alt.broker !== data.broker && (
+          <>
+            {" "}
+            · chez <strong>{alt.broker}</strong>, environ{" "}
+            <strong className="font-mono tabular">{fmt.approxEur(altFees)}</strong>
+          </>
+        )}
+        .
+      </p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Frais de courtage et de tenue de compte, plus ce qu'ils t'auraient rapporté s'ils étaient
+        restés investis
+        {data.weighted_ter
+          ? `, frais des fonds (${(data.weighted_ter * 100).toFixed(2)} %/an) compris`
+          : ""}
+        .
+      </p>
+      {data.multi_broker_warning && (
+        <p className="mt-2 text-xs text-muted-foreground">{data.multi_broker_warning}</p>
+      )}
+    </section>
+  );
+}
+
+/* ─── Inputs ────────────────────────────────────────────────────────────── */
+
+function NumberField({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+  step,
+  allowEmpty,
+}: {
+  label: string;
+  value: number | "";
+  onChange: (v: number | "") => void;
+  min?: number;
+  max?: number;
+  step?: number;
+  allowEmpty?: boolean;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <Input
+        type="number"
+        value={value}
+        min={min}
+        max={max}
+        step={step}
+        onChange={(e) => {
+          const raw = e.target.value;
+          if (raw === "" && allowEmpty) return onChange("");
+          const n = Number(raw);
+          if (!isNaN(n)) onChange(n);
+        }}
+        className="font-mono tabular"
+      />
+    </div>
   );
 }
 
@@ -113,8 +311,8 @@ function BrokerField({
   brokers: { default: string; brokers: { id: string; name: string }[] } | undefined;
 }) {
   return (
-    <div className="space-y-1">
-      <Label className="text-xs text-muted-foreground">Broker (frais)</Label>
+    <div className="space-y-1.5">
+      <Label className="text-xs text-muted-foreground">Chez qui tu investis</Label>
       <Select value={value} onValueChange={onChange} disabled={!brokers}>
         <SelectTrigger>
           <SelectValue placeholder="Chargement…" />
@@ -131,408 +329,138 @@ function BrokerField({
   );
 }
 
-function ErrorBanner({ error }: { error: unknown }) {
-  const msg =
-    error instanceof ApiError
-      ? `${error.type} — ${error.message}`
-      : error instanceof Error
-        ? error.message
-        : "Erreur inconnue";
-  return <p className="text-sm text-[hsl(var(--loss))]">Erreur : {msg}</p>;
-}
-
-/* ─── Inputs ─────────────────────────────────────────────────────────────── */
-
-interface NumberFieldProps {
-  label: string;
-  value: number | "";
-  onChange: (v: number | "") => void;
-  min?: number;
-  max?: number;
-  step?: number;
-  allowEmpty?: boolean;
-}
-
-function NumberField({ label, value, onChange, min, max, step, allowEmpty }: NumberFieldProps) {
-  return (
-    <div className="space-y-1">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
-      <Input
-        type="number"
-        value={value}
-        min={min}
-        max={max}
-        step={step}
-        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-          const raw = e.target.value;
-          if (raw === "" && allowEmpty) return onChange("");
-          const n = Number(raw);
-          if (!isNaN(n)) onChange(n);
-        }}
-        className="font-mono tabular"
-      />
-    </div>
-  );
-}
-
-/* ─── Stats block ────────────────────────────────────────────────────────── */
-
-function Stats({ data }: { data: ProjectionResponse }) {
-  const invested = data.invested[data.invested.length - 1];
-  const median = data.bands.p50[data.bands.p50.length - 1];
-  const grossMedian = data.gross_p50[data.gross_p50.length - 1];
-  const fees = data.cumulative_fees[data.cumulative_fees.length - 1];
-  const gain = median - invested;
-  const feesPctOfGross = grossMedian > 0 ? fees / grossMedian : 0;
-
-  return (
-    <div className="space-y-5">
-      {data.multi_broker_warning && (
-        <div className="rounded-md border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-          ⚠ {data.multi_broker_warning}
-        </div>
-      )}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-        <Stat
-          label="μ, σ utilisés"
-          value={`${fmt.pct(data.annual_return)} / ${fmt.pct(data.annual_vol)}`}
-          sub="annualisés, extraits de ton historique"
-        />
-        <Stat
-          label="Capital investi"
-          value={fmt.eur(invested)}
-          sub={`${data.months.length - 1} mois`}
-        />
-        <Stat
-          label="Valeur médiane nette (P50)"
-          value={fmt.eur(median)}
-          sub={`plus-value : ${fmt.signedEur(gain)}`}
-        />
-        {data.goal_prob_at_end !== null && data.goal && (
-          <Stat
-            label={`P(atteindre ${fmt.eur(data.goal)})`}
-            value={fmt.pct(data.goal_prob_at_end)}
-            sub="fraction des 1000 simulations qui dépassent l'objectif"
-          />
-        )}
-      </div>
-
-      {/* Fee impact strip — what BNP/Fortuneo/etc. actually coûte sur l'horizon */}
-      <div className="rounded-md border bg-card/40 px-4 py-3">
-        <div className="flex items-center justify-between text-xs uppercase tracking-wider text-muted-foreground mb-2">
-          <span>Impact frais — {data.broker}</span>
-          <span className="font-mono tabular text-[10px] normal-case tracking-normal">
-            modèle : fixe × n_lignes + (custody + rebates) × valeur + courtage × versement
-          </span>
-        </div>
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
-          <Stat
-            label="Frais cumulés à l'horizon"
-            value={fmt.eur(fees)}
-            sub={`soit ${fmt.pct(feesPctOfGross)} de la médiane brute`}
-          />
-          <Stat
-            label="Médiane brute (sans frais)"
-            value={fmt.eur(grossMedian)}
-            sub={`écart : ${fmt.signedEur(median - grossMedian)} vs brut`}
-          />
-          <Stat
-            label="Frais mensuels moyens"
-            value={fmt.eur(fees / Math.max(1, data.months.length - 1))}
-            sub="amorti sur l'horizon, en €/mois"
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Stat({ label, value, sub }: { label: string; value: string; sub: string }) {
-  return (
-    <div className="space-y-0.5">
-      <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className="font-mono font-semibold tabular">{value}</div>
-      <div className="text-xs text-muted-foreground">{sub}</div>
-    </div>
-  );
-}
-
-/* ─── Fan chart ──────────────────────────────────────────────────────────── */
-
-interface FanProps {
-  data: ProjectionResponse;
-}
-
-function FanChart({ data }: FanProps) {
-  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
-  const n = data.months.length;
-
-  const yMax = useMemo(
-    () => Math.max(...data.bands.p10, ...data.bands.p90, ...data.invested),
-    [data],
-  );
-
-  const scales = (frame: ChartFrame) => ({
-    xScale: linearScale([0, n - 1], [frame.left, frame.right]),
-    yScale: linearScale([0, yMax * 1.05], [frame.bottom, frame.top]),
-  });
-
-  return (
-    <div>
-      <Chart
-        ariaLabel="Projection DCA"
-        height={(_w, compact) => (compact ? 260 : 360)}
-        pad={(compact) =>
-          compact
-            ? { left: 44, right: 12, top: 12, bottom: 34 }
-            : { left: 64, right: 24, top: 16, bottom: 36 }
-        }
-        onPointer={(p, frame) => setHoverIdx(p ? indexAt(p.x, frame, n) : null)}
-        tooltip={(frame) => {
-          if (hoverIdx === null) return null;
-          const { xScale, yScale } = scales(frame);
-          return {
-            x: xScale(hoverIdx),
-            y: yScale(data.bands.p50[hoverIdx]),
-            content: <FanTooltipContent data={data} idx={hoverIdx} />,
-          };
-        }}
-      >
-        {(frame) => {
-          const { xScale, yScale } = scales(frame);
-          const ticks = frame.compact ? 4 : 6;
-          const xAt = (i: number) => xScale(i);
-          // P10→P90 as an envelope, then P25→P75 as a darker inner one.
-          const envelopePath = (lo: number[], hi: number[]) => {
-            let p = `M${xAt(0).toFixed(2)},${yScale(lo[0]).toFixed(2)} `;
-            for (let i = 1; i < lo.length; i++)
-              p += `L${xAt(i).toFixed(2)},${yScale(lo[i]).toFixed(2)} `;
-            for (let i = hi.length - 1; i >= 0; i--)
-              p += `L${xAt(i).toFixed(2)},${yScale(hi[i]).toFixed(2)} `;
-            return p + "Z";
-          };
-          const goalPx = data.goal !== null ? yScale(data.goal) : null;
-
-          return (
-            <>
-              <YAxis
-                frame={frame}
-                ticks={niceTicks(0, yMax, ticks)}
-                scale={yScale}
-                format={compactEur}
-                grid
-              />
-
-              {/* P10-P90 envelope */}
-              <path
-                d={envelopePath(data.bands.p10, data.bands.p90)}
-                fill={COLOR.band}
-                fillOpacity={0.08}
-              />
-              {/* P25-P75 envelope */}
-              <path
-                d={envelopePath(data.bands.p25, data.bands.p75)}
-                fill={COLOR.band}
-                fillOpacity={0.14}
-              />
-
-              {/* Goal line */}
-              {goalPx !== null && (
-                <g>
-                  <line
-                    x1={frame.left}
-                    x2={frame.right}
-                    y1={goalPx}
-                    y2={goalPx}
-                    stroke={COLOR.goal}
-                    strokeDasharray="4 4"
-                    strokeWidth="1"
-                  />
-                  <text
-                    x={frame.right - 4}
-                    y={goalPx - 4}
-                    textAnchor="end"
-                    className="font-mono text-[11px]"
-                    fill={COLOR.goal}
-                  >
-                    Objectif {fmt.eur(data.goal!)}
-                  </text>
-                </g>
-              )}
-
-              {/* Deterministic lines */}
-              <path
-                d={linePath(data.bands.base, xAt, yScale)}
-                fill="none"
-                stroke={COLOR.base}
-                strokeWidth="2"
-              />
-
-              {/* Gross P50 (without fees) — dashed overlay for comparison */}
-              <path
-                d={linePath(data.gross_p50, xAt, yScale)}
-                fill="none"
-                stroke={COLOR.gross}
-                strokeDasharray="4 4"
-                strokeWidth="1.2"
-                strokeOpacity={0.65}
-              />
-
-              {/* Invested line */}
-              <path
-                d={linePath(data.invested, xAt, yScale)}
-                fill="none"
-                stroke={COLOR.invested}
-                strokeDasharray="3 3"
-                strokeWidth="1.2"
-              />
-
-              {/* Axes */}
-              <g stroke="hsl(var(--foreground))" strokeWidth="1">
-                <line x1={frame.left} x2={frame.left} y1={frame.top} y2={frame.bottom} />
-              </g>
-              <XAxis
-                frame={frame}
-                ticks={pickIndices(n, ticks)}
-                scale={xScale}
-                format={(i) =>
-                  data.months[i] / 12 < 1
-                    ? `${data.months[i]}m`
-                    : `${Math.round(data.months[i] / 12)}a`
-                }
-                label="Horizon"
-              />
-
-              {/* Hover crosshair */}
-              {hoverIdx !== null && (
-                <g>
-                  <Crosshair frame={frame} x={xAt(hoverIdx)} />
-                  <circle
-                    cx={xAt(hoverIdx)}
-                    cy={yScale(data.bands.p50[hoverIdx])}
-                    r="4"
-                    fill={COLOR.base}
-                  />
-                </g>
-              )}
-            </>
-          );
-        }}
-      </Chart>
-
-      <Legend />
-    </div>
-  );
-}
-
-function FanTooltipContent({ data, idx }: { data: ProjectionResponse; idx: number }) {
-  const months = data.months[idx];
-  const years = months / 12;
-  const invested = data.invested[idx];
-  const median = data.bands.p50[idx];
-  const grossMedian = data.gross_p50[idx];
-  const cumFees = data.cumulative_fees[idx];
-  const prob = data.goal_prob_by_month?.[idx];
-
-  return (
-    <div className="space-y-1.5 font-mono tabular">
-      <div className="font-sans font-medium text-foreground">
-        {years < 1 ? `${months} mois` : `Année ${years.toFixed(1)} (${months} mois)`}
-      </div>
-      <Row label="Médiane nette (P50)" value={fmt.eur(median)} bold />
-      <Row label="Médiane brute (sans frais)" value={fmt.eur(grossMedian)} muted />
-      <Row label="Frais cumulés" value={fmt.eur(cumFees)} />
-      <Row
-        label="P10 / P90"
-        value={`${compactEur(data.bands.p10[idx])} / ${compactEur(data.bands.p90[idx])}`}
-      />
-      <Row label="Investi" value={fmt.eur(invested)} muted />
-      <Row label="Plus-value nette" value={fmt.signedEur(median - invested)} />
-      {prob !== undefined && <Row label={`P(≥ ${compactEur(data.goal!)})`} value={fmt.pct(prob)} />}
-      <div className="font-sans text-[10px] text-muted-foreground pt-1 leading-tight">
-        Bandes P10–P90 = quantiles des 1000 simulations. Tiret gris = projection sans frais
-        (comparaison).
-      </div>
-    </div>
-  );
-}
-
-function Row({
-  label,
-  value,
-  bold,
-  muted,
+function GoalField({
+  mode,
+  onModeChange,
+  capital,
+  onCapitalChange,
+  income,
+  onIncomeChange,
 }: {
-  label: string;
-  value: string;
-  bold?: boolean;
-  muted?: boolean;
+  mode: "capital" | "income";
+  onModeChange: (m: "capital" | "income") => void;
+  capital: number | "";
+  onCapitalChange: (v: number | "") => void;
+  income: number;
+  onIncomeChange: (v: number) => void;
 }) {
   return (
-    <div className="flex justify-between gap-3">
-      <span className={`font-sans ${muted ? "text-muted-foreground" : ""}`}>{label}</span>
-      <span className={bold ? "font-semibold" : ""}>{value}</span>
+    <div className="space-y-1.5 sm:col-span-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <Label className="text-xs text-muted-foreground">Mon objectif (optionnel)</Label>
+        <div className="flex gap-1 text-xs">
+          <ModeButton active={mode === "capital"} onClick={() => onModeChange("capital")}>
+            une somme
+          </ModeButton>
+          <ModeButton active={mode === "income"} onClick={() => onModeChange("income")}>
+            un revenu mensuel à vie
+          </ModeButton>
+        </div>
+      </div>
+      {mode === "capital" ? (
+        <Input
+          type="number"
+          min={0}
+          step={5000}
+          value={capital}
+          onChange={(e) => onCapitalChange(e.target.value === "" ? "" : Number(e.target.value))}
+          placeholder="ex. 25 000"
+          className="font-mono tabular sm:max-w-xs"
+        />
+      ) : (
+        <div className="space-y-1">
+          <Input
+            type="number"
+            min={0}
+            step={50}
+            value={income}
+            onChange={(e) => onIncomeChange(Math.max(0, Number(e.target.value) || 0))}
+            className="font-mono tabular sm:max-w-xs"
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Il faut environ {fmt.approxEur((income * 12) / WITHDRAWAL_RATE)} de capital pour en
+            retirer {fmt.eur(income).replace(",00", "")} par mois sans l'épuiser (règle des 4 % par
+            an).
+          </p>
+        </div>
+      )}
     </div>
   );
 }
 
-function Legend() {
+function ModeButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-muted-foreground">
-      <LegendItem
-        swatch={<Band color={COLOR.band} />}
-        label="P10–P90 / P25–P75 (Monte Carlo, net frais)"
-      />
-      <LegendItem swatch={<Stroke color={COLOR.base} thick />} label="Scénario base (μ)" />
-      <LegendItem
-        swatch={<Stroke color={COLOR.gross} dashed />}
-        label="P50 sans frais (comparaison)"
-      />
-      <LegendItem swatch={<Stroke color={COLOR.invested} dashed />} label="Capital investi" />
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "rounded-full border px-2.5 py-0.5",
+        active ? "bg-accent font-medium text-accent-foreground" : "text-muted-foreground",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ErrorState({ error }: { error: unknown }) {
+  const empty = error instanceof ApiError && error.type === "portfolio_empty";
+  return (
+    <div className="rounded-xl border border-dashed p-8 text-center">
+      <p className="text-sm font-medium">
+        {empty ? "Pas encore de placements à projeter" : "Projection indisponible"}
+      </p>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {empty
+          ? "Connecte un compte-titres, un PEA ou une assurance vie : la projection part de ce que tu détiens."
+          : error instanceof Error
+            ? error.message
+            : "Réessaie dans un instant."}
+      </p>
     </div>
   );
 }
 
-function LegendItem({ swatch, label }: { swatch: React.ReactNode; label: string }) {
+/* ─── « Comment c'est calculé ? » ───────────────────────────────────────── */
+
+function HowItWorks({ data }: { data: ProjectionResponse }) {
+  const years = Math.round(data.months[data.months.length - 1] / 12);
+  const last = data.months.length - 1;
   return (
-    <span className="flex items-center gap-2">
-      {swatch}
-      {label}
-    </span>
+    <details className="rounded-xl border bg-muted/20 text-sm">
+      <summary className="cursor-pointer select-none px-4 py-3 font-medium">
+        Comment c'est calculé ?
+      </summary>
+      <div className="space-y-2 border-t px-4 py-3 text-muted-foreground">
+        <p>
+          Le rendement et l'amplitude des variations viennent de l'historique de tes fonds sur 5 ans
+          : rendement annuel estimé {fmt.pct(data.annual_return)}, variations annuelles de{" "}
+          {fmt.pct(data.annual_vol)}.
+        </p>
+        <p>
+          On simule 1 000 trajectoires possibles (Monte-Carlo), en tenant compte de l'incertitude
+          sur le rendement estimé lui-même : 5 ans d'historique, c'est peu. « Le plus probable » est
+          la médiane ; la « zone probable » va du 10ᵉ au 90ᵉ centile, donc 8 trajectoires sur 10
+          finissent dedans.
+        </p>
+        <p>
+          Les frais de courtage et de tenue de compte sont prélevés mois par mois, donc ils se
+          cumulent. Sans aucun frais, la médiane serait de {fmt.approxEur(data.gross_p50[last])} au
+          lieu de {fmt.approxEur(data.bands.p50[last])}.
+        </p>
+        <p>
+          Les montants ne tiennent compte ni de l'inflation ni de l'impôt : dans {years} ans, ils
+          achèteront moins qu'aujourd'hui.
+        </p>
+      </div>
+    </details>
   );
-}
-
-function Band({ color }: { color: string }) {
-  return (
-    <span className="relative inline-block h-3 w-6 overflow-hidden">
-      <span className="absolute inset-0 opacity-20" style={{ background: color }} />
-      <span
-        className="absolute inset-y-0 left-1 right-1 opacity-40"
-        style={{ background: color }}
-      />
-    </span>
-  );
-}
-
-function Stroke({ color, dashed, thick }: { color: string; dashed?: boolean; thick?: boolean }) {
-  return (
-    <svg width="24" height="6" className="inline-block">
-      <line
-        x1="0"
-        x2="24"
-        y1="3"
-        y2="3"
-        stroke={color}
-        strokeWidth={thick ? 2 : 1.4}
-        strokeDasharray={dashed ? "3 3" : undefined}
-      />
-    </svg>
-  );
-}
-
-/* ─── Small helpers ──────────────────────────────────────────────────────── */
-
-function compactEur(v: number): string {
-  if (Math.abs(v) >= 1000) return `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)} k€`;
-  return `${v.toFixed(0)} €`;
 }

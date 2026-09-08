@@ -11,7 +11,7 @@ from typing import TypedDict, cast
 
 import numpy as np
 
-from ..errors import ConfigurationError, InfeasibleStrategyError, PortfolioEmptyError
+from ..errors import ConfigurationError, InfeasibleStrategyError, PortfolioEmptyError, SolverError
 from ..models import (
     CeilingsUsed,
     EnvelopePoint,
@@ -111,11 +111,12 @@ def build(req: OptimizerRequest, wealth: "Wealth | None" = None) -> OptimizerRes
     envelope_max_weights = [e["max_weight"] for e in envelope_assets]
 
     # Blend historical μ with forward-looking CMAs (with expert overrides if provided).
-    hist_mu = (returns.mean() * analytics.TRADING_DAYS).values
+    hist_mu = analytics.annualized_arithmetic_mu(returns).values
     blended = cma.blended_mu(
         tickers, hist_mu, shrinkage=cma_shrink, overrides=cma_overrides or None
     )
     mu_override = {t: float(blended[i]) for i, t in enumerate(tickers)}
+    unmapped = cma.unmapped_tickers(tickers, cma_overrides or None)
 
     mu, cov, bounds = analytics.build_asset_stats(
         returns,
@@ -181,6 +182,12 @@ def build(req: OptimizerRequest, wealth: "Wealth | None" = None) -> OptimizerRes
                 f"Infeasible strategy: σ ≤ {req.max_volatility * 100:.1f}% and μ ≥ {req.target_return * 100:.2f}% "
                 f"cannot be satisfied simultaneously with your current assets."
             ) from err
+
+    if not optimal.get("success", True):
+        raise SolverError(
+            "Le solveur n'a pas convergé : aucune allocation fiable à proposer avec ces lignes. "
+            "Essaie une période historique plus longue dans les Paramètres expert."
+        )
 
     optimal_w = np.array(optimal["weights"])
 
@@ -288,6 +295,7 @@ def build(req: OptimizerRequest, wealth: "Wealth | None" = None) -> OptimizerRes
             EnvelopePoint(label=e["name"], expected_return=e["rate"], volatility=0.0)
             for e in envelope_assets
         ],
+        unmapped_tickers=unmapped,
         kelly_leverage=kelly_indicator,
     )
 

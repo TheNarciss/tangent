@@ -149,3 +149,74 @@ def test_frontier_has_no_reason_when_well_posed():
     out = analytics.efficient_frontier_curve(rets, mu=mu, cov=cov, n_points=10)
     assert len(out["vol"]) > 0
     assert out["reason"] is None
+
+
+def _three_assets():
+    mu = np.array([0.04, 0.07, 0.09])
+    cov = np.array([[0.0025, 0.001, 0.0005], [0.001, 0.0225, 0.012], [0.0005, 0.012, 0.04]])
+    return mu, cov, [(0.0, 1.0)] * 3
+
+
+@pytest.mark.parametrize("objective", ["max_sharpe", "min_variance", "target_volatility"])
+def test_solve_slsqp_converges_on_well_posed_problem(objective):
+    mu, cov, bounds = _three_assets()
+    res = analytics._solve_slsqp(mu, cov, bounds, objective, 0.02, 0.10)
+    w = np.array(res["weights"])
+    assert res["success"] is True
+    assert w.min() >= 0.0
+    assert w.sum() == pytest.approx(1.0)
+
+
+def test_solve_slsqp_from_strategy_reports_infeasible_as_failure():
+    mu, cov, bounds = _three_assets()
+    res = analytics._solve_slsqp(mu, cov, bounds, "from_strategy", 0.02, 0.03, 0.15)
+    assert res["success"] is False
+
+
+def test_max_sharpe_multistart_is_not_worse_than_equal_weight_start():
+    """The best of several starts must be at least as good as the 1/N start alone."""
+    mu, cov, bounds = _three_assets()
+    res = analytics._solve_slsqp(mu, cov, bounds, "max_sharpe", 0.02, None)
+    w0 = np.full(3, 1 / 3)
+    sharpe_w0 = (w0 @ mu - 0.02) / np.sqrt(w0 @ cov @ w0)
+    assert res["sharpe"] >= sharpe_w0 - 1e-9
+
+
+def test_annualized_arithmetic_mu_adds_half_variance():
+    """E[R] = exp(m + s²/2) − 1 on annualized log stats, not m alone."""
+    rng = np.random.default_rng(1)
+    rets = pd.DataFrame({"A": rng.normal(0.0003, 0.01, 2520)})
+    m = float(rets["A"].mean() * analytics.TRADING_DAYS)
+    v = float(rets["A"].var() * analytics.TRADING_DAYS)
+    got = float(analytics.annualized_arithmetic_mu(rets)["A"])
+    assert got == pytest.approx(np.exp(m + v / 2) - 1)
+    assert got > m
+
+
+def _daily_history(years: int = 5) -> pd.Series:
+    rng = np.random.default_rng(7)
+    return pd.Series(rng.normal(0.0003, 0.011, years * analytics.TRADING_DAYS))
+
+
+def test_monte_carlo_parameter_uncertainty_widens_the_fan_not_the_median():
+    """Uncertainty on μ̂ (5 years of data) must show up in the band, not in the center."""
+    hist = _daily_history(5)
+    with_unc = analytics.monte_carlo_projection(hist, 10_000, 500, 120, n_paths=4000)
+    without = analytics.monte_carlo_projection(
+        hist, 10_000, 500, 120, n_paths=4000, parameter_uncertainty=False
+    )
+    width_with = with_unc["p90"][-1] - with_unc["p10"][-1]
+    width_without = without["p90"][-1] - without["p10"][-1]
+    assert width_with > 1.3 * width_without
+    assert with_unc["p50"][-1] == pytest.approx(without["p50"][-1], rel=0.05)
+
+
+def test_monte_carlo_uncertainty_shrinks_with_longer_history():
+    """Same μ̂ and σ̂, ten times more observations: SE(μ̂) falls by √10, the fan narrows."""
+    short = _daily_history(2)
+    long = pd.concat([short] * 10, ignore_index=True)
+    fan_short = analytics.monte_carlo_projection(short, 10_000, 500, 120, n_paths=4000)
+    fan_long = analytics.monte_carlo_projection(long, 10_000, 500, 120, n_paths=4000)
+    assert (fan_short["p90"][-1] - fan_short["p10"][-1]) > (
+        fan_long["p90"][-1] - fan_long["p10"][-1]
+    )

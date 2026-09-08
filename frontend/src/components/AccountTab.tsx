@@ -1,26 +1,17 @@
 import { useState } from "react";
-import {
-  AlertTriangle,
-  Building2,
-  CheckCircle2,
-  KeyRound,
-  Loader2,
-  Trash2,
-  Unlink,
-} from "lucide-react";
+import { AlertTriangle, CheckCircle2, KeyRound, Loader2, Trash2, Unlink } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   ApiError,
   changePassword,
   deleteMyAccount,
-  fetchBankConnections,
   listOAuthAccounts,
-  unlinkBankConnection,
   deleteOAuthAccount,
   useCurrentUser,
 } from "@/api";
 import { useProfile } from "@/lib/profile";
+import { BRIEFING_TIME } from "@/components/dashboard/AiBriefTile";
 import { Button } from "@/components/ui/button";
 import { Section } from "@/components/ui/section";
 import {
@@ -37,7 +28,7 @@ import { Label } from "@/components/ui/label";
 /**
  * Mon compte — gestion du compte Tangent et de ses connexions externes.
  *
- * 5 sections : Email, Mot de passe, Comptes liés (OAuth), Banques connectées
+ * 4 sections : Email, Mot de passe, Comptes liés (OAuth)
  * (Powens), Zone dangereuse (delete account).
  */
 export function AccountTab() {
@@ -46,7 +37,6 @@ export function AccountTab() {
       <EmailSection />
       <PasswordSection />
       <OAuthSection />
-      <BanksSection />
       <AutoReviewSection />
       <DangerZone />
     </div>
@@ -380,147 +370,6 @@ function OAuthRow({
 }
 
 /* ──────────────────────────────────────────────────────────────────────── */
-/*  Bank connections (Powens)                                               */
-/* ──────────────────────────────────────────────────────────────────────── */
-
-function BanksSection() {
-  const connections = useQuery({
-    queryKey: ["bank-connections"],
-    queryFn: fetchBankConnections,
-  });
-
-  return (
-    <Section
-      title="Banques connectées"
-      description="Banques avec lesquelles Tangent communique via Powens (DSP2). Délier supprime aussi tous les comptes associés en local."
-    >
-      {connections.isLoading && <p className="text-sm text-muted-foreground">Chargement…</p>}
-      {connections.isError && (
-        <p className="text-sm text-[hsl(var(--loss))]">Impossible de charger les banques.</p>
-      )}
-      {connections.data && connections.data.length === 0 && (
-        <div className="rounded-md border border-dashed py-6 text-center text-sm text-muted-foreground">
-          Aucune banque connectée. Utilise <strong>+ Ajouter une banque</strong> en haut de
-          l&apos;application.
-        </div>
-      )}
-      {connections.data && connections.data.length > 0 && (
-        <div className="space-y-2">
-          {connections.data.map((conn) => (
-            <BankRow
-              key={conn.connection_id}
-              connectionId={conn.connection_id}
-              institutionName={conn.institution_name}
-              accountsCount={conn.accounts_count}
-              lastUpdate={conn.last_update}
-              hasError={!!conn.error}
-            />
-          ))}
-        </div>
-      )}
-    </Section>
-  );
-}
-
-function BankRow({
-  connectionId,
-  institutionName,
-  accountsCount,
-  lastUpdate,
-  hasError,
-}: {
-  connectionId: number;
-  institutionName: string;
-  accountsCount: number;
-  lastUpdate: string | null;
-  hasError: boolean;
-}) {
-  const qc = useQueryClient();
-  const [confirming, setConfirming] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const mutation = useMutation({
-    mutationFn: () => unlinkBankConnection(connectionId),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["bank-connections"] });
-      qc.invalidateQueries({ queryKey: ["bank-accounts"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-      qc.invalidateQueries({ queryKey: ["portfolio"] });
-      setConfirming(false);
-    },
-    onError: (e) => {
-      setError(e instanceof Error ? e.message : "Erreur inconnue");
-    },
-  });
-
-  return (
-    <>
-      <div className="flex items-center gap-3 rounded-md border px-3 py-2">
-        <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium">{institutionName}</p>
-          <p className="text-xs text-muted-foreground">
-            {accountsCount} compte{accountsCount > 1 ? "s" : ""}
-            {lastUpdate && ` · sync ${formatRelative(lastUpdate)}`}
-            {hasError && <span className="ml-2 text-[hsl(var(--loss))]">erreur de sync</span>}
-          </p>
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setConfirming(true)}
-          className="gap-2 text-muted-foreground hover:text-[hsl(var(--loss))]"
-        >
-          <Unlink className="h-3.5 w-3.5" />
-          Délier
-        </Button>
-      </div>
-
-      <Dialog open={confirming} onOpenChange={setConfirming}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Délier {institutionName} ?</DialogTitle>
-            <DialogDescription>
-              {accountsCount} compte{accountsCount > 1 ? "s" : ""} et toutes les transactions
-              associées seront supprimés de Tangent. La connexion DSP2 sera révoquée côté Powens.
-              Cette action est irréversible.
-            </DialogDescription>
-          </DialogHeader>
-          {error && <p className="text-sm text-[hsl(var(--loss))]">{error}</p>}
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setConfirming(false)}
-              disabled={mutation.isPending}
-            >
-              Annuler
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => mutation.mutate()}
-              disabled={mutation.isPending}
-            >
-              {mutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Confirmer la suppression
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
-
-function formatRelative(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const m = Math.floor(diff / 60_000);
-  if (m < 1) return "à l'instant";
-  if (m < 60) return `il y a ${m} min`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `il y a ${h} h`;
-  return `il y a ${Math.floor(h / 24)} j`;
-}
-
-/* ──────────────────────────────────────────────────────────────────────── */
 /*  Danger zone — delete account                                            */
 /* ──────────────────────────────────────────────────────────────────────── */
 
@@ -682,8 +531,8 @@ function AutoReviewSection() {
 
   return (
     <Section
-      title="Reviews IA matinales"
-      description="Reçois chaque matin (entre 4 h et 9 h) une analyse personnalisée de ton patrimoine, générée par Claude avec recherche web. Activable / désactivable à tout moment."
+      title="Briefing du matin"
+      description={`Chaque matin (${BRIEFING_TIME}), un court texte sur ce qui a bougé dans ton patrimoine, ce que ça veut dire et s'il y a quelque chose à faire. Écrit par une IA à partir de tes comptes ; activable et désactivable à tout moment.`}
     >
       <div className="flex items-start gap-3 rounded-md border bg-muted/30 px-3 py-3 hover:bg-muted/50 transition">
         <input
@@ -694,11 +543,11 @@ function AutoReviewSection() {
           className="mt-0.5 h-4 w-4 rounded border-input accent-primary cursor-pointer"
         />
         <label htmlFor="auto-review-toggle" className="flex-1 cursor-pointer">
-          <p className="text-sm font-medium">Activer les reviews automatiques</p>
+          <p className="text-sm font-medium">Recevoir le briefing du matin</p>
           <p className="text-xs text-muted-foreground mt-0.5">
             {enabled
-              ? "Activé — tu recevras une review chaque matin."
-              : "Désactivé — active pour recevoir ta première review demain matin."}
+              ? "Activé — ton briefing t'attend chaque matin sur l'Aperçu."
+              : "Désactivé — active pour recevoir ton premier briefing demain matin."}
           </p>
         </label>
       </div>

@@ -4,7 +4,9 @@
 #
 # Modèle de frais (par mois) :
 #   fee_t = fixed_per_line_eur × n_lines / 12
-#         + (custody_pct + rebates_pct) × portfolio_value_t / 12
+#         + custody_pct × portfolio_value_t / 12
+#   rebates_pct est informatif (ce que la banque touche des sociétés de gestion,
+#   déjà inclus dans le TER des fonds) : jamais facturé à l'utilisateur.
 #         + courtage_pct × monthly_contribution
 #
 # Si tu changes de banque, édite simplement `default_broker` ou passe
@@ -28,7 +30,7 @@ brokers:
     name: "BNP Paribas — Offre Bourse Start"
     fixed_per_line_eur: 5.0       # 5 €/an par ligne en compte
     custody_pct: 0.0040           # 0,40 % proportionnel sur portefeuille moyen
-    rebates_pct: 0.0019           # 0,19 % rétrocessions OPC encaissées par la banque
+    rebates_pct: 0.0019           # 0,19 % rétrocessions OPC encaissées par la banque (informatif, non facturé)
     courtage_pct: 0.0050          # 0,50 % par ordre (plafond légal PEA)
 
   fortuneo:

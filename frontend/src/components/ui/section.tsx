@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-/** Titled block used by the Profil / Réglages forms. */
+/** Titled block used by the Profil / Compte forms and the Scanner options. */
 export function Section({
   title,
   description,

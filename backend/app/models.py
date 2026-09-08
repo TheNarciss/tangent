@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 class AssetMetrics(BaseModel):
     ticker: str
+    label: str | None = None  # fund name as the provider labels it (shown instead of the ticker)
     price: float
     weight: float
     value: float
@@ -33,6 +34,9 @@ class PortfolioMetrics(BaseModel):
     max_drawdown_observed: float = 0.0  # max drawdown of the reconstructed portfolio
     assets: list[AssetMetrics]
     correlation: dict[str, dict[str, float]]
+    # Tickers without a forward-looking μ (not in cma.yaml): their expected
+    # return is the historical one only. Surfaced so the UI can say so.
+    unmapped_tickers: list[str] = Field(default_factory=list)
 
 
 class Insight(BaseModel):
@@ -287,6 +291,7 @@ class OptimizerResponse(BaseModel):
     risk_contributions_optimal: RiskContribution
     frontier_curve: FrontierCurve  # ETF-only curve (envelope-augmented frontier is just a kink)
     envelope_points: list[EnvelopePoint] = Field(default_factory=list)
+    unmapped_tickers: list[str] = Field(default_factory=list)
     kelly_leverage: KellyLeverage | None = (
         None  # sanity check: does Kelly recommend leverage or cash?
     )

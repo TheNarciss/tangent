@@ -27,14 +27,13 @@ export function Assets({ assets }: Props) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Ticker</TableHead>
+              <TableHead>Fonds</TableHead>
               <TableHead className="hidden text-right md:table-cell">Cours</TableHead>
               <TableHead className="text-right">Poids</TableHead>
               <TableHead className="text-right">Valeur</TableHead>
               <TableHead className="text-right">P/L</TableHead>
               <TableHead className="hidden text-right md:table-cell">μ</TableHead>
               <TableHead className="hidden text-right md:table-cell">σ</TableHead>
-              <TableHead className="hidden text-right md:table-cell">CVaR 95 %</TableHead>
               <TableHead className="hidden text-right md:table-cell">Max DD</TableHead>
               <TableHead className="hidden text-right md:table-cell">Sharpe</TableHead>
             </TableRow>
@@ -44,7 +43,12 @@ export function Assets({ assets }: Props) {
               const positive = a.pnl >= 0;
               return (
                 <TableRow key={a.ticker}>
-                  <TableCell className="font-mono font-medium">{a.ticker}</TableCell>
+                  <TableCell className="font-medium">
+                    <div className="truncate">{a.label ?? a.ticker}</div>
+                    {a.label && (
+                      <div className="font-mono text-xs text-muted-foreground">{a.ticker}</div>
+                    )}
+                  </TableCell>
                   <TableCell className="hidden text-right font-mono tabular md:table-cell">
                     {fmt.eur(a.price)}
                   </TableCell>
@@ -68,9 +72,6 @@ export function Assets({ assets }: Props) {
                   </TableCell>
                   <TableCell className="hidden text-right font-mono tabular md:table-cell">
                     {fmt.pct(a.annual_vol)}
-                  </TableCell>
-                  <TableCell className="hidden text-right font-mono tabular md:table-cell text-[hsl(var(--loss))]">
-                    {fmt.signedPct(a.cvar_95)}
                   </TableCell>
                   <TableCell className="hidden text-right font-mono tabular md:table-cell text-[hsl(var(--loss))]">
                     {fmt.signedPct(a.max_drawdown_observed)}

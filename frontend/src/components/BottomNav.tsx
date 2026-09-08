@@ -18,7 +18,7 @@ const ITEM_CLASS =
  *
  * 5 items: the 4 main views (same list as the Sidebar) + a "Plus" trigger
  * that opens a MoreSheet containing the equivalent of the desktop UserMenu
- * (profile / settings / Google link / legal / logout).
+ * (profile / account / Google link / legal / logout).
  */
 export function BottomNav({ onOpenMore, isMoreOpen = false }: BottomNavProps) {
   return (
