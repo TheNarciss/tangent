@@ -1176,3 +1176,22 @@ export interface NextEuroVerdictDetails {
   cto_value_eur?: number;
   profile_complete?: boolean;
 }
+
+/** `details` of the « part d'actions » verdict (id "risk_share"). */
+export interface RiskShareVerdictDetails {
+  actual_share?: number;
+  target_share?: number;
+  merton_share?: number;
+  horizon_cap?: number;
+  horizon_years?: number;
+  risk_level?: number;
+  risk_label?: string;
+  gamma?: number | null;
+  equity_eur?: number;
+  non_equity_eur?: number;
+  pocket_eur?: number;
+  bad_year_eur?: number;
+  band?: number;
+  equity_premium?: number;
+  equity_sigma?: number;
+}

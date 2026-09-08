@@ -263,4 +263,99 @@ def test_incomplete_profile_asks_for_it():
 
 def test_compute_all_orders_next_euro_first():
     resp = verdicts.compute_all(_wealth2(accounts=[_acc("pea", 1000.0)]), _profile(), 1000.0)
-    assert [v.id for v in resp.verdicts] == ["next_euro", "fees"]
+    assert [v.id for v in resp.verdicts] == ["next_euro", "risk_share", "fees"]
+
+
+# ── « Part d'actions » ─────────────────────────────────────────────────────
+
+RISK = verdicts.RiskShareThresholds(
+    equity_premium=0.045,
+    equity_sigma=0.15,
+    band=0.10,
+    red_gap=0.30,
+    horizon_caps=[
+        verdicts.HorizonCap(max_years=3, max_share=0.10),
+        verdicts.HorizonCap(max_years=5, max_share=0.30),
+        verdicts.HorizonCap(max_years=8, max_share=0.60),
+        verdicts.HorizonCap(max_years=None, max_share=1.0),
+    ],
+)
+
+
+def _pea_with_lines(value: float) -> InvestmentAccount:
+    return InvestmentAccount(
+        provider_account_id="pea-l",
+        name="PEA",
+        account_type="pea",
+        positions=[_pos("CW8.PA", value, 0.0038)],
+    )
+
+
+def test_merton_share_sits_on_the_market_line():
+    assert verdicts.merton_share(0.12, 0.15) == pytest.approx(0.80)
+    assert verdicts.merton_share(0.20, 0.15) == 1.0
+    assert verdicts.merton_share(0.05, 0.15) == pytest.approx(1 / 3)
+
+
+def test_no_long_term_pocket_is_unknown():
+    v = verdicts.risk_share_verdict(
+        _wealth2(envelopes=[_env("livret_a", 5000.0)]), _profile(), RISK
+    )
+    assert v.status == "unknown"
+
+
+def test_no_risk_level_asks_for_the_slider():
+    p = _profile()
+    p.risk_level = None
+    v = verdicts.risk_share_verdict(_wealth2(accounts=[_pea_with_lines(10_000)]), p, RISK)
+    assert v.status == "unknown"
+    assert v.action is not None and "curseur" in v.action
+
+
+def test_within_band_is_green():
+    p = _profile()
+    p.risk_level = 3  # 12 % / 15 % = 80 %
+    w = _wealth2(accounts=[_pea_with_lines(8_000), _acc("life_insurance", 2_000)])
+    v = verdicts.risk_share_verdict(w, p, RISK)
+    assert v.status == "green"
+    assert v.details["target_share"] == pytest.approx(0.80)
+    assert v.details["gamma"] == pytest.approx(0.045 / (0.80 * 0.15**2))
+
+
+def test_under_invested_is_amber_with_premium_in_euros():
+    p = _profile()
+    p.risk_level = 3
+    w = _wealth2(accounts=[_pea_with_lines(6_000), _acc("life_insurance", 4_000)])
+    v = verdicts.risk_share_verdict(w, p, RISK)
+    assert v.status == "amber"  # 60 % vs 80 %
+    assert v.impact_eur_per_year == pytest.approx(0.045 * 0.20 * 10_000)
+    assert v.action is not None and "ETF monde" in v.action
+
+
+def test_far_under_invested_is_red():
+    p = _profile()
+    p.risk_level = 5
+    w = _wealth2(accounts=[_pea_with_lines(1_000), _acc("life_insurance", 9_000)])
+    v = verdicts.risk_share_verdict(w, p, RISK)
+    assert v.status == "red"
+
+
+def test_over_invested_for_a_prudent_profile_has_no_euro_gain_but_a_loss_figure():
+    p = _profile()
+    p.risk_level = 1  # 33 %
+    w = _wealth2(accounts=[_pea_with_lines(9_000), _acc("life_insurance", 1_000)])
+    v = verdicts.risk_share_verdict(w, p, RISK)
+    assert v.status == "red"  # 90 % vs 33 %
+    assert v.impact_eur_per_year is None
+    assert "2\u202f700 €" in v.headline  # 2 × 15 % × 9 000
+    assert v.action is not None and "curseur" in v.action
+
+
+def test_short_horizon_caps_the_target():
+    p = _profile()
+    p.risk_level = 5
+    p.horizon_years = 4
+    w = _wealth2(accounts=[_pea_with_lines(5_000), _acc("life_insurance", 5_000)])
+    v = verdicts.risk_share_verdict(w, p, RISK)
+    assert v.details["target_share"] == pytest.approx(0.30)
+    assert v.status == "amber"  # 50 % vs 30 %

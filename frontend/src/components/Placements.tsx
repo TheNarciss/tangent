@@ -98,6 +98,7 @@ export function Placements() {
   return (
     <div className="space-y-6">
       <WhatIHave metrics={m} />
+      <VerdictLine id="risk_share" to={NAV_PATHS.method} />
       <VerdictLine id="fees" to={NAV_PATHS.method} />
       <RiskBlock
         metrics={m}
