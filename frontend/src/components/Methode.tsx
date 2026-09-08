@@ -5,6 +5,7 @@ import {
   type FeesVerdictDetails,
   type NextEuroVerdictDetails,
   type RiskShareVerdictDetails,
+  type SavingsRateVerdictDetails,
   type Verdict,
 } from "@/api";
 import { fmt } from "@/lib/format";
@@ -55,6 +56,8 @@ export function Methode() {
             <NextEuroDetails details={v.details as NextEuroVerdictDetails} />
           ) : v.id === "risk_share" ? (
             <RiskShareDetails details={v.details as RiskShareVerdictDetails} />
+          ) : v.id === "savings_rate" ? (
+            <SavingsRateDetails details={v.details as SavingsRateVerdictDetails} />
           ) : (
             <GenericDetails verdict={v} />
           )}
@@ -63,6 +66,84 @@ export function Methode() {
       <p className="text-xs text-muted-foreground">
         Prochains verdicts : où placer le prochain euro (enveloppes et impôt), part d'actions selon
         ton profil, rééquilibrage, épargne nécessaire pour ton objectif.
+      </p>
+    </div>
+  );
+}
+
+/* ── Taux d'épargne ────────────────────────────────────────────────────── */
+
+function SavingsRateDetails({ details: d }: { details: SavingsRateVerdictDetails }) {
+  if (d.rate === undefined || d.income_monthly_eur === undefined) return null;
+  const rate = d.rate;
+  const target = d.target_rate ?? 0.15;
+  const amber = d.amber_min ?? 0.05;
+  const scale = Math.max(0.3, target * 2, rate * 1.1);
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Figure
+          label="Épargné par mois"
+          value={fmt.eur0(d.monthly_saved_used_eur ?? 0)}
+          sub={
+            d.source === "observed"
+              ? "virements vers livrets et placements, 90 derniers jours"
+              : "versement déclaré dans ton profil"
+          }
+        />
+        <Figure
+          label="Revenu par mois"
+          value={fmt.eur0(d.income_monthly_eur)}
+          sub={`revenu fiscal ${fmt.eur0(d.rfr_eur ?? 0)} sur 12 mois`}
+        />
+        <Figure
+          label="Cible"
+          value={fmt.eur0(d.target_monthly_eur ?? 0)}
+          sub={`${fmt.pct0(target)} du revenu`}
+        />
+      </div>
+
+      {/* Gauge: 0 → scale, red under amber_min, amber under target, green above. */}
+      <div>
+        <div className="relative h-3 overflow-hidden rounded-full bg-muted">
+          <div
+            className="absolute inset-y-0 left-0 bg-[hsl(var(--loss))]/25"
+            style={{ width: `${(amber / scale) * 100}%` }}
+          />
+          <div
+            className="absolute inset-y-0 bg-amber-500/25"
+            style={{
+              left: `${(amber / scale) * 100}%`,
+              width: `${((target - amber) / scale) * 100}%`,
+            }}
+          />
+          <div
+            className="absolute inset-y-0 bg-[hsl(var(--gain))]/25"
+            style={{ left: `${(target / scale) * 100}%`, right: 0 }}
+          />
+          <div
+            className="absolute inset-y-0 w-1 rounded-full bg-primary"
+            style={{ left: `calc(${Math.min(1, rate / scale) * 100}% - 2px)` }}
+          />
+        </div>
+        <div className="mt-1 flex justify-between text-xs text-muted-foreground">
+          <span>0 %</span>
+          <span>
+            toi : {fmt.pct0(rate)} · cible {fmt.pct0(target)}
+          </span>
+          <span>{fmt.pct0(scale)}</span>
+        </div>
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        {d.missing_monthly_eur && d.missing_monthly_eur > 0
+          ? `Les ${fmt.eur0(d.missing_monthly_eur)} par mois qui manquent valent ${fmt.eur0(
+              d.gap_at_horizon_eur ?? 0,
+            )} dans ${d.horizon_years ?? 20} ans à ${fmt.pct0(d.growth_for_horizon ?? 0.05)} par an. `
+          : ""}
+        À 20 ans, plus de la moitié du capital final vient des versements, pas du rendement. La
+        hausse automatique de {fmt.pct0(d.escalation ?? 0.05)} par an (« Save More Tomorrow »)
+        porterait ton versement à {fmt.eur0(d.escalated_next_year_eur ?? 0)} l'an prochain.
       </p>
     </div>
   );

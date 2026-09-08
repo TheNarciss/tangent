@@ -89,7 +89,10 @@ async def generate_review_stream(
     # 3. Profile + prompt
     profile = await profile_repo.get_or_create(session, user_id)
     spending = await tx_repo.monthly_outflow(session, user_id)
-    verdicts = verdicts_engine.compute_all(wealth, profile, monthly_spending=spending).verdicts
+    saved = await tx_repo.monthly_inflow_to_savings(session, user_id)
+    verdicts = verdicts_engine.compute_all(
+        wealth, profile, monthly_spending=spending, monthly_saved=saved
+    ).verdicts
     snapshot = prompt_builder.build_anonymized_snapshot(
         wealth, profile, optimizer_response, verdicts=verdicts
     )

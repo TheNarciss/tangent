@@ -263,7 +263,7 @@ def test_incomplete_profile_asks_for_it():
 
 def test_compute_all_orders_next_euro_first():
     resp = verdicts.compute_all(_wealth2(accounts=[_acc("pea", 1000.0)]), _profile(), 1000.0)
-    assert [v.id for v in resp.verdicts] == ["next_euro", "risk_share", "fees"]
+    assert [v.id for v in resp.verdicts] == ["savings_rate", "next_euro", "risk_share", "fees"]
 
 
 # ── « Part d'actions » ─────────────────────────────────────────────────────
@@ -359,3 +359,49 @@ def test_short_horizon_caps_the_target():
     v = verdicts.risk_share_verdict(w, p, RISK)
     assert v.details["target_share"] == pytest.approx(0.30)
     assert v.status == "amber"  # 50 % vs 30 %
+
+
+# ── « Taux d'épargne » ─────────────────────────────────────────────────────
+
+SAVE = verdicts.SavingsRateThresholds(
+    target=0.15, amber_min=0.05, escalation=0.05, growth_for_20y=0.05, horizon_years=20
+)
+
+
+def test_future_value_of_monthly():
+    assert verdicts.future_value_of_monthly(100.0, 0.0, 1) == pytest.approx(1200.0)
+    fv = verdicts.future_value_of_monthly(100.0, 0.05, 20)
+    assert 40_000 < fv < 42_000  # ≈ 41 k€, textbook
+
+
+def test_no_income_is_unknown():
+    p = _profile(rfr=0.0)
+    v = verdicts.savings_rate_verdict(p, None, SAVE)
+    assert v.status == "unknown"
+
+
+def test_declared_dca_above_target_is_green_with_escalation():
+    p = _profile(rfr=24_000, dca=400)  # 2 000 €/mois, 20 %
+    v = verdicts.savings_rate_verdict(p, None, SAVE)
+    assert v.status == "green"
+    assert "20 %" in v.headline
+    assert v.action is not None and "420 €" in v.action
+    assert v.details["source"] == "declared"
+
+
+def test_observed_transfers_win_over_declared():
+    p = _profile(rfr=24_000, dca=400)
+    v = verdicts.savings_rate_verdict(p, 100.0, SAVE)  # observed 5 %
+    assert v.status == "amber"
+    assert v.details["source"] == "observed"
+    assert v.impact_eur_per_year == pytest.approx((300.0 - 100.0) * 12)
+    assert v.action is not None and "200 €" in v.action
+
+
+def test_under_five_percent_is_red_with_horizon_gap():
+    p = _profile(rfr=36_000, dca=50)  # 3 000 €/mois, 1,7 %
+    v = verdicts.savings_rate_verdict(p, None, SAVE)
+    assert v.status == "red"
+    gap = verdicts.future_value_of_monthly(450.0 - 50.0, 0.05, 20)
+    assert v.details["gap_at_horizon_eur"] == pytest.approx(gap)
+    assert "dans 20 ans" in v.headline

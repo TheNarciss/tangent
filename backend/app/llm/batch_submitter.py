@@ -140,8 +140,9 @@ async def submit_nightly_batch(session: AsyncSession) -> ReviewBatch | None:
 
             wealth = await get_user_wealth(user=user, session=session)
             spending = await tx_repo.monthly_outflow(session, user.id)
+            saved = await tx_repo.monthly_inflow_to_savings(session, user.id)
             verdicts = verdicts_engine.compute_all(
-                wealth, profile, monthly_spending=spending
+                wealth, profile, monthly_spending=spending, monthly_saved=saved
             ).verdicts
             snapshot = build_anonymized_snapshot(wealth, profile, verdicts=verdicts)
             user_prompt = build_user_prompt(snapshot)

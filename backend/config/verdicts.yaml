@@ -41,3 +41,12 @@ risk_share:
     - { max_years: 5, max_share: 0.30 }
     - { max_years: 8, max_share: 0.60 }
     - { max_years: null, max_share: 1.00 }
+
+savings_rate:
+  # Taux d'épargne = versements mensuels / revenu mensuel (RFR N-2 / 12).
+  # Levier n° 1 de l'étude (§1.1) : à 20 ans, 58 % du capital final vient des versements.
+  target: 0.15          # cible : 15 % du revenu (Épargnant 3.0, Bogleheads : 10 à 20 %)
+  amber_min: 0.05       # en dessous de 5 % : rouge ; entre 5 et 15 % : orange
+  escalation: 0.05      # « Save More Tomorrow » : +5 % du versement chaque année (Thaler-Benartzi)
+  growth_for_20y: 0.05  # rendement nominal utilisé pour dire ce que l'écart vaut à 20 ans
+  horizon_years: 20

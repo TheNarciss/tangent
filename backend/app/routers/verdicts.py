@@ -26,4 +26,5 @@ async def read_verdicts(
     """
     profile = await profile_repo.get_or_create(session, user.id)
     spending = await tx_repo.monthly_outflow(session, user.id)
-    return verdicts.compute_all(wealth, profile, monthly_spending=spending)
+    saved = await tx_repo.monthly_inflow_to_savings(session, user.id)
+    return verdicts.compute_all(wealth, profile, monthly_spending=spending, monthly_saved=saved)
