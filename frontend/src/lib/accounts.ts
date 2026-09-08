@@ -8,13 +8,7 @@
 import type { BankAccountResponse, BankAccountType } from "@/api";
 
 export type AccountGroup =
-  | "cash"
-  | "savings"
-  | "invest"
-  | "retirement"
-  | "employee"
-  | "loan"
-  | "other";
+  "cash" | "savings" | "invest" | "retirement" | "employee" | "loan" | "other";
 
 export const GROUP_ORDER: AccountGroup[] = [
   "cash",

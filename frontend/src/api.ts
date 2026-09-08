@@ -152,10 +152,7 @@ export class ApiError extends Error {
 }
 
 export type OptimizerObjective =
-  | "max_sharpe"
-  | "min_variance"
-  | "target_volatility"
-  | "from_strategy";
+  "max_sharpe" | "min_variance" | "target_volatility" | "from_strategy";
 
 export interface PortfolioPoint {
   weights: number[];
