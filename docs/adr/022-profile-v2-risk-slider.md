@@ -49,3 +49,7 @@ Scanner. Cf. `docs/ETAT_DES_LIEUX_2026-09.md` §5.5.
   métier hors de `backend/config/` où vivent brokers, enveloppes et CMA.
 - **Garder rendement cible / volatilité max en champs libres** : c'est le
   jargon qu'on retire ; un cran = un choix, pas deux nombres.
+
+## Révision 2026-09
+
+Les cinq paires (rendement visé, volatilité max) sont réalignées sur une droite de marché unique (r_f 2,5 %, actions monde 7 % à 15 % de volatilité) : 4 %/5 %, 5 %/8 %, 6 %/12 %, 7 %/16 %, 7,5 %/20 %. Les anciennes valeurs (3 %/5 % … 11 %/22 %) n'étaient sur aucune frontière : le cran 1 faisait moins que le LEP et les crans 4 et 5 étaient inatteignables avec les hypothèses de `cma.yaml`, ce qui faisait échouer l'objectif « selon ton profil ». Voir `docs/ETUDE_METHODE_FINANCIERE_2026-09.md` §3.1, défaut 5.

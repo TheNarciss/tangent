@@ -2,11 +2,13 @@
 # Chaque cran fixe les deux contraintes lues par l'optimiseur (objectif
 # « selon mon profil ») et par le briefing IA : rendement annuel visé et
 # volatilité annuelle maximale, en fractions (0.07 = 7 %/an).
-# Le cran 3 reprend les anciennes valeurs par défaut (7 % / 12 %).
+# Paires alignées sur une droite de marché unique (r_f 2,5 %, actions monde
+# 7 % à 15 % de volatilité, Sharpe ≈ 0,3) : chaque cran est atteignable avec
+# les hypothèses de cma.yaml, et le cran 1 bat le Livret A. Revu 2026-09.
 levels:
   - level: 1
     label: "Prudent"
-    target_annual_return: 0.03
+    target_annual_return: 0.04
     max_annual_volatility: 0.05
   - level: 2
     label: "Plutôt prudent"
@@ -14,13 +16,13 @@ levels:
     max_annual_volatility: 0.08
   - level: 3
     label: "Équilibré"
-    target_annual_return: 0.07
+    target_annual_return: 0.06
     max_annual_volatility: 0.12
   - level: 4
     label: "Dynamique"
-    target_annual_return: 0.09
+    target_annual_return: 0.07
     max_annual_volatility: 0.16
   - level: 5
     label: "Très dynamique"
-    target_annual_return: 0.11
-    max_annual_volatility: 0.22
+    target_annual_return: 0.075
+    max_annual_volatility: 0.20
