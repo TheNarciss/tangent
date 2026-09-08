@@ -37,7 +37,8 @@ export interface UserProfile {
   risk_level: number;
   target_annual_return: number; // raw %, e.g. 7 = 7 %
   max_annual_volatility: number; // raw %, e.g. 12 = 12 %
-  horizon_years: number; // 1–50, not asked any more (kept for the briefing)
+  horizon_years: number; // 1–50, set from the Projection page (goal date)
+  goal_amount: number | null; // € d'aujourd'hui, set from the Projection page
   ceilings_used: CeilingsUsed;
   default_broker: string | null; // null = auto-detected at sync
   auto_review_enabled: boolean; // opt-in to nightly LLM portfolio review (ADR-018)
@@ -54,6 +55,7 @@ export const EMPTY_PROFILE: UserProfile = {
   target_annual_return: 7,
   max_annual_volatility: 12,
   horizon_years: 10,
+  goal_amount: null,
   ceilings_used: { livret_a: 0, livret_a_jeune: 0, ldds: 0, lep: 0, pel: 0 },
   default_broker: null,
   auto_review_enabled: false,

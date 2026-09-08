@@ -32,6 +32,7 @@ class ProfileIn(BaseModel):
     max_annual_volatility: float | None = Field(default=None, ge=0, le=1)
     monthly_dca: float | None = Field(default=None, ge=0)
     horizon_years: int | None = Field(default=None, ge=1, le=80)
+    goal_amount: float | None = Field(default=None, ge=0)
     default_broker: str | None = Field(default=None, max_length=50)
     ceilings_used: dict[str, Any] | None = None
     auto_review_enabled: bool | None = None
@@ -53,6 +54,7 @@ def _to_out(prof) -> ProfileOut:
         max_annual_volatility=prof.max_annual_volatility,
         monthly_dca=prof.monthly_dca,
         horizon_years=prof.horizon_years,
+        goal_amount=prof.goal_amount,
         default_broker=prof.default_broker,
         ceilings_used=prof.ceilings_used or {},
         auto_review_enabled=prof.auto_review_enabled,

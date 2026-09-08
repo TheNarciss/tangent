@@ -88,6 +88,7 @@ class Profile(Base):
     max_annual_volatility: Mapped[float | None] = mapped_column(Float, default=None)  # fraction
     monthly_dca: Mapped[float | None] = mapped_column(Float, default=None)  # €/mois
     horizon_years: Mapped[int | None] = mapped_column(Integer, default=None)
+    goal_amount: Mapped[float | None] = mapped_column(Float, default=None)  # € d'aujourd'hui
     default_broker: Mapped[str | None] = mapped_column(String(50), default=None)
 
     # Ceilings utilisés par enveloppe — stocké en JSONB pour flexibilité
