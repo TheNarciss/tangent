@@ -59,3 +59,10 @@ goal:
   risk_free: 0.025           # analytics.RISK_FREE ; le rendement attendu suit la part d'actions (risk_share)
   n_paths: 2000
   seed: 7
+
+retirement:
+  # Taux de retrait initial soutenable pour convertir « un revenu à vie » en capital.
+  # 4 % (Bengen 1994, États-Unis) échoue dans plus de la moitié des cohortes françaises
+  # (Pfau 2010) ; pour un portefeuille monde vu d'Europe : 3,5 % (ERN « le nouveau 4 % »,
+  # Pfau monde 3,58 %), sans garde-fous dynamiques pour l'instant. Étude §1.4.
+  withdrawal_rate: 0.035

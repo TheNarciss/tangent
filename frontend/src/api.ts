@@ -1238,3 +1238,17 @@ export interface GoalVerdictDetails {
   inflation?: number;
   n_paths?: number;
 }
+
+export interface WithdrawalRateResponse {
+  withdrawal_rate: number; // fraction, e.g. 0.035
+  note: string;
+}
+
+/** The app's one sustainable withdrawal rate (config/verdicts.yaml). */
+export function useWithdrawalRate() {
+  return useQuery({
+    queryKey: ["withdrawal-rate"],
+    queryFn: () => http<WithdrawalRateResponse>("/withdrawal-rate"),
+    staleTime: Infinity,
+  });
+}

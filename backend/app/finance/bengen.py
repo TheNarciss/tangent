@@ -1,11 +1,12 @@
-"""Bengen 4 % rule — capital nécessaire pour un revenu mensuel soutenable,
+"""Taux de retrait soutenable — capital nécessaire pour un revenu mensuel à vie,
 et projection inverse pour estimer le temps requis.
 
-Bengen (1994) : sur 30 ans glissants depuis 1926, retirer 4 % du capital initial
-ajusté inflation chaque année n'a jamais épuisé un portefeuille 60/40. C'est
-devenu la règle de pouce de référence pour les revenus passifs durables.
+Bengen (1994) trouvait 4 % sur les États-Unis 1926-1992 ; sur l'histoire
+française, 4 % échoue dans plus de la moitié des cohortes (Pfau 2010). Le taux
+par défaut vient de `config/verdicts.yaml` (`retirement.withdrawal_rate`),
+3,5 % pour un portefeuille monde vu d'Europe (étude §1.4).
 
-Notre implémentation simplifiée : capital = revenu_annuel / taux_retrait.
+Implémentation simplifiée : capital = revenu_annuel / taux_retrait.
 """
 
 import logging
@@ -13,16 +14,23 @@ import math
 
 from pydantic import BaseModel, Field
 
+from . import verdicts as _verdicts
+
 logger = logging.getLogger(__name__)
+
+
+def default_withdrawal_rate() -> float:
+    """The sustainable initial withdrawal rate, versioned in verdicts.yaml."""
+    return _verdicts.config().retirement.withdrawal_rate
 
 
 class BengenRequest(BaseModel):
     target_monthly_income: float = Field(ge=0, description="€/mois passifs visés")
     withdrawal_rate: float = Field(
-        default=0.04,
+        default_factory=default_withdrawal_rate,
         ge=0.001,
         le=0.10,
-        description="Taux de retrait annuel soutenable (Bengen=4 %)",
+        description="Taux de retrait annuel soutenable (verdicts.yaml, 3,5 %)",
     )
     current_capital: float = Field(default=0, ge=0)
     monthly_dca: float = Field(default=0, ge=0)
@@ -61,7 +69,7 @@ def compute(req: BengenRequest) -> BengenResponse:
         months = round(years * 12)
         rationale = (
             f"Pour {req.target_monthly_income:.0f} €/mois passifs ({yearly_income:.0f} €/an) "
-            f"au taux Bengen {req.withdrawal_rate * 100:.1f} %, il te faut {capital_needed:,.0f} €. "
+            f"au taux de retrait {req.withdrawal_rate * 100:.1f} %, il te faut {capital_needed:,.0f} €. "
             f"Avec capital actuel {req.current_capital:,.0f} € + DCA {req.monthly_dca:.0f} €/mois "
             f"@ μ {req.expected_return * 100:.1f} % : atteint en {years:.1f} ans."
         )

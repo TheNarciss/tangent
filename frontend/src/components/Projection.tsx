@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { ApiError, useBrokers, useProjection, type ProjectionResponse } from "@/api";
+import {
+  ApiError,
+  useBrokers,
+  useProjection,
+  useWithdrawalRate,
+  type ProjectionResponse,
+} from "@/api";
 import { useDebouncedValue } from "@/lib/hooks";
 import { fmt } from "@/lib/format";
 import { useProfile } from "@/lib/profile";
@@ -18,8 +24,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-/** Bengen rule: a monthly income target becomes a capital goal at 4 %/an. */
-const WITHDRAWAL_RATE = 0.04;
+/** Fallback while GET /withdrawal-rate loads; the backend value wins (config/verdicts.yaml). */
+const WITHDRAWAL_RATE_FALLBACK = 0.035;
 const MONTHLY_MAX = 2000;
 
 /**
@@ -46,7 +52,9 @@ export function Projection() {
     if (profile.goal_amount) setGoalCapital(profile.goal_amount);
   }, [profile]);
 
-  const goal = goalMode === "income" ? (income * 12) / WITHDRAWAL_RATE : goalCapital || 0;
+  const withdrawal = useWithdrawalRate();
+  const withdrawalRate = withdrawal.data?.withdrawal_rate ?? WITHDRAWAL_RATE_FALLBACK;
+  const goal = goalMode === "income" ? (income * 12) / withdrawalRate : goalCapital || 0;
   const dMonthly = useDebouncedValue(monthly, 350);
   const dYears = useDebouncedValue(years, 350);
   const dGoal = useDebouncedValue(goal, 350);
@@ -148,6 +156,7 @@ export function Projection() {
               touched.current = true;
               setIncome(v);
             }}
+            withdrawalRate={withdrawalRate}
           />
         </div>
       </section>
@@ -359,6 +368,7 @@ function GoalField({
   onCapitalChange,
   income,
   onIncomeChange,
+  withdrawalRate,
 }: {
   mode: "capital" | "income";
   onModeChange: (m: "capital" | "income") => void;
@@ -366,6 +376,7 @@ function GoalField({
   onCapitalChange: (v: number | "") => void;
   income: number;
   onIncomeChange: (v: number) => void;
+  withdrawalRate: number;
 }) {
   return (
     <div className="space-y-1.5 sm:col-span-2">
@@ -401,9 +412,10 @@ function GoalField({
             className="font-mono tabular sm:max-w-xs"
           />
           <p className="text-[11px] text-muted-foreground">
-            Il faut environ {fmt.approxEur((income * 12) / WITHDRAWAL_RATE)} de capital pour en
-            retirer {fmt.eur(income).replace(",00", "")} par mois sans l'épuiser (règle des 4 % par
-            an).
+            Il faut environ {fmt.approxEur((income * 12) / withdrawalRate)} de capital pour en
+            retirer {fmt.eur(income).replace(",00", "")} par mois sans l'épuiser, en retirant{" "}
+            {(withdrawalRate * 100).toFixed(1).replace(".", ",")} % par an : la règle américaine des
+            4 % ne tient pas sur l'histoire européenne.
           </p>
         </div>
       )}

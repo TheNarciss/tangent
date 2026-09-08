@@ -82,12 +82,17 @@ class GoalThresholds(BaseModel):
     seed: int = 0
 
 
+class RetirementThresholds(BaseModel):
+    withdrawal_rate: float = Field(gt=0, le=0.1)
+
+
 class VerdictsConfig(BaseModel):
     fees: FeesThresholds
     next_euro: NextEuroThresholds
     risk_share: RiskShareThresholds
     savings_rate: SavingsRateThresholds
     goal: GoalThresholds
+    retirement: RetirementThresholds
 
 
 def _load_config() -> VerdictsConfig:
