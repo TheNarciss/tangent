@@ -31,7 +31,7 @@ def _make_wealth() -> Wealth:
                 balance=8000.0,
                 envelope_type="livret_a",
                 display_name="Livret A",
-                rate_pct=3.0,
+                rate_pct=0.03,  # fraction, as in envelopes.yaml
                 ceiling_eur=22950.0,
                 tax_status="net",
             ),
@@ -60,7 +60,7 @@ def _make_wealth() -> Wealth:
                 institution_name="BNP Paribas",
                 name="Prêt étudiant",
                 outstanding_balance=15000.0,
-                interest_rate_pct=1.5,
+                interest_rate_pct=0.015,  # fraction, as built in deps.py
                 monthly_payment=200.0,
                 maturity_date=date(2030, 6, 1),
             ),
@@ -73,8 +73,8 @@ def _make_profile() -> Profile:
     p.birth_date = date(2002, 6, 15)
     p.fiscal_shares = 1.0
     p.rfr_n_minus_2 = 18000.0
-    p.target_annual_return = 7.0
-    p.max_annual_volatility = 15.0
+    p.target_annual_return = 0.07  # fraction, as stored in DB
+    p.max_annual_volatility = 0.15
     p.horizon_years = 30
     p.default_broker = "bnp"
     return p
@@ -227,3 +227,17 @@ def test_user_prompt_has_no_markowitz_block():
     prompt = prompt_builder.build_user_prompt(snap)
     assert "Markowitz" not in prompt
     assert "μ=" not in prompt
+
+
+def test_snapshot_and_prompt_render_fractions_as_percents():
+    """DB, envelopes.yaml and Powens loans carry fractions; the model must read percents."""
+    snap = prompt_builder.build_anonymized_snapshot(_make_wealth(), _make_profile())
+    assert snap["profile"]["target_annual_return_pct"] == 7.0
+    assert snap["profile"]["max_annual_volatility_pct"] == 15.0
+    assert snap["envelopes"][0]["rate_pct"] == 3.0
+    assert snap["loans"][0]["interest_rate_pct"] == 1.5
+    prompt = prompt_builder.build_user_prompt(snap)
+    assert "Objectif rendement annuel : 7.0 %" in prompt
+    assert "Tolérance volatilité annuelle : 15.0 %" in prompt
+    assert "taux 3.00 %" in prompt
+    assert "1.50 %" in prompt

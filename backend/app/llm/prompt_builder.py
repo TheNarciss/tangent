@@ -65,6 +65,11 @@ def _age_from(birth_date: date | None) -> int | None:
     )
 
 
+def _pct(fraction: float | None) -> float | None:
+    """Domain rates are fractions (0.07 = 7 %); the snapshot keys are named ``*_pct``."""
+    return None if fraction is None else round(fraction * 100, 2)
+
+
 def build_anonymized_snapshot(
     wealth: Wealth,
     profile: Profile,
@@ -82,8 +87,8 @@ def build_anonymized_snapshot(
             "risk_level": getattr(profile, "risk_level", None),
             "fiscal_shares": profile.fiscal_shares,
             "rfr_n_minus_2_eur": profile.rfr_n_minus_2,
-            "target_annual_return_pct": profile.target_annual_return,
-            "max_annual_volatility_pct": profile.max_annual_volatility,
+            "target_annual_return_pct": _pct(profile.target_annual_return),
+            "max_annual_volatility_pct": _pct(profile.max_annual_volatility),
             "horizon_years": profile.horizon_years,
             "default_broker": profile.default_broker,
         },
@@ -97,7 +102,7 @@ def build_anonymized_snapshot(
                 "type": e.envelope_type,
                 "display_name": e.display_name,
                 "balance_eur": round(e.balance, 2),
-                "rate_pct": e.rate_pct,
+                "rate_pct": _pct(e.rate_pct),
                 "ceiling_eur": e.ceiling_eur,
                 "headroom_eur": e.headroom_eur,
                 "tax_status": e.tax_status,
@@ -129,7 +134,7 @@ def build_anonymized_snapshot(
         "loans": [
             {
                 "outstanding_eur": round(loan.outstanding_balance, 2),
-                "interest_rate_pct": loan.interest_rate_pct,
+                "interest_rate_pct": _pct(loan.interest_rate_pct),
                 "monthly_payment_eur": loan.monthly_payment,
                 "next_payment_date": (
                     loan.next_payment_date.isoformat() if loan.next_payment_date else None
