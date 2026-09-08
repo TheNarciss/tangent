@@ -29,11 +29,11 @@ const MONTHLY_MAX = 2000;
  * The maths (Monte-Carlo, quantiles, fee model) sit behind « Comment c'est calculé ? ».
  */
 export function Projection() {
-  const [profile] = useProfile();
+  const [profile, setProfile] = useProfile();
   const [monthly, setMonthly] = useState(profile?.monthly_dca ?? 200);
   const [years, setYears] = useState(profile?.horizon_years ?? 10);
   const [goalMode, setGoalMode] = useState<"capital" | "income">("capital");
-  const [goalCapital, setGoalCapital] = useState<number | "">(25000);
+  const [goalCapital, setGoalCapital] = useState<number | "">(profile?.goal_amount ?? 25000);
   const [income, setIncome] = useState(500);
   const [broker, setBroker] = useState<string | undefined>(undefined);
   const touched = useRef(false);
@@ -43,12 +43,22 @@ export function Projection() {
     if (touched.current || !profile) return;
     setMonthly(profile.monthly_dca);
     setYears(profile.horizon_years);
+    if (profile.goal_amount) setGoalCapital(profile.goal_amount);
   }, [profile]);
 
   const goal = goalMode === "income" ? (income * 12) / WITHDRAWAL_RATE : goalCapital || 0;
   const dMonthly = useDebouncedValue(monthly, 350);
   const dYears = useDebouncedValue(years, 350);
   const dGoal = useDebouncedValue(goal, 350);
+
+  // The goal and its date are the profile's: the « épargne pour ton objectif »
+  // verdict reads them. The monthly slider stays a « et si… », never saved.
+  useEffect(() => {
+    if (!profile || !touched.current) return;
+    const nextGoal = dGoal > 0 ? Math.round(dGoal) : null;
+    if (profile.goal_amount === nextGoal && profile.horizon_years === dYears) return;
+    setProfile({ ...profile, goal_amount: nextGoal, horizon_years: dYears });
+  }, [dGoal, dYears, profile, setProfile]);
 
   const brokers = useBrokers();
   const q = useProjection(dMonthly, dYears, dGoal || undefined, broker);
@@ -74,6 +84,7 @@ export function Projection() {
   return (
     <div className="space-y-6">
       <VerdictLine id="savings_rate" to={NAV_PATHS.method} />
+      <VerdictLine id="goal" to={NAV_PATHS.method} />
       <section className="rounded-xl border bg-card p-4 md:p-6">
         <h2 className="text-base font-semibold">
           Si je continue à verser{" "}
@@ -123,11 +134,20 @@ export function Projection() {
           />
           <GoalField
             mode={goalMode}
-            onModeChange={setGoalMode}
+            onModeChange={(m) => {
+              touched.current = true;
+              setGoalMode(m);
+            }}
             capital={goalCapital}
-            onCapitalChange={setGoalCapital}
+            onCapitalChange={(v) => {
+              touched.current = true;
+              setGoalCapital(v);
+            }}
             income={income}
-            onIncomeChange={setIncome}
+            onIncomeChange={(v) => {
+              touched.current = true;
+              setIncome(v);
+            }}
           />
         </div>
       </section>

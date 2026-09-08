@@ -263,7 +263,13 @@ def test_incomplete_profile_asks_for_it():
 
 def test_compute_all_orders_next_euro_first():
     resp = verdicts.compute_all(_wealth2(accounts=[_acc("pea", 1000.0)]), _profile(), 1000.0)
-    assert [v.id for v in resp.verdicts] == ["savings_rate", "next_euro", "risk_share", "fees"]
+    assert [v.id for v in resp.verdicts] == [
+        "savings_rate",
+        "goal",
+        "next_euro",
+        "risk_share",
+        "fees",
+    ]
 
 
 # ── « Part d'actions » ─────────────────────────────────────────────────────
@@ -405,3 +411,62 @@ def test_under_five_percent_is_red_with_horizon_gap():
     gap = verdicts.future_value_of_monthly(450.0 - 50.0, 0.05, 20)
     assert v.details["gap_at_horizon_eur"] == pytest.approx(gap)
     assert "dans 20 ans" in v.headline
+
+
+# ── « Épargne pour ton objectif » ──────────────────────────────────────────
+
+import numpy as np  # noqa: E402
+
+GOAL = verdicts.GoalThresholds(
+    target_probability=0.75,
+    amber_probability=0.5,
+    inflation=0.02,
+    risk_free=0.025,
+    n_paths=500,
+    seed=1,
+)
+
+
+def test_goal_paths_match_the_closed_form_without_risk():
+    shocks = np.zeros((10, 24))
+    terminal = verdicts.goal_paths(1000.0, 100.0, 24, 0.0, 0.0, shocks)
+    assert np.allclose(terminal, 1000.0 + 24 * 100.0)
+
+
+def test_required_monthly_reaches_the_target_probability():
+    rng = np.random.default_rng(0)
+    shocks = rng.standard_normal((500, 120))
+    req = verdicts.required_monthly_for(50_000.0, 5_000.0, 120, 0.03, 0.10, shocks, 0.75)
+    p = float(np.mean(verdicts.goal_paths(5_000.0, req, 120, 0.03, 0.10, shocks) >= 50_000.0))
+    assert p >= 0.75
+    p_below = float(
+        np.mean(verdicts.goal_paths(5_000.0, req * 0.9, 120, 0.03, 0.10, shocks) >= 50_000.0)
+    )
+    assert p_below < p
+
+
+def test_no_goal_is_unknown():
+    v = verdicts.goal_verdict(_wealth2(), _profile(), None, GOAL, RISK)
+    assert v.status == "unknown"
+
+
+def test_easy_goal_is_green():
+    p = _profile(dca=300)
+    p.goal_amount = 10_000.0
+    p.horizon_years = 10
+    p.risk_level = 3
+    v = verdicts.goal_verdict(_wealth2(accounts=[_acc("pea", 5_000.0)]), p, None, GOAL, RISK)
+    assert v.status == "green"
+    assert v.details["probability"] >= 0.75
+    assert v.details["mu_real"] == pytest.approx(0.025 + 0.8 * 0.045 - 0.02)
+
+
+def test_hard_goal_is_red_with_required_monthly():
+    p = _profile(dca=50)
+    p.goal_amount = 200_000.0
+    p.horizon_years = 10
+    p.risk_level = 3
+    v = verdicts.goal_verdict(_wealth2(accounts=[_acc("pea", 5_000.0)]), p, None, GOAL, RISK)
+    assert v.status == "red"
+    assert v.details["required_monthly_eur"] > 1_000
+    assert v.action is not None and "Monte ton versement" in v.action

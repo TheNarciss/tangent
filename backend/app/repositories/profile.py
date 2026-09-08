@@ -41,6 +41,7 @@ async def update(session: AsyncSession, user_id: uuid.UUID, updates: dict) -> Pr
         "max_annual_volatility",
         "monthly_dca",
         "horizon_years",
+        "goal_amount",
         "default_broker",
         "ceilings_used",
         "auto_review_enabled",

@@ -50,3 +50,12 @@ savings_rate:
   escalation: 0.05      # « Save More Tomorrow » : +5 % du versement chaque année (Thaler-Benartzi)
   growth_for_20y: 0.05  # rendement nominal utilisé pour dire ce que l'écart vaut à 20 ans
   horizon_years: 20
+
+goal:
+  # « Combien épargner pour ton objectif » : problème inverse de la projection (étude §7.1, §8.1 point 7).
+  target_probability: 0.75   # on vise 3 chances sur 4 (Brunel : besoins 90 %, envies 80 %, souhaits 65-75 %)
+  amber_probability: 0.50    # en dessous d'une chance sur deux : rouge
+  inflation: 0.02            # simulation en euros d'aujourd'hui : rendement nominal − 2 %/an
+  risk_free: 0.025           # analytics.RISK_FREE ; le rendement attendu suit la part d'actions (risk_share)
+  n_paths: 2000
+  seed: 7

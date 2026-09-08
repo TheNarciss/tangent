@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import {
   useVerdicts,
   type FeesVerdictDetails,
+  type GoalVerdictDetails,
   type NextEuroVerdictDetails,
   type RiskShareVerdictDetails,
   type SavingsRateVerdictDetails,
@@ -58,6 +59,8 @@ export function Methode() {
             <RiskShareDetails details={v.details as RiskShareVerdictDetails} />
           ) : v.id === "savings_rate" ? (
             <SavingsRateDetails details={v.details as SavingsRateVerdictDetails} />
+          ) : v.id === "goal" ? (
+            <GoalDetails details={v.details as GoalVerdictDetails} />
           ) : (
             <GenericDetails verdict={v} />
           )}
@@ -66,6 +69,80 @@ export function Methode() {
       <p className="text-xs text-muted-foreground">
         Prochains verdicts : où placer le prochain euro (enveloppes et impôt), part d'actions selon
         ton profil, rééquilibrage, épargne nécessaire pour ton objectif.
+      </p>
+    </div>
+  );
+}
+
+/* ── Épargne pour ton objectif ─────────────────────────────────────────── */
+
+function GoalDetails({ details: d }: { details: GoalVerdictDetails }) {
+  if (d.probability === undefined || d.goal_eur === undefined) return null;
+  const p = d.probability;
+  const target = d.target_probability ?? 0.75;
+  const amber = d.amber_probability ?? 0.5;
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Figure
+          label="Objectif"
+          value={fmt.eur0(d.goal_eur)}
+          sub={`dans ${d.horizon_years ?? 10} ans, en euros d'aujourd'hui`}
+        />
+        <Figure
+          label="Point de départ"
+          value={fmt.eur0(d.initial_eur ?? 0)}
+          sub={`+ ${fmt.eur0(d.monthly_used_eur ?? 0)} par mois (${
+            d.monthly_source === "observed" ? "virements observés" : "versement déclaré"
+          })`}
+        />
+        <Figure
+          label="Pour 3 chances sur 4"
+          value={`${fmt.eur0(d.required_monthly_eur ?? 0)}/mois`}
+          sub={
+            d.extra_monthly_eur && d.extra_monthly_eur > 0
+              ? `soit ${fmt.eur0(d.extra_monthly_eur)} de plus qu'aujourd'hui`
+              : "tu y es déjà"
+          }
+        />
+      </div>
+
+      {/* Probability gauge with the two thresholds. */}
+      <div>
+        <div className="relative h-3 overflow-hidden rounded-full bg-muted">
+          <div
+            className="absolute inset-y-0 left-0 bg-[hsl(var(--loss))]/25"
+            style={{ width: `${amber * 100}%` }}
+          />
+          <div
+            className="absolute inset-y-0 bg-amber-500/25"
+            style={{ left: `${amber * 100}%`, width: `${(target - amber) * 100}%` }}
+          />
+          <div
+            className="absolute inset-y-0 bg-[hsl(var(--gain))]/25"
+            style={{ left: `${target * 100}%`, right: 0 }}
+          />
+          <div
+            className="absolute inset-y-0 w-1 rounded-full bg-primary"
+            style={{ left: `calc(${p * 100}% - 2px)` }}
+          />
+        </div>
+        <div className="mt-1 flex justify-between text-xs text-muted-foreground">
+          <span>0 %</span>
+          <span>
+            {fmt.pct0(p)} de chances · cible {fmt.pct0(target)}
+          </span>
+          <span>100 %</span>
+        </div>
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        Dans {d.horizon_years ?? 10} ans, 1 fois sur 10 tu auras moins de {fmt.eur0(d.p10_eur ?? 0)}
+        , la moitié du temps plus de {fmt.eur0(d.p50_eur ?? 0)}, 1 fois sur 10 plus de{" "}
+        {fmt.eur0(d.p90_eur ?? 0)}. Simulation de {d.n_paths ?? 2000} trajectoires avec{" "}
+        {fmt.pct0(d.equity_share ?? 0)} d'actions (ton profil), {fmt.pct(d.mu_real ?? 0)} de
+        rendement réel par an après {fmt.pct0(d.inflation ?? 0.02)} d'inflation, volatilité{" "}
+        {fmt.pct0(d.sigma ?? 0)}.
       </p>
     </div>
   );

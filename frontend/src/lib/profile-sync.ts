@@ -29,6 +29,7 @@ interface BackendProfileDTO {
   max_annual_volatility?: number | null; // fraction
   monthly_dca?: number | null;
   horizon_years?: number | null;
+  goal_amount?: number | null;
   default_broker?: string | null;
   ceilings_used?: Record<string, number> | null;
   auto_review_enabled?: boolean | null;
@@ -44,6 +45,7 @@ function toBackendDTO(p: UserProfile): BackendProfileDTO {
     risk_level: p.risk_level,
     monthly_dca: p.monthly_dca,
     horizon_years: p.horizon_years,
+    goal_amount: p.goal_amount,
     // Only sent when the user picked one; otherwise the backend keeps the
     // broker it auto-detected at sync time (undefined → omitted from JSON).
     default_broker: p.default_broker ?? undefined,
@@ -65,6 +67,7 @@ function fromBackendDTO(dto: BackendProfileDTO): Partial<UserProfile> {
   if (dto.max_annual_volatility != null)
     out.max_annual_volatility = dto.max_annual_volatility * 100;
   if (dto.horizon_years != null) out.horizon_years = dto.horizon_years;
+  if (dto.goal_amount !== undefined) out.goal_amount = dto.goal_amount;
   if (dto.default_broker != null) out.default_broker = dto.default_broker;
   if (dto.ceilings_used && Object.keys(dto.ceilings_used).length > 0)
     out.ceilings_used = dto.ceilings_used as unknown as UserProfile["ceilings_used"];

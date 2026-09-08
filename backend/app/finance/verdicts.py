@@ -13,6 +13,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import yaml
 from pydantic import BaseModel, Field
 
@@ -72,11 +73,21 @@ class SavingsRateThresholds(BaseModel):
     horizon_years: int = Field(gt=0)
 
 
+class GoalThresholds(BaseModel):
+    target_probability: float = Field(gt=0, lt=1)
+    amber_probability: float = Field(gt=0, lt=1)
+    inflation: float = Field(ge=0)
+    risk_free: float = Field(ge=0)
+    n_paths: int = Field(gt=0)
+    seed: int = 0
+
+
 class VerdictsConfig(BaseModel):
     fees: FeesThresholds
     next_euro: NextEuroThresholds
     risk_share: RiskShareThresholds
     savings_rate: SavingsRateThresholds
+    goal: GoalThresholds
 
 
 def _load_config() -> VerdictsConfig:
@@ -865,6 +876,164 @@ def savings_rate_verdict(
     )
 
 
+def goal_paths(
+    initial: float,
+    monthly: float,
+    months: int,
+    mu_annual: float,
+    sigma_annual: float,
+    shocks: np.ndarray,
+) -> np.ndarray:
+    """Terminal values of `shocks.shape[0]` paths: lognormal monthly returns
+    with arithmetic mean (1 + μ)^(1/12), a contribution at the end of each month.
+    `shocks` is a (n_paths, months) matrix of standard normals, shared between
+    calls so the required contribution is found on the same draws."""
+    sigma_m = sigma_annual / np.sqrt(12.0)
+    drift_m = np.log1p(mu_annual) / 12.0 - sigma_m**2 / 2.0
+    value = np.full(shocks.shape[0], float(initial))
+    for t in range(months):
+        value = value * np.exp(drift_m + sigma_m * shocks[:, t]) + monthly
+    return value
+
+
+def required_monthly_for(
+    goal: float,
+    initial: float,
+    months: int,
+    mu_annual: float,
+    sigma_annual: float,
+    shocks: np.ndarray,
+    target_probability: float,
+) -> float:
+    """Smallest monthly contribution whose success probability reaches the
+    target, by bisection on common random numbers (the probability is
+    monotone in the contribution on a fixed set of draws)."""
+
+    def prob(m: float) -> float:
+        return float(
+            np.mean(goal_paths(initial, m, months, mu_annual, sigma_annual, shocks) >= goal)
+        )
+
+    lo, hi = 0.0, 100.0
+    if prob(lo) >= target_probability:
+        return 0.0
+    while prob(hi) < target_probability and hi < 1e6:
+        hi *= 2
+    for _ in range(20):
+        mid = (lo + hi) / 2
+        if prob(mid) >= target_probability:
+            hi = mid
+        else:
+            lo = mid
+    return hi
+
+
+def goal_verdict(
+    wealth: Wealth,
+    profile: Profile,
+    monthly_saved: float | None,
+    thresholds: GoalThresholds | None = None,
+    risk_thresholds: RiskShareThresholds | None = None,
+) -> Verdict:
+    """« Combien épargner pour ton objectif » : the inverse problem of the
+    projection (étude §7.1, §8.1 point 7). The goal is in today's euros, so
+    the simulation runs on real returns; the expected return follows the
+    equity share the profile targets (same market line as `risk_share`).
+    The answer is not a probability but the monthly saving that brings the
+    goal to the target probability."""
+    cfg = thresholds or config().goal
+    rcfg = risk_thresholds or config().risk_share
+    title = "Épargne pour ton objectif"
+    goal = profile.goal_amount
+    if not goal or goal <= 0:
+        return Verdict(
+            id="goal",
+            title=title,
+            status="unknown",
+            headline=(
+                "Tu n'as pas fixé d'objectif : donne une somme et une échéance dans Projection "
+                "et la méthode te dira combien épargner chaque mois."
+            ),
+            action="Fixe ton objectif dans Projection (« Mon objectif »).",
+        )
+    years = profile.horizon_years if profile.horizon_years else 10
+    months = int(years * 12)
+    monthly = monthly_saved if monthly_saved is not None else float(profile.monthly_dca or 0.0)
+    initial = wealth.investments_total + wealth.pea_cash_total
+
+    level = profile.risk_level
+    if level is not None:
+        share = merton_share(risk_profile.resolve(level).max_annual_volatility, rcfg.equity_sigma)
+    else:
+        share = 0.5
+    mu_nominal = cfg.risk_free + share * rcfg.equity_premium
+    mu_real = mu_nominal - cfg.inflation
+    sigma = share * rcfg.equity_sigma
+
+    rng = np.random.default_rng(cfg.seed)
+    shocks = rng.standard_normal((cfg.n_paths, months))
+    terminal = goal_paths(initial, monthly, months, mu_real, sigma, shocks)
+    probability = float(np.mean(terminal >= goal))
+    p10, p50, p90 = (float(x) for x in np.percentile(terminal, [10, 50, 90]))
+    required = required_monthly_for(
+        goal, initial, months, mu_real, sigma, shocks, cfg.target_probability
+    )
+    extra = max(0.0, required - monthly)
+
+    details: dict[str, Any] = {
+        "goal_eur": goal,
+        "horizon_years": years,
+        "initial_eur": initial,
+        "monthly_used_eur": monthly,
+        "monthly_source": "observed" if monthly_saved is not None else "declared",
+        "probability": probability,
+        "target_probability": cfg.target_probability,
+        "amber_probability": cfg.amber_probability,
+        "required_monthly_eur": required,
+        "extra_monthly_eur": extra,
+        "p10_eur": p10,
+        "p50_eur": p50,
+        "p90_eur": p90,
+        "equity_share": share,
+        "mu_nominal": mu_nominal,
+        "mu_real": mu_real,
+        "sigma": sigma,
+        "inflation": cfg.inflation,
+        "n_paths": cfg.n_paths,
+    }
+    chances = f"{round(probability * 10):.0f} chances sur 10"
+    base = (
+        f"Avec {_eur(monthly)} par mois, tu as {chances} d'avoir {_eur(goal)} dans {years} ans, "
+        "en euros d'aujourd'hui"
+    )
+    if probability >= cfg.target_probability:
+        return Verdict(
+            id="goal",
+            title=title,
+            status="green",
+            headline=base + " : ton objectif est sur les rails.",
+            impact_eur_per_year=0.0,
+            action=(
+                f"Garde le rythme ; {_eur(required)} par mois suffiraient pour 3 chances sur 4."
+                if required < monthly
+                else None
+            ),
+            details=details,
+        )
+    return Verdict(
+        id="goal",
+        title=title,
+        status="amber" if probability >= cfg.amber_probability else "red",
+        headline=base + f" ; il faut {_eur(required)} par mois pour 3 chances sur 4.",
+        impact_eur_per_year=None,
+        action=(
+            f"Monte ton versement de {_eur(extra)} par mois, ou repousse l'échéance, "
+            "ou revois la somme visée."
+        ),
+        details=details,
+    )
+
+
 def compute_all(
     wealth: Wealth,
     profile: Profile,
@@ -885,6 +1054,7 @@ def compute_all(
     monthly = float(profile.monthly_dca or 0.0)
     verdicts = [
         savings_rate_verdict(profile, monthly_saved),
+        goal_verdict(wealth, profile, monthly_saved),
         next_euro_verdict(wealth, profile, monthly_spending),
         risk_share_verdict(wealth, profile),
         fees_verdict(wealth, broker_fees, monthly),

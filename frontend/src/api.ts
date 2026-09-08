@@ -1215,3 +1215,26 @@ export interface SavingsRateVerdictDetails {
   escalated_next_year_eur?: number;
   amber_min?: number;
 }
+
+/** `details` of the « épargne pour ton objectif » verdict (id "goal"). */
+export interface GoalVerdictDetails {
+  goal_eur?: number;
+  horizon_years?: number;
+  initial_eur?: number;
+  monthly_used_eur?: number;
+  monthly_source?: "observed" | "declared";
+  probability?: number;
+  target_probability?: number;
+  amber_probability?: number;
+  required_monthly_eur?: number;
+  extra_monthly_eur?: number;
+  p10_eur?: number;
+  p50_eur?: number;
+  p90_eur?: number;
+  equity_share?: number;
+  mu_nominal?: number;
+  mu_real?: number;
+  sigma?: number;
+  inflation?: number;
+  n_paths?: number;
+}
