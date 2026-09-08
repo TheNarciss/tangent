@@ -3,7 +3,7 @@
 Fee model applied per month inside the projection:
 
     fee_t = fixed_per_line_eur × n_lines / 12
-          + (custody_pct + rebates_pct) × portfolio_value_t / 12
+          + custody_pct × portfolio_value_t / 12
           + courtage_pct × monthly_contribution
 
 Loaded once at import time; reload by restarting the process (config rarely
@@ -28,7 +28,9 @@ class BrokerFees(BaseModel):
     name: str
     fixed_per_line_eur: float = Field(ge=0)
     custody_pct: float = Field(ge=0)
-    rebates_pct: float = Field(ge=0)
+    # Retrocessions the bank receives from fund managers: paid out of the fund's
+    # TER, never charged to the client. Kept as information, not a cost.
+    rebates_pct: float = Field(ge=0, default=0.0)
     courtage_pct: float = Field(ge=0)
 
 
@@ -94,7 +96,7 @@ def monthly_fee_fn(
     pays its own fees based on its own current value.
     """
     fixed_monthly = fees.fixed_per_line_eur * n_lines / 12.0
-    prop = (fees.custody_pct + fees.rebates_pct) / 12.0
+    prop = fees.custody_pct / 12.0
     courtage_monthly = fees.courtage_pct * monthly_contribution
 
     def fee_of(value: float) -> float:
