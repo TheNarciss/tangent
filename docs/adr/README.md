@@ -50,3 +50,4 @@ Template : [`TEMPLATE.md`](./TEMPLATE.md).
 
 - [ADR-021](021-universal-gap-filler.md) — Universal Gap-Filler for nullable provider fields
 - [ADR-022](022-profile-v2-risk-slider.md) — Profil v2 : cinq questions, curseur de risque en YAML, DB source de vérité
+- [ADR-023](023-verdicts.md) — Verdicts : un contrat unique du moteur vers l'écran simple, l'onglet Méthode et le briefing

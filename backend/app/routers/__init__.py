@@ -12,4 +12,5 @@ Routers:
 - envelopes    : POST /envelopes/eligible, GET /brokers
 - powens       : POST /sync/powens, GET /sync/status, POST /webhooks/powens
 - admin        : GET /admin/users (superuser only)
+- verdicts     : GET /verdicts (ADR-023)
 """

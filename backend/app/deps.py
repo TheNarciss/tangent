@@ -195,6 +195,7 @@ async def get_user_wealth(
                             avg_cost=float(h.unit_price),
                             current_value=float(h.current_value),
                             currency=h.currency or "EUR",
+                            ter=h.ter,
                         )
                         for h in holdings
                         if float(h.quantity) > 0

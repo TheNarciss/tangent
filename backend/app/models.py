@@ -1,6 +1,7 @@
 """Pydantic schemas used both as API contracts and domain models."""
 
 from datetime import date, datetime
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -89,7 +90,7 @@ class ProjectionResponse(BaseModel):
     cumulative_fees: list[float]  # cumulative fee impact at each month (€)
     multi_broker_warning: str | None = None
     # ADR-021: weighted average TER (Total Expense Ratio) applied as monthly fee
-    weighted_ter: float = 0.0  # ratio (0.0025 = 0.25%/an)
+    weighted_ter: float = 0.0  # ratio (0.0025 = 0.25%/an), shown, not simulated (ADR-023)
 
 
 class BrokerInfo(BaseModel):
@@ -317,6 +318,27 @@ class StrategyRequest(BaseModel):
 # Names prefixed with "Wealth" where they would clash with existing classes
 # (e.g. `Position` above, `Envelope` in finance/envelopes.py).
 #
+class Verdict(BaseModel):
+    """One conclusion of the method, ready to display (ADR-023).
+
+    The engine computes, the simple screens show `status` + `headline`, the
+    Méthode tab unfolds `details`, the briefing reads the same list.
+    """
+
+    id: str
+    title: str
+    status: Literal["green", "amber", "red", "unknown"]
+    headline: str
+    impact_eur_per_year: float | None = None
+    action: str | None = None
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
+class VerdictsResponse(BaseModel):
+    computed_at: datetime
+    verdicts: list[Verdict]
+
+
 # No DB equivalent — built on the fly by `deps.get_user_wealth()`.
 
 
@@ -336,6 +358,9 @@ class WealthPosition(BaseModel):
     avg_cost: float = Field(..., description="Cost basis per unit (PRU)")
     current_value: float = Field(..., description="Total current valuation")
     currency: str = "EUR"
+    ter: float | None = Field(
+        default=None, description="Annual fund expense ratio as a fraction (0.0025 = 0.25 %)"
+    )
 
     @property
     def cost_basis(self) -> float:

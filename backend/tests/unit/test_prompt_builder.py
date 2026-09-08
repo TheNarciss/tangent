@@ -241,3 +241,31 @@ def test_snapshot_and_prompt_render_fractions_as_percents():
     assert "Tolérance volatilité annuelle : 15.0 %" in prompt
     assert "taux 3.00 %" in prompt
     assert "1.50 %" in prompt
+
+
+def test_verdicts_are_rendered_for_the_model():
+    """Verdicts reach the prompt as computed: status, sentence, euros, action."""
+    from app.models import Verdict
+
+    v = Verdict(
+        id="fees",
+        title="Frais réels",
+        status="red",
+        headline="Tes placements te coûtent 2,00 % par an, soit 1 000 €.",
+        impact_eur_per_year=850.0,
+        action="Change de courtier.",
+    )
+    snapshot = prompt_builder.build_anonymized_snapshot(
+        _make_wealth(), _make_profile(), verdicts=[v]
+    )
+    assert snapshot["verdicts"][0]["status"] == "red"
+    text = prompt_builder.build_user_prompt(snapshot)
+    assert "## Verdicts de la méthode" in text
+    assert "**Frais réels** [rouge] (850 € par an en jeu)" in text
+    assert "À faire : Change de courtier." in text
+
+
+def test_no_verdicts_means_no_section():
+    snapshot = prompt_builder.build_anonymized_snapshot(_make_wealth(), _make_profile())
+    assert snapshot["verdicts"] == []
+    assert "Verdicts de la méthode" not in prompt_builder.build_user_prompt(snapshot)

@@ -45,7 +45,7 @@ async def read_projection(
     if effective_broker is None:
         profile = await profile_repo.get_or_create(session, user.id)
         effective_broker = profile.default_broker
-    # ADR-021: subtract weighted TER as a monthly fee on top of broker fees
+    # Echoed in the response for display; not a simulated cost (ADR-023).
     weighted_ter = await holdings_repo.get_weighted_ter(session, user.id)
     return await run_in_threadpool(
         projection.build,
