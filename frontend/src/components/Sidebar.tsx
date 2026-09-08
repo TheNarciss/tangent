@@ -4,12 +4,7 @@ import { NavLink } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
 export type NavView =
-  | "overview"
-  | "accounts"
-  | "investments"
-  | "projection"
-  | "profile"
-  | "account";
+  "overview" | "accounts" | "investments" | "projection" | "profile" | "account";
 
 /** One URL per view, so the phone's back button, refresh and shared links work. */
 export const NAV_PATHS: Record<NavView, string> = {
