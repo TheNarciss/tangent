@@ -1149,3 +1149,30 @@ export function useVerdicts() {
     staleTime: 60_000,
   });
 }
+
+export interface NextEuroStep {
+  id: "precaution" | "lep" | "pea" | "per";
+  label: string;
+  status: VerdictStatus;
+  text: string;
+  impact_eur_per_year: number | null;
+}
+
+/** `details` of the « où placer le prochain euro » verdict (id "next_euro"). */
+export interface NextEuroVerdictDetails {
+  destination?: string;
+  steps?: NextEuroStep[];
+  precaution?: {
+    liquid_eur: number;
+    monthly_spending_eur: number | null;
+    target_eur: number | null;
+    months_covered: number | null;
+    target_months: number;
+  };
+  tax?: { tmi: number | null; rfr_eur: number | null; fiscal_shares: number | null };
+  per?: { has_per: boolean; ceiling_eur: number | null; gain_eur_per_year: number };
+  pea?: { has_pea: boolean; value_eur: number; ceiling_eur: number; gain_eur_per_year: number };
+  lep?: { eligible: boolean | null; has_lep: boolean; gain_eur_per_year: number };
+  cto_value_eur?: number;
+  profile_complete?: boolean;
+}

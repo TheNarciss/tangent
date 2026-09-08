@@ -1,7 +1,8 @@
 import { ChevronDown } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 
-import type { Verdict, VerdictStatus } from "@/api";
+import { useVerdicts, type Verdict, type VerdictStatus } from "@/api";
 import { fmt } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -79,5 +80,26 @@ export function VerdictCard({ verdict, children, defaultOpen = false }: VerdictC
       </summary>
       {open && children && <div className="border-t p-4 md:p-5">{children}</div>}
     </details>
+  );
+}
+
+/**
+ * One verdict on a simple screen (ADR-023): the traffic light and the
+ * sentence, nothing else, linking to the Méthode tab for the computation.
+ * Renders nothing while loading or when the verdict is absent.
+ */
+export function VerdictLine({ id, to }: { id: string; to: string }) {
+  const q = useVerdicts();
+  const v = q.data?.verdicts.find((x) => x.id === id);
+  if (!v) return null;
+  return (
+    <Link
+      to={to}
+      className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3 text-sm transition-colors hover:bg-accent/30 md:px-6"
+    >
+      <VerdictDot status={v.status} />
+      <span className="min-w-0 flex-1 leading-snug">{v.headline}</span>
+      <span className="shrink-0 text-xs text-muted-foreground">Détail</span>
+    </Link>
   );
 }

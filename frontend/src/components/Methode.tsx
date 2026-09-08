@@ -1,10 +1,15 @@
 import { Link } from "react-router-dom";
 
-import { useVerdicts, type FeesVerdictDetails, type Verdict } from "@/api";
+import {
+  useVerdicts,
+  type FeesVerdictDetails,
+  type NextEuroVerdictDetails,
+  type Verdict,
+} from "@/api";
 import { fmt } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { NAV_PATHS } from "@/components/Sidebar";
-import { VerdictCard } from "@/components/ui/verdict-card";
+import { VerdictCard, VerdictDot } from "@/components/ui/verdict-card";
 
 /**
  * « Méthode » : every verdict of the method as a folded card (ADR-023).
@@ -45,6 +50,8 @@ export function Methode() {
         <VerdictCard key={v.id} verdict={v}>
           {v.id === "fees" ? (
             <FeesDetails details={v.details as FeesVerdictDetails} />
+          ) : v.id === "next_euro" ? (
+            <NextEuroDetails details={v.details as NextEuroVerdictDetails} />
           ) : (
             <GenericDetails verdict={v} />
           )}
@@ -53,6 +60,71 @@ export function Methode() {
       <p className="text-xs text-muted-foreground">
         Prochains verdicts : où placer le prochain euro (enveloppes et impôt), part d'actions selon
         ton profil, rééquilibrage, épargne nécessaire pour ton objectif.
+      </p>
+    </div>
+  );
+}
+
+/* ── Où placer le prochain euro ────────────────────────────────────────── */
+
+function NextEuroDetails({ details: d }: { details: NextEuroVerdictDetails }) {
+  const steps = d.steps ?? [];
+  const p = d.precaution;
+  if (steps.length === 0) return null;
+  return (
+    <div className="space-y-4">
+      {p && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Figure
+            label="Sur tes livrets"
+            value={fmt.eur0(p.liquid_eur)}
+            sub={
+              p.months_covered !== null
+                ? `${p.months_covered.toFixed(1).replace(".", ",")} mois de dépenses`
+                : "dépenses mensuelles inconnues"
+            }
+          />
+          <Figure
+            label="Cible de précaution"
+            value={p.target_eur !== null ? fmt.eur0(p.target_eur) : "—"}
+            sub={`${p.target_months} mois de dépenses`}
+          />
+          <Figure
+            label="Dépenses par mois"
+            value={p.monthly_spending_eur !== null ? fmt.eur0(p.monthly_spending_eur) : "—"}
+            sub="débits de tes comptes courants, 90 derniers jours"
+          />
+        </div>
+      )}
+
+      <ol className="divide-y rounded-md border text-sm">
+        {steps.map((s, i) => (
+          <li key={s.id} className="flex items-start gap-3 px-3 py-2.5">
+            <span className="mt-0.5 w-4 shrink-0 font-mono text-xs text-muted-foreground">
+              {i + 1}
+            </span>
+            <VerdictDot status={s.status} className="mt-1.5" />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                <span className="font-medium">{s.label}</span>
+                {s.impact_eur_per_year !== null && s.impact_eur_per_year > 0 && (
+                  <span className="font-mono text-xs tabular text-muted-foreground">
+                    {fmt.eur0(s.impact_eur_per_year)}/an
+                  </span>
+                )}
+              </div>
+              <p className="text-muted-foreground">{s.text}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+
+      <p className="text-xs text-muted-foreground">
+        La règle, dans l'ordre : précaution sur livrets, puis actions à long terme dans le PEA, puis
+        PER seulement au-dessus de la tranche à 30 %, le reste en compte-titres.
+        {d.tax?.tmi !== null && d.tax?.tmi !== undefined
+          ? ` Ta tranche d'imposition estimée : ${fmt.pct(d.tax.tmi)}, d'après ton revenu fiscal et tes parts.`
+          : ""}
       </p>
     </div>
   );

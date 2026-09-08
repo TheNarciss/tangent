@@ -100,15 +100,167 @@ def test_missing_ter_on_a_minority_says_at_least():
 
 
 def test_compute_all_falls_back_to_default_broker():
-    class P:
-        default_broker = "does-not-exist"
-        monthly_dca = 100.0
-
-    resp = verdicts.compute_all(_wealth(_pos("A", 1_000, 0.002)), P())  # type: ignore[arg-type]
-    assert [v.id for v in resp.verdicts] == ["fees"]
-    assert resp.verdicts[0].details["broker_name"] == fees.get(None)[1].name
+    p = _profile()
+    p.default_broker = "does-not-exist"
+    resp = verdicts.compute_all(_wealth(_pos("A", 1_000, 0.002)), p)
+    fees_v = next(v for v in resp.verdicts if v.id == "fees")
+    assert fees_v.details["broker_name"] == fees.get(None)[1].name
 
 
 def test_yaml_thresholds_load():
     cfg = verdicts.config().fees
     assert 0 < cfg.reference < cfg.green_max < cfg.amber_max
+
+
+# ── « Où placer le prochain euro » ─────────────────────────────────────────
+
+from datetime import date  # noqa: E402
+
+from app.db.models import Profile  # noqa: E402
+from app.models import CashAccount, WealthEnvelope  # noqa: E402
+
+NEXT = verdicts.NextEuroThresholds(
+    precaution_months=3,
+    precaution_min_months=1,
+    liquid_envelopes=["livret_a", "ldds", "lep"],
+    pea_ceiling_eur=150_000,
+    pea_vs_cto_pct=0.006,
+    per_tmi_min=0.30,
+    per_ceiling_pct=0.10,
+    per_ceiling_min_eur=4637,
+    per_ceiling_max_eur=37094,
+    tax_brackets=[
+        verdicts.TaxBracket(up_to=11497, rate=0.0),
+        verdicts.TaxBracket(up_to=29315, rate=0.11),
+        verdicts.TaxBracket(up_to=83823, rate=0.30),
+        verdicts.TaxBracket(up_to=180294, rate=0.41),
+        verdicts.TaxBracket(up_to=None, rate=0.45),
+    ],
+)
+
+
+def _profile(rfr: float = 30_000.0, shares: float = 1.0, dca: float = 200.0) -> Profile:
+    p = Profile(user_id=uuid.uuid4(), ceilings_used={})
+    p.birth_date = date(1990, 1, 1)
+    p.fiscal_shares = shares
+    p.rfr_n_minus_2 = rfr
+    p.monthly_dca = dca
+    return p
+
+
+def _env(kind: str, balance: float, ceiling: float | None = 22_950.0) -> WealthEnvelope:
+    return WealthEnvelope(
+        provider_account_id=f"{kind}-1",
+        name=kind,
+        balance=balance,
+        envelope_type=kind,
+        ceiling_eur=ceiling,
+        rate_pct=0.024,
+    )
+
+
+def _acc(kind: str, value: float) -> InvestmentAccount:
+    return InvestmentAccount(
+        provider_account_id=f"{kind}-1", name=kind.upper(), account_type=kind, balance=value
+    )
+
+
+def _wealth2(*, envelopes=(), accounts=(), checking: float = 500.0) -> Wealth:
+    return Wealth(
+        user_id=uuid.uuid4(),
+        snapshot_at=datetime(2026, 9, 8, tzinfo=UTC),
+        checking_accounts=[
+            CashAccount(provider_account_id="chk", name="Courant", balance=checking)
+        ],
+        envelopes=list(envelopes),
+        investment_accounts=list(accounts),
+    )
+
+
+def test_marginal_rate_uses_quotient_familial():
+    assert verdicts.marginal_tax_rate(50_000, 1.0, NEXT.tax_brackets) == 0.30
+    assert verdicts.marginal_tax_rate(50_000, 2.5, NEXT.tax_brackets) == 0.11
+    assert verdicts.marginal_tax_rate(500_000, 1.0, NEXT.tax_brackets) == 0.45
+
+
+def test_nothing_connected_is_unknown():
+    w = Wealth(user_id=uuid.uuid4(), snapshot_at=datetime(2026, 9, 8, tzinfo=UTC))
+    v = verdicts.next_euro_verdict(w, _profile(), 1500.0, NEXT)
+    assert v.status == "unknown"
+
+
+def test_precaution_under_one_month_is_red_and_goes_to_a_livret():
+    w = _wealth2(envelopes=[_env("livret_a", 800.0)], accounts=[_acc("pea", 5000.0)])
+    v = verdicts.next_euro_verdict(w, _profile(rfr=40_000), 1500.0, NEXT)
+    assert v.status == "red"
+    assert "ton Livret A" in v.headline
+    assert v.action is not None and "4\u202f500 €" in v.action
+    assert v.details["precaution"]["months_covered"] == pytest.approx(800 / 1500)
+
+
+def test_lep_eligible_precaution_short_goes_to_lep():
+    w = _wealth2(envelopes=[_env("livret_a", 2000.0)], accounts=[_acc("pea", 5000.0)])
+    v = verdicts.next_euro_verdict(w, _profile(rfr=15_000), 1500.0, NEXT)
+    assert v.status == "amber"
+    assert "un LEP à ouvrir" in v.headline
+
+
+def test_no_pea_with_cto_is_amber_with_tax_gain():
+    w = _wealth2(envelopes=[_env("livret_a", 6000.0)], accounts=[_acc("cto", 10_000.0)])
+    v = verdicts.next_euro_verdict(w, _profile(rfr=40_000, dca=200), 1500.0, NEXT)
+    assert v.status == "amber"
+    assert "un PEA à ouvrir" in v.headline
+    assert v.impact_eur_per_year == pytest.approx(0.006 * (10_000 + 2400))
+    assert v.action is not None and "Ouvre un PEA" in v.action
+
+
+def test_all_in_place_low_bracket_is_green():
+    w = _wealth2(envelopes=[_env("livret_a", 6000.0)], accounts=[_acc("pea", 20_000.0)])
+    v = verdicts.next_euro_verdict(w, _profile(rfr=25_000), 1500.0, NEXT)
+    assert v.status == "green"
+    assert "ton PEA" in v.headline
+    assert v.action is None
+    per = next(s for s in v.details["steps"] if s["id"] == "per")
+    assert per["status"] == "green" and "11 %" in per["text"]
+
+
+def test_bracket_30_without_per_is_an_opportunity():
+    w = _wealth2(envelopes=[_env("livret_a", 6000.0)], accounts=[_acc("pea", 20_000.0)])
+    v = verdicts.next_euro_verdict(w, _profile(rfr=50_000, dca=500), 1500.0, NEXT)
+    assert v.status == "amber"
+    assert (
+        "ton PEA" in v.headline
+    )  # destination unchanged: PER is an opportunity, not the next euro
+    assert v.impact_eur_per_year == pytest.approx(0.30 * min(5000.0, 6000.0))
+    assert v.action is not None and "PER" in v.action
+    assert v.details["per"]["ceiling_eur"] == pytest.approx(5000.0)
+
+
+def test_lep_opportunity_moves_livret_money():
+    w = _wealth2(envelopes=[_env("livret_a", 6000.0)], accounts=[_acc("pea", 20_000.0)])
+    v = verdicts.next_euro_verdict(w, _profile(rfr=15_000), 1500.0, NEXT)
+    lep = next(s for s in v.details["steps"] if s["id"] == "lep")
+    assert lep["status"] == "amber"
+    # (3,5 % − 2,4 %) × min(plafond LEP 10 000, 6 000 sur le Livret A)
+    assert lep["impact_eur_per_year"] == pytest.approx(0.011 * 6000.0)
+    assert v.action is not None and "LEP" in v.action
+
+
+def test_unknown_spending_keeps_the_rest_of_the_rule():
+    w = _wealth2(envelopes=[_env("livret_a", 6000.0)], accounts=[_acc("pea", 20_000.0)])
+    v = verdicts.next_euro_verdict(w, _profile(rfr=25_000), None, NEXT)
+    assert v.status == "green"
+    assert v.details["steps"][0]["status"] == "unknown"
+
+
+def test_incomplete_profile_asks_for_it():
+    p = Profile(user_id=uuid.uuid4(), ceilings_used={})
+    w = _wealth2(envelopes=[_env("livret_a", 6000.0)], accounts=[_acc("pea", 20_000.0)])
+    v = verdicts.next_euro_verdict(w, p, 1500.0, NEXT)
+    assert v.status == "green"
+    assert v.action is not None and "Renseigne ton profil" in v.action
+
+
+def test_compute_all_orders_next_euro_first():
+    resp = verdicts.compute_all(_wealth2(accounts=[_acc("pea", 1000.0)]), _profile(), 1000.0)
+    assert [v.id for v in resp.verdicts] == ["next_euro", "fees"]
