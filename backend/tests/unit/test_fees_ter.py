@@ -1,66 +1,22 @@
-"""Unit tests for fees.apply_ter_to_fee_fn (ADR-021)."""
+"""Unit tests for the broker fee model (config/brokers.yaml)."""
 
 from __future__ import annotations
 
 import pytest
 
-from app.finance.fees import apply_ter_to_fee_fn
-
-
-def test_zero_ter_returns_input_function() -> None:
-    """weighted_ter=0 → wrap is a no-op (returns the input function unchanged)."""
-
-    def broker_fee(value: float) -> float:
-        return 10.0 + value * 0.001
-
-    wrapped = apply_ter_to_fee_fn(broker_fee, weighted_ter=0.0)
-    assert wrapped is broker_fee
-
-
-def test_negative_ter_returns_input_function() -> None:
-    """Defensive: negative TER → no-op rather than crediting fees."""
-
-    def broker_fee(value: float) -> float:
-        return 5.0
-
-    wrapped = apply_ter_to_fee_fn(broker_fee, weighted_ter=-0.01)
-    assert wrapped is broker_fee
-
-
-def test_ter_adds_monthly_proportional_cost() -> None:
-    """Combined fee = broker_fee(value) + value * ter / 12."""
-
-    def broker_fee(value: float) -> float:
-        return 10.0
-
-    wrapped = apply_ter_to_fee_fn(broker_fee, weighted_ter=0.0024)
-
-    # value = 12_000 €, TER = 0.24%/an → monthly TER cost = 12_000 * 0.0024 / 12 = 2.4 €
-    # Combined = 10 + 2.4 = 12.4 €
-    assert wrapped(12_000) == 12.4
-
-
-def test_ter_scales_with_value() -> None:
-    """Fee scales linearly with portfolio value."""
-
-    def broker_fee(value: float) -> float:
-        return 0.0
-
-    wrapped = apply_ter_to_fee_fn(broker_fee, weighted_ter=0.006)  # 0.6%/an
-
-    # At 10 000 € → 5 €/mois.  At 100 000 € → 50 €/mois.
-    assert wrapped(10_000) == 10_000 * 0.006 / 12
-    assert wrapped(100_000) == 100_000 * 0.006 / 12
-    # Ratio is exactly 10
-    assert wrapped(100_000) / wrapped(10_000) == 10
+from app.finance import fees
 
 
 def test_rebates_are_not_charged_to_the_user():
     """Retrocessions are paid out of the fund's TER to the bank, not by the client."""
-    from app.finance import fees
 
     _, bnp = fees.get("bnp_start")
     assert bnp.rebates_pct > 0  # still documented in brokers.yaml
     fn = fees.monthly_fee_fn(bnp, n_lines=1, monthly_contribution=0.0)
     expected = bnp.fixed_per_line_eur / 12 + bnp.custody_pct / 12 * 100_000
     assert fn(100_000.0) == pytest.approx(expected)
+
+
+def test_ter_is_not_a_simulated_cost_anymore():
+    """Prices are net of fund fees: the TER is costed by the verdict, not the projection."""
+    assert not hasattr(fees, "apply_ter_to_fee_fn")

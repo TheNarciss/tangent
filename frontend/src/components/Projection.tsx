@@ -250,7 +250,7 @@ function FeesLine({
         Frais de courtage et de tenue de compte, plus ce qu'ils t'auraient rapporté s'ils étaient
         restés investis
         {data.weighted_ter
-          ? `, frais des fonds (${(data.weighted_ter * 100).toFixed(2)} %/an) compris`
+          ? `, frais des fonds (${(data.weighted_ter * 100).toFixed(2)} %/an) déjà dans les cours`
           : ""}
         .
       </p>

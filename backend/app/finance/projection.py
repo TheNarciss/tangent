@@ -26,7 +26,7 @@ def build(
     goal: float | None,
     broker_id: str | None = None,
     wealth: Wealth | None = None,
-    weighted_ter: float = 0.0,
+    weighted_ter: float = 0.0,  # informational, see below
 ) -> ProjectionResponse:
     if wealth is None:
         raise PortfolioEmptyError("Wealth required for projection.")
@@ -58,8 +58,10 @@ def build(
         n_lines=len(quantities),
         monthly_contribution=monthly_contribution,
     )
-    # ADR-021: layer ETF TER on top of broker fees as a monthly cost
-    fee_fn = fees.apply_ter_to_fee_fn(broker_fee_fn, weighted_ter)
+    # Prices are net of fund fees (the NAV is struck after the TER), so the TER
+    # is not simulated again here; `weighted_ter` is echoed for display only
+    # and costed by the « frais réels » verdict (ADR-023).
+    fee_fn = broker_fee_fn
 
     # Net projection (with fees compounding) — primary curves
     det = analytics.deterministic_projection(

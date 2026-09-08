@@ -38,6 +38,7 @@ from .routers import (
     profile,
     reviews,
     terms,
+    verdicts,
     watchlist,
 )
 from .scheduler import setup_scheduler
@@ -270,6 +271,7 @@ app.include_router(account.router, prefix="/api")
 app.include_router(terms.router, prefix="/api")
 app.include_router(oauth_accounts.router, prefix="/api")
 app.include_router(reviews.router, prefix="/api")
+app.include_router(verdicts.router, prefix="/api")
 
 
 # ─── Exception handlers ───────────────────────────────────────────────────

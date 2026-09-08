@@ -17,7 +17,7 @@ from datetime import date
 from typing import Any
 
 from ..db.models import Profile
-from ..models import OptimizerResponse, Wealth
+from ..models import OptimizerResponse, Verdict, Wealth
 
 # system prompt held in a separate module-level constant; loaded via a sentinel
 # multi-line string. Kept here (not in a .txt file) so it ships with the wheel.
@@ -44,7 +44,7 @@ Deux à quatre phrases : les mouvements notables de ses fonds et livrets depuis 
 Une explication simple de la cause (une hausse de taux, un résultat d'entreprise, une décision politique…) et de ce que ça change ou ne change pas pour un épargnant qui verse tous les mois.
 
 # À faire cette semaine
-Par défaut une seule ligne : « Rien à faire : continue tes versements. » Sinon, une à deux pistes concrètes, chacune avec sa raison structurelle.
+Par défaut une seule ligne : « Rien à faire : continue tes versements. » Sinon, une à deux pistes concrètes, chacune avec sa raison structurelle. Les verdicts de la méthode fournis dans les données sont déjà calculés : un verdict orange ou rouge est la piste à proposer en premier, avec son montant en euros tel quel ; tu ne recalcules pas et tu ne contredis pas un verdict vert.
 
 # Sources
 Liste de toutes les URLs citées : - [Nom court](URL)
@@ -74,8 +74,9 @@ def build_anonymized_snapshot(
     wealth: Wealth,
     profile: Profile,
     optimizer_response: OptimizerResponse | None = None,
+    verdicts: list[Verdict] | None = None,
 ) -> dict[str, Any]:
-    """Project Wealth + Profile + optimizer into a JSON-safe dict for the LLM.
+    """Project Wealth + Profile + optimizer + verdicts into a JSON-safe dict for the LLM.
 
     Stripped of: provider_account_id, institution_name. Kept: tickers,
     amounts, dates, all profile fields (age computed from birth_date).
@@ -145,6 +146,17 @@ def build_anonymized_snapshot(
             for loan in wealth.loans
         ],
         "optimizer": _serialize_optimizer(optimizer_response),
+        "verdicts": [
+            {
+                "id": v.id,
+                "title": v.title,
+                "status": v.status,
+                "headline": v.headline,
+                "impact_eur_per_year": v.impact_eur_per_year,
+                "action": v.action,
+            }
+            for v in (verdicts or [])
+        ],
     }
 
 
@@ -174,6 +186,9 @@ def _serialize_optimizer(opt: OptimizerResponse | None) -> dict[str, Any] | None
             if abs(a.delta_weight) > 0.01
         ],
     }
+
+
+_STATUS_FR = {"green": "vert", "amber": "orange", "red": "rouge", "unknown": "incomplet"}
 
 
 def build_user_prompt(snapshot: dict[str, Any]) -> str:
@@ -284,6 +299,16 @@ def build_user_prompt(snapshot: dict[str, Any]) -> str:
             lines.append(
                 f"- {outs:,.2f} € restant, taux {rate}, {mens}{deferral}, échéance {maturity}"
             )
+        lines.append("")
+
+    if snapshot.get("verdicts"):
+        lines.append("## Verdicts de la méthode (déjà calculés, à reprendre tels quels)")
+        for v in snapshot["verdicts"]:
+            status = _STATUS_FR.get(v["status"], v["status"])
+            impact = v["impact_eur_per_year"]
+            impact_txt = f" ({impact:,.0f} € par an en jeu)" if impact else ""
+            action = f" À faire : {v['action']}" if v["action"] else " Rien à faire."
+            lines.append(f"- **{v['title']}** [{status}]{impact_txt} : {v['headline']}{action}")
         lines.append("")
 
     lines.append("---")
