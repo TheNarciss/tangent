@@ -8,7 +8,13 @@ import logging
 
 import pandas as pd
 
+from . import analytics
+
 logger = logging.getLogger(__name__)
+
+# A period is only scored when every holding has a price at most this many
+# calendar days before the window starts (holidays, listing gaps).
+MAX_START_GAP_DAYS = 10
 
 # Périodes calibrées sur les pires drawdowns récents.
 # Format: (id, label, start, end_or_None_for_recovery).
@@ -42,39 +48,38 @@ def compute(prices: pd.DataFrame, quantities: dict[str, float]) -> list[dict]:
     reconstruit (qty actuelles × prix historiques) sur la fenêtre.
 
     Retourne une liste de dicts JSON-friendly avec start, end, pnl_pct, drawdown.
-    Skip silencieusement les périodes en-dehors de l'historique disponible.
+    Une période n'est scorée que si *chaque* ligne a un prix sur toute la
+    fenêtre : un panier partiel (ETF lancé après la crise) donnerait un
+    rendement de sous-ensemble que l'UI multiplie ensuite par la valeur totale.
+    Les périodes non couvertes sont ignorées.
     """
     if prices.empty:
         return []
 
-    qty_series = pd.Series(quantities)
-    available_tickers = [t for t in qty_series.index if t in prices.columns]
-    if not available_tickers:
+    quantities = {t: q for t, q in quantities.items() if t in prices.columns}
+    if not quantities:
         return []
 
-    qty_series = qty_series[available_tickers]
-    equity = (prices[available_tickers] * qty_series).sum(axis=1)
-    equity = equity.dropna()
+    # NaN propagates: the curve only exists on dates where every line is priced.
+    equity = analytics.portfolio_value_series(prices, quantities)
     if equity.empty:
         return []
 
     results: list[dict] = []
-    earliest = equity.index.min().date() if hasattr(equity.index.min(), "date") else None
     for p in STRESS_PERIODS:
         start = pd.Timestamp(p["start"])
         end = pd.Timestamp(p["end"])
-        if earliest and start.date() < earliest:
-            continue  # period antérieure à l'historique → skip
-        # Get value at start and during window
-        try:
-            value_start = float(equity.loc[:start].iloc[-1])
-            window = equity.loc[start:end]
-            if window.empty:
-                continue
-            value_end = float(window.iloc[-1])
-            min_value = float(window.min())
-        except (KeyError, IndexError):
+        before = equity.loc[:start]
+        window = equity.loc[start:end]
+        if before.empty or window.empty:
+            continue  # at least one holding has no history here → skip
+        if (start - before.index[-1]).days > MAX_START_GAP_DAYS:
+            continue  # coverage starts inside the window → partial basket → skip
+        if (window.index[0] - start).days > MAX_START_GAP_DAYS:
             continue
+        value_start = float(before.iloc[-1])
+        value_end = float(window.iloc[-1])
+        min_value = float(window.min())
         pnl_pct = (value_end - value_start) / value_start if value_start else 0.0
         drawdown = (min_value - value_start) / value_start if value_start else 0.0
         results.append(
