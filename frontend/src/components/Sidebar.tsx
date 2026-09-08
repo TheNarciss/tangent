@@ -1,10 +1,10 @@
-import { LayoutDashboard, PieChart, TrendingUp, Wallet } from "lucide-react";
+import { Compass, LayoutDashboard, PieChart, TrendingUp, Wallet } from "lucide-react";
 import { NavLink } from "react-router-dom";
 
 import { cn } from "@/lib/utils";
 
 export type NavView =
-  "overview" | "accounts" | "investments" | "projection" | "profile" | "account";
+  "overview" | "accounts" | "investments" | "projection" | "method" | "profile" | "account";
 
 /** One URL per view, so the phone's back button, refresh and shared links work. */
 export const NAV_PATHS: Record<NavView, string> = {
@@ -12,6 +12,7 @@ export const NAV_PATHS: Record<NavView, string> = {
   accounts: "/comptes",
   investments: "/placements",
   projection: "/projection",
+  method: "/methode",
   profile: "/profil",
   account: "/compte",
 };
@@ -29,6 +30,10 @@ export const NAV_ITEMS: NavItem[] = [
   { view: "investments", label: "Placements", icon: PieChart },
   { view: "projection", label: "Projection", icon: TrendingUp },
 ];
+
+/** Secondary navigation — in the sidebar on desktop, in the « Plus » sheet on
+ *  a phone (the bottom bar keeps four items so it stays tappable at 390 px). */
+export const SECONDARY_NAV_ITEMS: NavItem[] = [{ view: "method", label: "Méthode", icon: Compass }];
 
 interface SidebarProps {
   /** Renders below the nav (typically a UserMenu). */
@@ -50,31 +55,38 @@ export function Sidebar({ footer }: SidebarProps) {
 
       {/* Nav */}
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        {NAV_ITEMS.map((item) => {
-          const Icon = item.icon;
-          return (
-            <NavLink
-              key={item.view}
-              to={NAV_PATHS[item.view]}
-              end={item.view === "overview"}
-              className={({ isActive }) =>
-                cn(
-                  "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
-                  isActive
-                    ? "bg-accent font-medium text-accent-foreground"
-                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-                )
-              }
-            >
-              <Icon className="h-4 w-4" />
-              {item.label}
-            </NavLink>
-          );
-        })}
+        {NAV_ITEMS.map((item) => (
+          <SidebarLink key={item.view} item={item} />
+        ))}
+        <div className="my-2 border-t border-border" />
+        {SECONDARY_NAV_ITEMS.map((item) => (
+          <SidebarLink key={item.view} item={item} />
+        ))}
       </nav>
 
       {/* Footer (user menu, etc.) */}
       {footer && <div className="border-t border-border px-3 py-3">{footer}</div>}
     </aside>
+  );
+}
+
+function SidebarLink({ item }: { item: NavItem }) {
+  const Icon = item.icon;
+  return (
+    <NavLink
+      to={NAV_PATHS[item.view]}
+      end={item.view === "overview"}
+      className={({ isActive }) =>
+        cn(
+          "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+          isActive
+            ? "bg-accent font-medium text-accent-foreground"
+            : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+        )
+      }
+    >
+      <Icon className="h-4 w-4" />
+      {item.label}
+    </NavLink>
   );
 }
