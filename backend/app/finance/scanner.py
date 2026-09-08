@@ -190,7 +190,7 @@ def scan(req: ScanRequest, wealth: "Wealth | None" = None) -> ScanResponse:
     prices_p = market.fetch_prices(pf_tickers, period=period)
     returns_p = analytics.daily_log_returns(prices_p[pf_tickers])
 
-    hist_mu_p = (returns_p.mean() * analytics.TRADING_DAYS).values
+    hist_mu_p = analytics.annualized_arithmetic_mu(returns_p).values
     blended_p = cma.blended_mu(
         pf_tickers, hist_mu_p, shrinkage=cma_shrink, overrides=cma_overrides or None
     )
@@ -260,7 +260,7 @@ def scan(req: ScanRequest, wealth: "Wealth | None" = None) -> ScanResponse:
 
         # μ blendé pour ce candidat (respect override expert si présent)
         try:
-            hist_mu_c = float(cand_returns.mean() * analytics.TRADING_DAYS)
+            hist_mu_c = float(analytics.annualized_arithmetic_mu(cand_returns.to_frame()).iloc[0])
             sym_override = {sym: cma_overrides[sym]} if sym in cma_overrides else {}
             blended_c = cma.blended_mu(
                 [sym], np.array([hist_mu_c]), shrinkage=cma_shrink, overrides=sym_override or None

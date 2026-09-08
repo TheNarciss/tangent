@@ -79,8 +79,9 @@ def build(
 
     # Blend μ historiques avec CMAs forward-looking. Shrinkage overridable.
     rf = risk_free if risk_free is not None else analytics.RISK_FREE
-    hist_mu = (returns.mean() * analytics.TRADING_DAYS).values
+    hist_mu = analytics.annualized_arithmetic_mu(returns).values
     blended = cma.blended_mu(tickers, hist_mu, shrinkage=cma_shrinkage)
+    unmapped = cma.unmapped_tickers(tickers)
     mu_override = {t: float(blended[i]) for i, t in enumerate(tickers)}
 
     asset_stats = analytics.annualized_stats(returns, risk_free=rf, mu_override=mu_override)
@@ -130,6 +131,7 @@ def build(
         max_drawdown_observed=pf_max_dd,
         assets=assets,
         correlation=analytics.correlation_matrix(returns),
+        unmapped_tickers=unmapped,
     )
     logger.info(
         "dashboard built: %d assets, %.2f €, shrinkage=%s, period=%s, %d stress tests",

@@ -149,3 +149,14 @@ def test_frontier_has_no_reason_when_well_posed():
     out = analytics.efficient_frontier_curve(rets, mu=mu, cov=cov, n_points=10)
     assert len(out["vol"]) > 0
     assert out["reason"] is None
+
+
+def test_annualized_arithmetic_mu_adds_half_variance():
+    """E[R] = exp(m + s²/2) − 1 on annualized log stats, not m alone."""
+    rng = np.random.default_rng(1)
+    rets = pd.DataFrame({"A": rng.normal(0.0003, 0.01, 2520)})
+    m = float(rets["A"].mean() * analytics.TRADING_DAYS)
+    v = float(rets["A"].var() * analytics.TRADING_DAYS)
+    got = float(analytics.annualized_arithmetic_mu(rets)["A"])
+    assert got == pytest.approx(np.exp(m + v / 2) - 1)
+    assert got > m

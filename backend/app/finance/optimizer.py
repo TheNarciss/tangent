@@ -111,11 +111,12 @@ def build(req: OptimizerRequest, wealth: "Wealth | None" = None) -> OptimizerRes
     envelope_max_weights = [e["max_weight"] for e in envelope_assets]
 
     # Blend historical μ with forward-looking CMAs (with expert overrides if provided).
-    hist_mu = (returns.mean() * analytics.TRADING_DAYS).values
+    hist_mu = analytics.annualized_arithmetic_mu(returns).values
     blended = cma.blended_mu(
         tickers, hist_mu, shrinkage=cma_shrink, overrides=cma_overrides or None
     )
     mu_override = {t: float(blended[i]) for i, t in enumerate(tickers)}
+    unmapped = cma.unmapped_tickers(tickers, cma_overrides or None)
 
     mu, cov, bounds = analytics.build_asset_stats(
         returns,
@@ -288,6 +289,7 @@ def build(req: OptimizerRequest, wealth: "Wealth | None" = None) -> OptimizerRes
             EnvelopePoint(label=e["name"], expected_return=e["rate"], volatility=0.0)
             for e in envelope_assets
         ],
+        unmapped_tickers=unmapped,
         kelly_leverage=kelly_indicator,
     )
 
