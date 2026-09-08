@@ -326,7 +326,14 @@ def _solve_slsqp(
     max_vol: float | None,
     target_return: float | None = None,
 ) -> dict[str, float | list[float]]:
-    """Common SLSQP body. mu, cov, bounds already finalized (possibly augmented)."""
+    """Common SLSQP body. mu, cov, bounds already finalized (possibly augmented).
+
+    ``max_sharpe`` and ``from_strategy`` are non-convex: a single start can
+    report a local optimum as "optimal". They are solved from several starts
+    (equal weight, each vertex, a few Dirichlet draws with a fixed seed) and
+    the best converged solution is kept. The result's ``success`` flag is the
+    caller's to check: a non-converged solve must never be shown as optimal.
+    """
     from scipy.optimize import minimize
 
     n = len(mu)
@@ -379,15 +386,25 @@ def _solve_slsqp(
     else:
         raise ValueError(f"Unknown objective: {objective!r}")
 
-    res = minimize(
-        fn,
-        w0,
-        method="SLSQP",
-        bounds=bounds,
-        constraints=constraints,
-        options={"ftol": 1e-10, "maxiter": 200},
-    )
-    w_opt = res.x
+    starts = [w0]
+    if objective in ("max_sharpe", "from_strategy"):
+        starts += [np.eye(n)[i] for i in range(n)]
+        starts += list(np.random.default_rng(0).dirichlet(np.ones(n), size=4))
+
+    res = None
+    for start in starts:
+        cand = minimize(
+            fn,
+            _project_to_bounds(start, bounds),
+            method="SLSQP",
+            bounds=bounds,
+            constraints=constraints,
+            options={"ftol": 1e-10, "maxiter": 200},
+        )
+        if res is None or (cand.success and (not res.success or cand.fun < res.fun)):
+            res = cand
+    assert res is not None
+    w_opt = _project_to_bounds(res.x, bounds)
     vol = float(np.sqrt(w_opt @ cov @ w_opt))
     ret = float(w_opt @ mu)
     sharpe = (ret - risk_free) / vol if vol > 1e-10 else 0.0
@@ -398,6 +415,15 @@ def _solve_slsqp(
         "sharpe": sharpe,
         "success": bool(res.success),
     }
+
+
+def _project_to_bounds(w: np.ndarray, bounds: list[tuple[float, float]]) -> np.ndarray:
+    """Clip to the box and renormalize to sum 1 (SLSQP can return −1e-9 or 1 ± 1e-9)."""
+    lo = np.array([b[0] for b in bounds])
+    hi = np.array([b[1] for b in bounds])
+    w = np.clip(np.asarray(w, dtype=float), lo, hi)
+    total = float(w.sum())
+    return w / total if total > 0 else np.full(len(w), 1 / len(w))
 
 
 def build_asset_stats(

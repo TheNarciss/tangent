@@ -65,3 +65,9 @@ class InfeasibleStrategyError(AppError):
     """User's strategy (target return + max vol) is mathematically unachievable."""
 
     status_code = 422
+
+
+class SolverError(AppError):
+    """The optimizer did not converge; the result must not be shown as optimal."""
+
+    status_code = 422
