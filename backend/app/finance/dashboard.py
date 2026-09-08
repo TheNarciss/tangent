@@ -4,7 +4,6 @@ import logging
 from datetime import date
 
 import numpy as np
-import pandas as pd
 
 from ..errors import InsufficientHistoryError, PortfolioEmptyError
 from ..models import (
@@ -92,8 +91,8 @@ def build(
     pf_stats = analytics.portfolio_stats(returns, weights, risk_free=rf, mu_override=mu_override)
 
     # Risque de queue : CVaR 95 % et max drawdown observé sur la fenêtre choisie.
-    qty_per_ticker = pd.Series(qty_by_ticker)
-    equity_curve = (prices[tickers] * qty_per_ticker).sum(axis=1)
+    # NaN propagates: a date where one line has no price is not a portfolio value.
+    equity_curve = analytics.portfolio_value_series(prices, qty_by_ticker)
     pf_returns = returns @ weights
     pf_cvar = analytics.cvar_95(pf_returns)
     pf_max_dd = analytics.max_drawdown(equity_curve)
