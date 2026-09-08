@@ -35,6 +35,7 @@ from ..db.models import ReviewBatch
 from ..deps import get_user_wealth
 from ..finance import verdicts as verdicts_engine
 from ..finance.gap_filler import engine as gap_filler_engine
+from ..repositories import bank_transactions as tx_repo
 from ..repositories import profile as profile_repo
 from ..repositories import review_batches as batches_repo
 from . import anthropic_client, cost_tracker
@@ -138,7 +139,10 @@ async def submit_nightly_batch(session: AsyncSession) -> ReviewBatch | None:
                 continue
 
             wealth = await get_user_wealth(user=user, session=session)
-            verdicts = verdicts_engine.compute_all(wealth, profile).verdicts
+            spending = await tx_repo.monthly_outflow(session, user.id)
+            verdicts = verdicts_engine.compute_all(
+                wealth, profile, monthly_spending=spending
+            ).verdicts
             snapshot = build_anonymized_snapshot(wealth, profile, verdicts=verdicts)
             user_prompt = build_user_prompt(snapshot)
 

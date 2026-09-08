@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..finance import verdicts as verdicts_engine
 from ..models import OptimizerResponse, Wealth
+from ..repositories import bank_transactions as tx_repo
 from ..repositories import profile as profile_repo
 from ..repositories import reviews as reviews_repo
 from . import anthropic_client, cost_tracker, prompt_builder
@@ -87,7 +88,8 @@ async def generate_review_stream(
 
     # 3. Profile + prompt
     profile = await profile_repo.get_or_create(session, user_id)
-    verdicts = verdicts_engine.compute_all(wealth, profile).verdicts
+    spending = await tx_repo.monthly_outflow(session, user_id)
+    verdicts = verdicts_engine.compute_all(wealth, profile, monthly_spending=spending).verdicts
     snapshot = prompt_builder.build_anonymized_snapshot(
         wealth, profile, optimizer_response, verdicts=verdicts
     )

@@ -1,12 +1,10 @@
 import { AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
-import { Link } from "react-router-dom";
 
 import {
   ApiError,
   useDashboard,
   useOptimizer,
   useRiskLevels,
-  useVerdicts,
   useWealthSummary,
   type AssetMetrics,
   type Insight,
@@ -23,7 +21,7 @@ import { useSettings } from "@/lib/settings";
 import { cn } from "@/lib/utils";
 import { PlacementsAdvanced } from "@/components/PlacementsAdvanced";
 import { NAV_PATHS } from "@/components/Sidebar";
-import { VerdictDot } from "@/components/ui/verdict-card";
+import { VerdictLine } from "@/components/ui/verdict-card";
 
 const COLORS = ["#60a5fa", "#f97316", "#a78bfa", "#22d3ee", "#facc15", "#f472b6", "#10b981"];
 /** A proposed move is worth showing above this weight or amount (cf. état des lieux §5.3). */
@@ -100,7 +98,7 @@ export function Placements() {
   return (
     <div className="space-y-6">
       <WhatIHave metrics={m} />
-      <FeesLine />
+      <VerdictLine id="fees" to={NAV_PATHS.method} />
       <RiskBlock
         metrics={m}
         stress={dashboard.data.stress_tests}
@@ -179,24 +177,6 @@ function WhatIHave({ metrics }: { metrics: PortfolioMetrics }) {
         ))}
       </ul>
     </Block>
-  );
-}
-
-/* ── Ce que ça me coûte (verdict « frais réels », ADR-023) ─────────────── */
-
-function FeesLine() {
-  const q = useVerdicts();
-  const v = q.data?.verdicts.find((x) => x.id === "fees");
-  if (!v) return null;
-  return (
-    <Link
-      to={NAV_PATHS.method}
-      className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3 text-sm transition-colors hover:bg-accent/30 md:px-6"
-    >
-      <VerdictDot status={v.status} />
-      <span className="min-w-0 flex-1 leading-snug">{v.headline}</span>
-      <span className="shrink-0 text-xs text-muted-foreground">Détail</span>
-    </Link>
   );
 }
 

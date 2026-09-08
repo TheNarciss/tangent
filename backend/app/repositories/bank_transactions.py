@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Literal
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -151,3 +151,38 @@ async def list_recent_all_accounts(
     )
     res = await session.execute(stmt)
     return [(tx, acc) for tx, acc in res.all()]
+
+
+# Accounts whose debits are day-to-day spending (transfers out of savings or
+# investment wrappers are not expenses).
+_SPENDING_ACCOUNT_TYPES = ("checking", "card", "joint")
+
+
+async def monthly_outflow(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    *,
+    days: int = 90,
+) -> float | None:
+    """Average monthly debits on the user's current accounts over `days` days.
+
+    Feeds the précaution step of the « prochain euro » verdict. Transfers to
+    a livret or a PEA count as debits here, which overstates spending a
+    little and therefore the précaution target: prudent by construction.
+    Returns None when no debit was synced in the window.
+    """
+    since = date.today() - timedelta(days=days)
+    stmt = (
+        select(func.sum(BankTransaction.amount))
+        .join(BankAccount, BankTransaction.bank_account_id == BankAccount.id)
+        .where(
+            BankTransaction.user_id == user_id,
+            BankTransaction.transaction_date >= since,
+            BankTransaction.amount < 0,
+            BankAccount.type.in_(_SPENDING_ACCOUNT_TYPES),
+        )
+    )
+    total = (await session.execute(stmt)).scalar()
+    if total is None:
+        return None
+    return -float(total) / (days / 30.4375)
