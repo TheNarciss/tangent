@@ -1,11 +1,15 @@
 # Capital Market Assumptions — long-term forward-looking annualized returns.
 # Source : Dimson-Marsh-Staunton Yearbook (100+ years), Vanguard CMAs, JP Morgan LTCMA.
 # Moins biaisé que yfinance 5y qui gonfle à cause du bull-run post-COVID.
-# À mettre à jour annuellement.
+# À mettre à jour annuellement. Dernière revue : 2026-09.
+# Un ticker absent d'ici garde son μ historique (aucune valeur par défaut) et
+# est signalé à l'utilisateur comme « sans hypothèse long terme ».
 tickers:
   DCAM.PA: 0.07   # Amundi MSCI World UCITS ETF — actions monde diversifiées
+  CW8.PA: 0.07    # Amundi MSCI World UCITS ETF (benchmark de l'app) — même indice que DCAM
+  EWLD.PA: 0.07   # Lyxor/Amundi MSCI World PEA — même indice que DCAM
+  WPEA.PA: 0.07   # iShares MSCI World Swap PEA — même indice que DCAM
   PUST.PA: 0.10   # Amundi Nasdaq-100 UCITS ETF — tech long-terme
   ETZ.PA: 0.06    # BNP Easy Stoxx Europe 600 — actions Europe larges
 
-# Fallback si ticker absent
-default_return: 0.07
+# Plus aucun fallback : un ticker absent garde son μ historique (voir cma.py).
