@@ -160,3 +160,32 @@ def test_annualized_arithmetic_mu_adds_half_variance():
     got = float(analytics.annualized_arithmetic_mu(rets)["A"])
     assert got == pytest.approx(np.exp(m + v / 2) - 1)
     assert got > m
+
+
+def _daily_history(years: int = 5) -> pd.Series:
+    rng = np.random.default_rng(7)
+    return pd.Series(rng.normal(0.0003, 0.011, years * analytics.TRADING_DAYS))
+
+
+def test_monte_carlo_parameter_uncertainty_widens_the_fan_not_the_median():
+    """Uncertainty on μ̂ (5 years of data) must show up in the band, not in the center."""
+    hist = _daily_history(5)
+    with_unc = analytics.monte_carlo_projection(hist, 10_000, 500, 120, n_paths=4000)
+    without = analytics.monte_carlo_projection(
+        hist, 10_000, 500, 120, n_paths=4000, parameter_uncertainty=False
+    )
+    width_with = with_unc["p90"][-1] - with_unc["p10"][-1]
+    width_without = without["p90"][-1] - without["p10"][-1]
+    assert width_with > 1.3 * width_without
+    assert with_unc["p50"][-1] == pytest.approx(without["p50"][-1], rel=0.05)
+
+
+def test_monte_carlo_uncertainty_shrinks_with_longer_history():
+    """Same μ̂ and σ̂, ten times more observations: SE(μ̂) falls by √10, the fan narrows."""
+    short = _daily_history(2)
+    long = pd.concat([short] * 10, ignore_index=True)
+    fan_short = analytics.monte_carlo_projection(short, 10_000, 500, 120, n_paths=4000)
+    fan_long = analytics.monte_carlo_projection(long, 10_000, 500, 120, n_paths=4000)
+    assert (fan_short["p90"][-1] - fan_short["p10"][-1]) > (
+        fan_long["p90"][-1] - fan_long["p10"][-1]
+    )

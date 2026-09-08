@@ -269,12 +269,19 @@ def monte_carlo_projection(
     monthly_fee: "Callable[[float], float] | None" = None,
     n_paths: int = 1000,
     seed: int = 42,
+    parameter_uncertainty: bool = True,
 ) -> dict[str, list[float] | np.ndarray]:
     """Parametric Monte Carlo on monthly log-returns derived from daily history.
 
     Returns percentile bands p10/p25/p50/p75/p90 at each month, plus the
     probability of reaching `goal` at each month if provided via wrapper.
     Fees (if given) deducted per-path per-month and compound correctly.
+
+    With ``parameter_uncertainty`` each path draws its own drift from
+    N(μ̂, SE²), SE = σ_month / √(months of history): with 5 years of data
+    SE(μ̂) ≈ 8 %/year for an equity basket, larger than the dispersion the
+    return volatility alone produces at a 10-year horizon. A fan drawn from
+    σ only is about half as wide as the honest one.
     """
     if daily_log_returns is None or daily_log_returns.empty:
         raise ValueError("Aucun rendement historique pour la simulation Monte-Carlo.")
@@ -284,7 +291,13 @@ def monte_carlo_projection(
     mu = float(daily_log_returns.mean()) * days_per_month
     sigma = float(daily_log_returns.std()) * np.sqrt(days_per_month)
 
-    log_rets = rng.normal(mu, sigma, size=(n_paths, months))
+    if parameter_uncertainty:
+        months_of_history = max(len(daily_log_returns) / days_per_month, 1.0)
+        se_mu = sigma / np.sqrt(months_of_history)
+        mu_paths = rng.normal(mu, se_mu, size=(n_paths, 1))
+    else:
+        mu_paths = np.full((n_paths, 1), mu)
+    log_rets = rng.normal(mu_paths, sigma, size=(n_paths, months))
     gross = np.exp(log_rets)
 
     fee = monthly_fee or (lambda _v: 0.0)

@@ -181,9 +181,9 @@ function Headline({
         sub={`entre ${fmt.kEur(lo)} et ${fmt.kEur(hi)}, 8 fois sur 10`}
       />
       <Figure
-        label="Tu auras versé"
+        label="Capital de départ + versements"
         value={fmt.approxEur(invested)}
-        sub="ton capital d'aujourd'hui compris"
+        sub="ce que tu auras mis, sans gain ni perte"
       />
       {data.goal !== null && data.goal > 0 && chances !== null ? (
         <Figure
@@ -432,6 +432,7 @@ function ErrorState({ error }: { error: unknown }) {
 /* ─── « Comment c'est calculé ? » ───────────────────────────────────────── */
 
 function HowItWorks({ data }: { data: ProjectionResponse }) {
+  const years = Math.round(data.months[data.months.length - 1] / 12);
   const last = data.months.length - 1;
   return (
     <details className="rounded-xl border bg-muted/20 text-sm">
@@ -445,16 +446,20 @@ function HowItWorks({ data }: { data: ProjectionResponse }) {
           {fmt.pct(data.annual_vol)}.
         </p>
         <p>
-          On simule 1 000 trajectoires possibles (Monte-Carlo). « Le plus probable » est la médiane
-          ; la « zone probable » va du 10ᵉ au 90ᵉ centile, donc 8 trajectoires sur 10 finissent
-          dedans.
+          On simule 1 000 trajectoires possibles (Monte-Carlo), en tenant compte de l'incertitude
+          sur le rendement estimé lui-même : 5 ans d'historique, c'est peu. « Le plus probable » est
+          la médiane ; la « zone probable » va du 10ᵉ au 90ᵉ centile, donc 8 trajectoires sur 10
+          finissent dedans.
         </p>
         <p>
           Les frais de courtage et de tenue de compte sont prélevés mois par mois, donc ils se
           cumulent. Sans aucun frais, la médiane serait de {fmt.approxEur(data.gross_p50[last])} au
           lieu de {fmt.approxEur(data.bands.p50[last])}.
         </p>
-        <p>Les montants sont en euros d'aujourd'hui, avant impôt.</p>
+        <p>
+          Les montants ne tiennent compte ni de l'inflation ni de l'impôt : dans {years} ans, ils
+          achèteront moins qu'aujourd'hui.
+        </p>
       </div>
     </details>
   );
