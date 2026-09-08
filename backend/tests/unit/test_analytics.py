@@ -180,3 +180,14 @@ def test_max_sharpe_multistart_is_not_worse_than_equal_weight_start():
     w0 = np.full(3, 1 / 3)
     sharpe_w0 = (w0 @ mu - 0.02) / np.sqrt(w0 @ cov @ w0)
     assert res["sharpe"] >= sharpe_w0 - 1e-9
+
+
+def test_annualized_arithmetic_mu_adds_half_variance():
+    """E[R] = exp(m + s²/2) − 1 on annualized log stats, not m alone."""
+    rng = np.random.default_rng(1)
+    rets = pd.DataFrame({"A": rng.normal(0.0003, 0.01, 2520)})
+    m = float(rets["A"].mean() * analytics.TRADING_DAYS)
+    v = float(rets["A"].var() * analytics.TRADING_DAYS)
+    got = float(analytics.annualized_arithmetic_mu(rets)["A"])
+    assert got == pytest.approx(np.exp(m + v / 2) - 1)
+    assert got > m

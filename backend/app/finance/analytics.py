@@ -55,6 +55,18 @@ def daily_log_returns(prices: pd.DataFrame) -> pd.DataFrame:
     return rets
 
 
+def annualized_arithmetic_mu(returns: pd.DataFrame) -> pd.Series:
+    """Annualized *arithmetic* expected return per asset from daily log returns.
+
+    ``mean(log) × 252`` is the geometric drift; mean-variance inputs and the
+    CMA figures they are blended with are arithmetic. Under lognormality
+    E[R] = exp(m + s²/2) − 1 with m, s the annualized log mean and std.
+    """
+    m = returns.mean() * TRADING_DAYS
+    v = returns.var() * TRADING_DAYS
+    return np.exp(m + v / 2) - 1
+
+
 def annualized_stats(
     returns: pd.DataFrame,
     risk_free: float = RISK_FREE,
@@ -65,7 +77,7 @@ def annualized_stats(
     If `mu_override` provided, use those μ instead of the historical mean.
     σ is always computed from historical data (CMAs target μ, not σ).
     """
-    mu = returns.mean() * TRADING_DAYS
+    mu = annualized_arithmetic_mu(returns)
     if mu_override:
         for t in returns.columns:
             if t in mu_override:
@@ -88,12 +100,11 @@ def portfolio_stats(
 
     If `mu_override` given, asset μ are overridden before weighting.
     """
+    hist_mu = annualized_arithmetic_mu(returns)
     if mu_override:
-        mu_per_asset = np.array(
-            [mu_override.get(t, returns[t].mean() * TRADING_DAYS) for t in returns.columns]
-        )
+        mu_per_asset = np.array([mu_override.get(t, float(hist_mu[t])) for t in returns.columns])
     else:
-        mu_per_asset = returns.mean().values * TRADING_DAYS
+        mu_per_asset = hist_mu.values
     cov = returns.cov().values * TRADING_DAYS
     expected = float(weights @ mu_per_asset)
     vol = float(np.sqrt(weights @ cov @ weights))

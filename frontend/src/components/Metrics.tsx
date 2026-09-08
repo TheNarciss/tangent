@@ -33,6 +33,13 @@ export function Metrics({ metrics }: Props) {
         <MetricCard label="Sharpe" value={fmt.num(metrics.sharpe)} sub="vs. r_f = 2,5 %" />
       </div>
 
+      {metrics.unmapped_tickers.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          Sans hypothèse de rendement long terme, estimé sur l'historique seul :{" "}
+          {metrics.unmapped_tickers.join(", ")}.
+        </p>
+      )}
+
       <div className="grid gap-3 rounded-lg border bg-muted/20 p-3">
         <RiskCard
           label="Pire baisse vécue"

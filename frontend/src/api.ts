@@ -40,6 +40,8 @@ export interface PortfolioMetrics {
   max_drawdown_observed: number;
   assets: AssetMetrics[];
   correlation: Record<string, Record<string, number>>;
+  /** Tickers with no long-term return assumption: their μ is historical only. */
+  unmapped_tickers: string[];
 }
 
 export type Severity = "good" | "warning" | "critical";
@@ -228,6 +230,7 @@ export interface OptimizerResponse {
   risk_contributions_optimal: RiskContribution;
   frontier_curve: FrontierCurve;
   envelope_points: EnvelopePoint[];
+  unmapped_tickers: string[];
   kelly_leverage: KellyLeverage | null;
 }
 

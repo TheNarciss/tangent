@@ -24,7 +24,8 @@ SHRINKAGE_DEFAULT = 0.70
 
 class CMAConfig(BaseModel):
     tickers: dict[str, float] = Field(default_factory=dict)
-    default_return: float = 0.07
+    # Kept for backward-compatible parsing of cma.yaml; no longer applied.
+    default_return: float | None = None
 
 
 @lru_cache(maxsize=1)
@@ -39,12 +40,16 @@ def config() -> CMAConfig:
         raise ConfigurationError(f"cma.yaml malformé: {exc}") from exc
 
 
-def get_return(ticker: str, overrides: dict[str, float] | None = None) -> float:
-    """μ forward-looking. Overrides > config > default."""
+def get_return(ticker: str, overrides: dict[str, float] | None = None) -> float | None:
+    """μ forward-looking. Overrides > config > None (no CMA known for this ticker)."""
     if overrides and ticker in overrides:
         return overrides[ticker]
-    cfg = config()
-    return cfg.tickers.get(ticker, cfg.default_return)
+    return config().tickers.get(ticker)
+
+
+def unmapped_tickers(tickers: list[str], overrides: dict[str, float] | None = None) -> list[str]:
+    """Tickers with no CMA (neither in cma.yaml nor in the expert overrides)."""
+    return [t for t in tickers if get_return(t, overrides) is None]
 
 
 def blended_mu(
@@ -58,7 +63,18 @@ def blended_mu(
     Default shrinkage = 0.70 (70 % CMA) car les μ historiques 5y sont en moyenne
     gonflés de +10 points sur la période post-2020. Tire l'optimisation vers des
     espérances réalistes long-terme.
+
+    A ticker with no CMA keeps its historical μ untouched: assigning it a
+    generic equity-like return (the old ``default_return``) paired with its own
+    small σ made money-market or bond funds look like the best asset on earth.
+    Callers surface such tickers via :func:`unmapped_tickers`.
     """
     s = SHRINKAGE_DEFAULT if shrinkage is None else max(0.0, min(1.0, shrinkage))
-    cma_mu = np.array([get_return(t, overrides) for t in tickers])
-    return (1 - s) * historical_mu + s * cma_mu
+    out = np.array(historical_mu, dtype=float).copy()
+    for i, t in enumerate(tickers):
+        cma_mu = get_return(t, overrides)
+        if cma_mu is not None:
+            out[i] = (1 - s) * historical_mu[i] + s * cma_mu
+        else:
+            logger.warning("cma: no forward-looking μ for %s, historical μ kept", t)
+    return out

@@ -151,6 +151,12 @@ export function Optimizer({
             <ComparisonTable data={query.data} />
             <ActionsList data={query.data} />
             <RiskContributions data={query.data} />
+            {query.data.unmapped_tickers.length > 0 && (
+              <p className="text-xs text-muted-foreground italic border-l-2 border-muted pl-3">
+                Sans hypothèse de rendement long terme, estimé sur l'historique seul :{" "}
+                {query.data.unmapped_tickers.join(", ")}.
+              </p>
+            )}
             {includeEnvelopes && objective === "max_sharpe" && (
               <p className="text-xs text-muted-foreground italic border-l-2 border-muted pl-3">
                 Note : avec livrets et <em>max Sharpe</em> sans contrainte de risque, le solveur
