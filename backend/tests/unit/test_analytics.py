@@ -149,3 +149,34 @@ def test_frontier_has_no_reason_when_well_posed():
     out = analytics.efficient_frontier_curve(rets, mu=mu, cov=cov, n_points=10)
     assert len(out["vol"]) > 0
     assert out["reason"] is None
+
+
+def _three_assets():
+    mu = np.array([0.04, 0.07, 0.09])
+    cov = np.array([[0.0025, 0.001, 0.0005], [0.001, 0.0225, 0.012], [0.0005, 0.012, 0.04]])
+    return mu, cov, [(0.0, 1.0)] * 3
+
+
+@pytest.mark.parametrize("objective", ["max_sharpe", "min_variance", "target_volatility"])
+def test_solve_slsqp_converges_on_well_posed_problem(objective):
+    mu, cov, bounds = _three_assets()
+    res = analytics._solve_slsqp(mu, cov, bounds, objective, 0.02, 0.10)
+    w = np.array(res["weights"])
+    assert res["success"] is True
+    assert w.min() >= 0.0
+    assert w.sum() == pytest.approx(1.0)
+
+
+def test_solve_slsqp_from_strategy_reports_infeasible_as_failure():
+    mu, cov, bounds = _three_assets()
+    res = analytics._solve_slsqp(mu, cov, bounds, "from_strategy", 0.02, 0.03, 0.15)
+    assert res["success"] is False
+
+
+def test_max_sharpe_multistart_is_not_worse_than_equal_weight_start():
+    """The best of several starts must be at least as good as the 1/N start alone."""
+    mu, cov, bounds = _three_assets()
+    res = analytics._solve_slsqp(mu, cov, bounds, "max_sharpe", 0.02, None)
+    w0 = np.full(3, 1 / 3)
+    sharpe_w0 = (w0 @ mu - 0.02) / np.sqrt(w0 @ cov @ w0)
+    assert res["sharpe"] >= sharpe_w0 - 1e-9

@@ -11,7 +11,7 @@ from typing import TypedDict, cast
 
 import numpy as np
 
-from ..errors import ConfigurationError, InfeasibleStrategyError, PortfolioEmptyError
+from ..errors import ConfigurationError, InfeasibleStrategyError, PortfolioEmptyError, SolverError
 from ..models import (
     CeilingsUsed,
     EnvelopePoint,
@@ -181,6 +181,12 @@ def build(req: OptimizerRequest, wealth: "Wealth | None" = None) -> OptimizerRes
                 f"Infeasible strategy: σ ≤ {req.max_volatility * 100:.1f}% and μ ≥ {req.target_return * 100:.2f}% "
                 f"cannot be satisfied simultaneously with your current assets."
             ) from err
+
+    if not optimal.get("success", True):
+        raise SolverError(
+            "Le solveur n'a pas convergé : aucune allocation fiable à proposer avec ces lignes. "
+            "Essaie une période historique plus longue dans les Paramètres expert."
+        )
 
     optimal_w = np.array(optimal["weights"])
 
