@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from app.finance.fees import apply_ter_to_fee_fn
 
 
@@ -51,3 +53,14 @@ def test_ter_scales_with_value() -> None:
     assert wrapped(100_000) == 100_000 * 0.006 / 12
     # Ratio is exactly 10
     assert wrapped(100_000) / wrapped(10_000) == 10
+
+
+def test_rebates_are_not_charged_to_the_user():
+    """Retrocessions are paid out of the fund's TER to the bank, not by the client."""
+    from app.finance import fees
+
+    _, bnp = fees.get("bnp_start")
+    assert bnp.rebates_pct > 0  # still documented in brokers.yaml
+    fn = fees.monthly_fee_fn(bnp, n_lines=1, monthly_contribution=0.0)
+    expected = bnp.fixed_per_line_eur / 12 + bnp.custody_pct / 12 * 100_000
+    assert fn(100_000.0) == pytest.approx(expected)
