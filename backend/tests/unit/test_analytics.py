@@ -220,3 +220,59 @@ def test_monte_carlo_uncertainty_shrinks_with_longer_history():
     assert (fan_short["p90"][-1] - fan_short["p10"][-1]) > (
         fan_long["p90"][-1] - fan_long["p10"][-1]
     )
+
+
+# ── Inverse problem: the contribution a goal requires ──────────────────────
+
+
+def _flat_returns(mu_daily: float = 0.0003, sigma_daily: float = 0.008) -> pd.Series:
+    rng = np.random.default_rng(3)
+    return pd.Series(rng.normal(mu_daily, sigma_daily, 1260))
+
+
+def test_required_contribution_reaches_the_asked_probability():
+    """The answer, replayed on the same paths, hits the target probability."""
+    rets = _flat_returns()
+    required = analytics.required_monthly_contribution(
+        rets, initial=5_000.0, months=120, goal=60_000.0, probability=0.75, seed=11
+    )
+    assert required is not None
+    mc = analytics.monte_carlo_projection(rets, 5_000.0, required, 120, n_paths=1000, seed=11)
+    reached = analytics.goal_probability(np.asarray(mc["_paths"]), 60_000.0)[-1]
+    assert reached == pytest.approx(0.75, abs=0.02)
+
+
+def test_required_contribution_grows_with_the_probability():
+    rets = _flat_returns()
+    args = dict(initial=0.0, months=120, goal=50_000.0, seed=5)
+    p50 = analytics.required_monthly_contribution(rets, probability=0.50, **args)
+    p75 = analytics.required_monthly_contribution(rets, probability=0.75, **args)
+    p90 = analytics.required_monthly_contribution(rets, probability=0.90, **args)
+    assert p50 is not None and p75 is not None and p90 is not None
+    assert p50 < p75 < p90
+
+
+def test_required_contribution_is_zero_when_the_capital_already_gets_there():
+    rets = _flat_returns()
+    required = analytics.required_monthly_contribution(
+        rets, initial=100_000.0, months=120, goal=1_000.0, probability=0.75, seed=5
+    )
+    assert required == 0.0
+
+
+def test_required_contribution_accounts_for_fees():
+    """Fees raise the contribution needed for the same goal."""
+    rets = _flat_returns()
+    args = dict(initial=0.0, months=120, goal=50_000.0, probability=0.75, seed=7)
+    free = analytics.required_monthly_contribution(rets, **args)
+    charged = analytics.required_monthly_contribution(
+        rets, fixed_monthly=5.0, proportional_monthly=0.004 / 12, courtage_pct=0.005, **args
+    )
+    assert free is not None and charged is not None
+    assert charged > free
+
+
+def test_required_contribution_rejects_a_meaningless_ask():
+    rets = _flat_returns()
+    assert analytics.required_monthly_contribution(rets, 0.0, 0, 1000.0, 0.75) is None
+    assert analytics.required_monthly_contribution(rets, 0.0, 120, 0.0, 0.75) is None

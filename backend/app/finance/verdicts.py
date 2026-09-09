@@ -76,7 +76,6 @@ class SavingsRateThresholds(BaseModel):
 class GoalThresholds(BaseModel):
     target_probability: float = Field(gt=0, lt=1)
     amber_probability: float = Field(gt=0, lt=1)
-    inflation: float = Field(ge=0)
     risk_free: float = Field(ge=0)
     n_paths: int = Field(gt=0)
     seed: int = 0
@@ -86,7 +85,15 @@ class RetirementThresholds(BaseModel):
     withdrawal_rate: float = Field(gt=0, le=0.1)
 
 
+class ProjectionThresholds(BaseModel):
+    target_probability: float = Field(gt=0, lt=1)
+    tax_on_gains: dict[str, float]
+    default_tax_on_gains: float = Field(ge=0, le=1)
+
+
 class VerdictsConfig(BaseModel):
+    inflation: float = Field(ge=0)
+    projection: ProjectionThresholds
     fees: FeesThresholds
     next_euro: NextEuroThresholds
     risk_share: RiskShareThresholds
@@ -948,6 +955,7 @@ def goal_verdict(
     goal to the target probability."""
     cfg = thresholds or config().goal
     rcfg = risk_thresholds or config().risk_share
+    inflation = config().inflation
     title = "Épargne pour ton objectif"
     goal = profile.goal_amount
     if not goal or goal <= 0:
@@ -972,7 +980,7 @@ def goal_verdict(
     else:
         share = 0.5
     mu_nominal = cfg.risk_free + share * rcfg.equity_premium
-    mu_real = mu_nominal - cfg.inflation
+    mu_real = mu_nominal - inflation
     sigma = share * rcfg.equity_sigma
 
     rng = np.random.default_rng(cfg.seed)
@@ -1003,7 +1011,7 @@ def goal_verdict(
         "mu_nominal": mu_nominal,
         "mu_real": mu_real,
         "sigma": sigma,
-        "inflation": cfg.inflation,
+        "inflation": inflation,
         "n_paths": cfg.n_paths,
     }
     chances = f"{round(probability * 10):.0f} chances sur 10"

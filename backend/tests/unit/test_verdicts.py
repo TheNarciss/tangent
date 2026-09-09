@@ -470,3 +470,28 @@ def test_hard_goal_is_red_with_required_monthly():
     assert v.status == "red"
     assert v.details["required_monthly_eur"] > 1_000
     assert v.action is not None and "Monte ton versement" in v.action
+
+
+# ── Fiscalité de sortie de la projection ───────────────────────────────────
+
+
+def test_tax_on_gains_is_weighted_by_wrapper():
+    from app.finance.projection import _tax_on_gains
+
+    cfg = verdicts.config().projection
+    w = _wealth2(accounts=[_acc("pea", 30_000.0), _acc("cto", 10_000.0)])
+    # 3/4 de PEA à 17,2 %, 1/4 de CTO à 30 %
+    assert _tax_on_gains(w, cfg) == pytest.approx(0.75 * 0.172 + 0.25 * 0.30)
+
+
+def test_tax_on_gains_falls_back_to_the_flat_tax():
+    from app.finance.projection import _tax_on_gains
+
+    cfg = verdicts.config().projection
+    assert _tax_on_gains(_wealth2(), cfg) == pytest.approx(cfg.default_tax_on_gains)
+
+
+def test_inflation_is_declared_once_for_the_whole_app():
+    """Projection and « objectif » verdict deflate with the same rate."""
+    assert verdicts.config().inflation > 0
+    assert not hasattr(verdicts.config().goal, "inflation")

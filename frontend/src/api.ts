@@ -106,6 +106,14 @@ export interface ProjectionResponse {
   cumulative_fees: number[]; // €, per-month cumulative
   multi_broker_warning?: string | null;
   weighted_ter?: number; // ADR-021: weighted average TER, ratio (0.0025 = 0.25%/an)
+  /** Every amount above is in today's euros, deflated at this annual rate. */
+  inflation: number;
+  /** Contribution reaching the goal with `target_probability` (inverse problem). */
+  required_monthly: number | null;
+  target_probability: number | null;
+  /** Tax due on the gains at exit, weighted by the user's wrappers. */
+  tax_on_gains_pct: number;
+  median_after_tax: number | null;
 }
 
 export interface BrokerInfo {

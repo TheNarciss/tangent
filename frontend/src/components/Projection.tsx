@@ -204,9 +204,12 @@ function Headline({
   const reachedYear =
     reachedIdx >= 0 ? new Date().getFullYear() + Math.round(data.months[reachedIdx] / 12) : null;
   const chances = data.goal_prob_at_end !== null ? Math.round(data.goal_prob_at_end * 10) : null;
+  const hasGoal = data.goal !== null && data.goal > 0 && chances !== null;
 
   return (
-    <section className="grid gap-3 sm:grid-cols-3">
+    <section
+      className={cn("grid gap-3", hasGoal ? "sm:grid-cols-2 xl:grid-cols-4" : "sm:grid-cols-3")}
+    >
       <Figure
         label={`Dans ${years} an${years > 1 ? "s" : ""}, environ`}
         value={fmt.approxEur(median)}
@@ -217,20 +220,39 @@ function Headline({
         value={fmt.approxEur(invested)}
         sub="ce que tu auras mis, sans gain ni perte"
       />
-      {data.goal !== null && data.goal > 0 && chances !== null ? (
-        <Figure
-          label={
-            goalMode === "income"
-              ? `Pour ${fmt.eur(income).replace(",00", "")} par mois à vie`
-              : `Objectif ${fmt.approxEur(data.goal)}`
-          }
-          value={reachedYear !== null ? `vers ${reachedYear}` : "pas dans l'horizon"}
-          sub={
-            reachedYear !== null
-              ? `${chances} chance${chances > 1 ? "s" : ""} sur 10 à la fin`
-              : `${chances} chance${chances > 1 ? "s" : ""} sur 10 d'y être dans ${years} ans`
-          }
-        />
+      {hasGoal ? (
+        <>
+          <Figure
+            label={
+              goalMode === "income"
+                ? `Pour ${fmt.eur(income).replace(",00", "")} par mois à vie`
+                : `Objectif ${fmt.approxEur(data.goal!)}`
+            }
+            value={reachedYear !== null ? `vers ${reachedYear}` : "pas dans l'horizon"}
+            sub={
+              reachedYear !== null
+                ? `${chances} chance${chances! > 1 ? "s" : ""} sur 10 à la fin`
+                : `${chances} chance${chances! > 1 ? "s" : ""} sur 10 d'y être dans ${years} ans`
+            }
+          />
+          <Figure
+            label={
+              data.target_probability
+                ? `Pour ${chancesLabel(data.target_probability)}`
+                : "Versement requis"
+            }
+            value={
+              data.required_monthly !== null
+                ? `${fmt.approxEur(data.required_monthly)}/mois`
+                : "hors de portée"
+            }
+            sub={
+              data.required_monthly !== null
+                ? "le versement qu'il faudrait, frais compris"
+                : "vise moins haut, ou plus loin"
+            }
+          />
+        </>
       ) : (
         <Figure
           label="Objectif"
@@ -240,6 +262,18 @@ function Headline({
       )}
     </section>
   );
+}
+
+/** 0.75 → « 3 chances sur 4 » : the wording the Méthode tab uses too. */
+function chancesLabel(p: number): string {
+  for (const d of [2, 3, 4, 5, 10]) {
+    const n = p * d;
+    if (Math.abs(n - Math.round(n)) < 1e-9) {
+      const r = Math.round(n);
+      return `${r} chance${r > 1 ? "s" : ""} sur ${d}`;
+    }
+  }
+  return `${Math.round(p * 100)} % de chances`;
 }
 
 function Figure({ label, value, sub }: { label: string; value: string; sub: string }) {
@@ -492,8 +526,15 @@ function HowItWorks({ data }: { data: ProjectionResponse }) {
           lieu de {fmt.approxEur(data.bands.p50[last])}.
         </p>
         <p>
-          Les montants ne tiennent compte ni de l'inflation ni de l'impôt : dans {years} ans, ils
-          achèteront moins qu'aujourd'hui.
+          Tous les montants sont en euros d'aujourd'hui : la simulation tourne en euros courants
+          puis les ramène au pouvoir d'achat actuel, à {fmt.pct(data.inflation)} d'inflation par an.
+          Un capital de {fmt.approxEur(data.bands.p50[last])} dans {years} ans, c'est ce que{" "}
+          {fmt.approxEur(data.bands.p50[last])} achètent aujourd'hui.
+        </p>
+        <p>
+          L'impôt n'est pas déduit des courbes : il n'est dû qu'à la sortie, et seulement sur les
+          gains. Au taux de tes enveloppes ({fmt.pct(data.tax_on_gains_pct)} en moyenne), il
+          resterait environ {fmt.approxEur(data.median_after_tax ?? 0)} après impôt sur la médiane.
         </p>
       </div>
     </details>
