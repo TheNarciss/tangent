@@ -285,11 +285,10 @@ function RiskBlock({
       <p className="mt-2 text-xs text-muted-foreground">
         Les crises sont rejouées sur les classes d'actifs, pas sur les cours de tes lignes : aucun
         ETF français n'a d'historique avant 2009. Chaque perte est en euros, change compris, et le
-        pourcentage porte sur <strong>tout ton patrimoine</strong>, pas seulement sur tes
-        placements — d'où un pourcentage plus petit que si on le rapportait aux seules lignes
-        ci-dessus. Tes livrets ne bougent pas et ton fonds euros ne perd pas sa valeur, seul son
-        taux futur baisse. Un fonds sectoriel est rejoué avec l'amplitude des actions monde, ce qui
-        le sous-estime.
+        pourcentage porte sur <strong>tout ton patrimoine</strong>, pas seulement sur tes placements
+        — d'où un pourcentage plus petit que si on le rapportait aux seules lignes ci-dessus. Tes
+        livrets ne bougent pas et ton fonds euros ne perd pas sa valeur, seul son taux futur baisse.
+        Un fonds sectoriel est rejoué avec l'amplitude des actions monde, ce qui le sous-estime.
       </p>
     </Block>
   );
