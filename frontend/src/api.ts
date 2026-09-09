@@ -55,8 +55,14 @@ export interface StressTestResult {
   description: string;
   start: string;
   end: string;
+  /** Share of the whole patrimony the episode would have cost. */
   pnl_pct: number;
-  drawdown_pct: number;
+  /** Same thing in euros, negative for a loss. */
+  loss_eur: number;
+  /** What the euro/dollar move added to world equities during the episode;
+   *  null when the published euro and dollar figures are not comparable. */
+  currency_effect_pct: number | null;
+  currency_effect_eur: number | null;
 }
 
 export interface DashboardResponse {
