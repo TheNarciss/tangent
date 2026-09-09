@@ -8,6 +8,8 @@ Nothing here knows about a user, a portfolio or a verdict: consumers in
 - `ecb`        : taux directeur et cours de référence (Banque centrale européenne)
 - `eurostat`   : IPC harmonisé France
 - `ken_french` : rendements mensuels de marché par région, depuis 1990
+- `damodaran`  : rendements annuels des classes US (actions, obligations), depuis 1928
+- `shiller`    : S&P 500, IPC et taux longs mensuels, depuis 1871
 - `lbma`       : fixings or et argent, depuis 1968
 - `openfigi`   : ISIN → ticker / place / nom
 

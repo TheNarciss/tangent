@@ -19,7 +19,7 @@ from datetime import date
 
 import pandas as pd
 
-from . import ecb, eurostat, fred, ken_french, lbma, openfigi
+from . import damodaran, ecb, eurostat, fred, ken_french, lbma, openfigi, shiller
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +82,21 @@ def _metal(metal: str) -> Callable[[], str]:
     return run
 
 
+def _damodaran(asset_class: str) -> Callable[[], str]:
+    def run() -> str:
+        annual = damodaran.annual_returns(asset_class)
+        crash = damodaran.window_return(asset_class, 2008, 2008)
+        return f"{_coverage(annual)} · 2008 : {crash:+.1%}"
+
+    return run
+
+
+def _shiller() -> str:
+    levels = shiller.series("real_total_return")
+    seventies = shiller.window_return("real_total_return", "1973-01", "1974-12")
+    return f"{_coverage(levels)} · 1973-74 réel : {seventies:+.1%}"
+
+
 def _openfigi() -> str:
     records = openfigi.map_isins([SAMPLE_ISIN]).get(SAMPLE_ISIN, [])
     if not records:
@@ -105,6 +120,8 @@ PROBES: tuple[Probe, ...] = (
     Probe("ecb", "EUR/USD référence", _ecb("eur_usd", "")),
     Probe("eurostat", "IPC harmonisé France", _eurostat),
     *(Probe("ken_french", region, _region(region)) for region in ken_french.regions()),
+    *(Probe("damodaran", c, _damodaran(c)) for c in damodaran.classes()),
+    Probe("shiller", "S&P total return réel", _shiller),
     *(Probe("lbma", metal, _metal(metal)) for metal in lbma.metals()),
     Probe("openfigi", "ISIN → ticker", _openfigi),
     Probe("yahoo", "Cours quotidiens", _yahoo),

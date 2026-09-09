@@ -32,6 +32,8 @@ décide quoi en faire.
 | `ecb` | BCE Data Portal | taux directeur, cours de référence EUR/USD |
 | `eurostat` | Eurostat | IPC harmonisé France (contre-expertise) |
 | `ken_french` | Kenneth French Data Library | rendements mensuels de marché monde / Europe / US / Japon / émergents, depuis 1990 |
+| `damodaran` | Damodaran (NYU Stern) | rendements **annuels** des classes US — actions, small caps, T-Bills, **T-Bonds**, corporates, immobilier — depuis 1928 |
+| `shiller` | Shiller (Yale) | S&P 500, IPC et taux longs **mensuels** depuis 1871 |
 | `lbma` | London Bullion Market Association | fixings or et argent en USD / GBP / EUR, depuis 1968 |
 | `openfigi` | OpenFIGI | ISIN → ticker, place, nom |
 
@@ -73,9 +75,16 @@ quand même, parce que c'est la plus fragile de toutes.
 - Ken French publie en **dollar** et en **fin de mois** : convertir en euro
   demande une série de change, et la granularité mensuelle interdit de rejouer
   un krach de trois jours.
-- Ken French couvre les actions seulement. L'or vient de la LBMA ; les
-  **obligations** et les **fonds euros** n'ont toujours aucune source gratuite
-  et non bridée, et restent déclaratifs.
+- Ken French couvre les actions seulement. L'or vient de la LBMA, les
+  obligations de Damodaran. Seuls les **fonds euros** restent déclaratifs :
+  aucun flux ne les publie.
+- Damodaran et Shiller sont des **classeurs Excel**, pas des API : ils coûtent
+  deux dépendances (`openpyxl`, `xlrd`), et rien ne garantit qu'une colonne ne
+  bougera pas. Les deux parseurs vérifient l'en-tête et échouent bruyamment
+  plutôt que de renvoyer la mauvaise colonne.
+- Ces deux sources sont **américaines et annuelles** (Damodaran) ou **en retard
+  de deux ans** (Shiller, dernier point 2024-09). À utiliser pour rejouer une
+  crise ancienne, jamais pour une valeur courante.
 - La LBMA ne publie la jambe euro qu'à partir de 1999 : avant, il faut passer
   par le dollar et une série de change.
 - Le cache est en mémoire du process : deux workers font deux appels.
@@ -106,5 +115,7 @@ utilisé pour le macro, où il n'y a pas de bridage.
 - Sonde : `cd backend && python -m app.data.probe`
 - Ken French Data Library : <https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html>
 - OpenFIGI : 25 requêtes/minute sans clé, 10 ISIN par requête.
+- Or : la LBMA publie ses fixings en JSON ouvert, ce qui rend inutile le compte
+  Nasdaq Data Link initialement envisagé.
 - Cet ADR crée la couche. Le branchement des consommateurs (frais, diagnostic,
   stress, CMA) fait l'objet de PR séparées.

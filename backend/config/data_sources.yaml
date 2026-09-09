@@ -55,6 +55,38 @@ ken_french:
     equity_japan: "Japan_3_Factors_CSV.zip"            # depuis 1990-07
     equity_emerging: "Emerging_5_Factors_CSV.zip"      # depuis 1989-07
 
+damodaran:
+  # Aswath Damodaran (NYU Stern), « Annual Returns on Stock, T.Bonds and T.Bills ».
+  # Rendements ANNUELS des grandes classes US depuis 1928, dividendes et coupons
+  # inclus. C'est la seule source gratuite et non bridée qu'on ait trouvée pour
+  # les obligations sur longue période. Fichier Excel, mis à jour chaque janvier.
+  url: "https://pages.stern.nyu.edu/~adamodar/pc/datasets/histretSP.xlsx"
+  sheet: "Returns by year"
+  header_row: 19          # ligne d'en-tête (base 0) dans la feuille
+  columns:                # nom d'usage → intitulé exact de la colonne
+    equity_us: "S&P 500 (includes dividends)"
+    small_cap_us: "US Small cap (bottom decile)"
+    tbill_3m: "3-month T.Bill"
+    tbond_10y: "US T. Bond (10-year)"
+    corporate_baa: "Baa Corporate Bond"
+    real_estate: "Real Estate"
+
+shiller:
+  # Robert Shiller (Yale), série « ie_data ». S&P 500 mensuel depuis 1871, avec
+  # dividendes, IPC et taux long. Seule source qui couvre 1973-74 et 1987.
+  # Les colonnes sont repérées par position : l'en-tête tient sur quatre lignes
+  # et pandas ne sait pas le lire. `expect` vérifie qu'on lit bien la bonne.
+  url: "https://img1.wsimg.com/blobby/go/e5e77e0b-59d1-44d9-ab25-4763ac982e53/downloads/ie_data.xls"
+  sheet: "Data"
+  first_data_row: 8
+  label_rows: [4, 5, 6, 7]
+  columns:
+    sp500_price: {position: 1, expect: "P"}
+    dividend: {position: 2, expect: "Dividend"}
+    cpi: {position: 4, expect: "Consumer Price Index"}
+    long_rate: {position: 6, expect: "Long Interest Rate GS10"}
+    real_total_return: {position: 9, expect: "Real Total Return Price"}
+
 lbma:
   # Fixings officiels de la London Bullion Market Association, en USD / GBP / EUR.
   # Or depuis 1968, argent depuis 1968. Gratuit, sans clé, sans compte.

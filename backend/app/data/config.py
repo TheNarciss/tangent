@@ -51,6 +51,26 @@ class KenFrenchConfig(BaseModel):
     regions: dict[str, str] = Field(default_factory=dict)
 
 
+class DamodaranConfig(BaseModel):
+    url: str
+    sheet: str
+    header_row: int = Field(ge=0)
+    columns: dict[str, str] = Field(default_factory=dict)
+
+
+class ShillerColumn(BaseModel):
+    position: int = Field(ge=0)
+    expect: str
+
+
+class ShillerConfig(BaseModel):
+    url: str
+    sheet: str
+    first_data_row: int = Field(ge=0)
+    label_rows: list[int] = Field(default_factory=list)
+    columns: dict[str, ShillerColumn] = Field(default_factory=dict)
+
+
 class LbmaConfig(BaseModel):
     base_url: str
     series: dict[str, str] = Field(default_factory=dict)
@@ -69,6 +89,8 @@ class DataSourcesConfig(BaseModel):
     ecb: EcbConfig
     eurostat: EurostatConfig
     ken_french: KenFrenchConfig
+    damodaran: DamodaranConfig
+    shiller: ShillerConfig
     lbma: LbmaConfig
     openfigi: OpenFigiConfig
 
