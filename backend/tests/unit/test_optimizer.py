@@ -56,7 +56,7 @@ def test_build_raises_when_solver_does_not_converge(monkeypatch):
 
     monkeypatch.setattr(analytics, "_solve_slsqp", failed)
     with pytest.raises(SolverError):
-        optimizer.build(OptimizerRequest(objective="max_sharpe"), wealth=_wealth())
+        optimizer.build(OptimizerRequest(objective="min_variance"), wealth=_wealth())
 
 
 def test_build_succeeds_on_well_posed_input(monkeypatch):

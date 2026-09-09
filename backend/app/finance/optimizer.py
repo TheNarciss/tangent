@@ -1,6 +1,6 @@
 """Portfolio optimizer service.
 
-Supports three objectives (max_sharpe, min_variance, target_volatility) and
+Supports three objectives (min_variance, target_volatility, from_strategy) and
 optionally augments the asset universe with the user's eligible regulated
 envelopes (Livret A, LEP, etc.) modeled as synthetic 0-σ assets with
 ceiling-derived weight bounds.
@@ -16,7 +16,6 @@ from ..models import (
     CeilingsUsed,
     EnvelopePoint,
     FrontierCurve,
-    KellyLeverage,
     OptimizerRequest,
     OptimizerResponse,
     PortfolioPoint,
@@ -232,28 +231,6 @@ def build(req: OptimizerRequest, wealth: "Wealth | None" = None) -> OptimizerRes
         cov_etf = cov[:n_etf, :n_etf]
         frontier = analytics.efficient_frontier_curve(returns, mu=mu_etf, cov=cov_etf)
 
-    # Kelly leverage indicator (on ETFs only — exclude envelopes since σ≈0 explodes the formula)
-    n_etf = len(tickers)
-    kelly = analytics.kelly_leverage(mu[:n_etf], cov[:n_etf, :n_etf], risk_free=rf)
-    half_l = kelly["half_kelly_leverage"]
-    if half_l > 1.05:
-        kelly_msg = (
-            f"Half-Kelly recommends leverage {half_l:.2f}× — your risky assets are very attractive. "
-            f"Without access to leverage, investing 100% with no cash reserve is consistent."
-        )
-    elif half_l < 0.95:
-        kelly_msg = (
-            f"Half-Kelly recommends {half_l * 100:.0f}% of capital in risky assets — "
-            f"the return/risk ratio doesn't justify going all-in. Keep {(1 - half_l) * 100:.0f}% in cash/savings."
-        )
-    else:
-        kelly_msg = f"Half-Kelly recommends {half_l * 100:.0f}% — perfect for a full investment without leverage."
-    kelly_indicator = KellyLeverage(
-        full_kelly_leverage=kelly["full_kelly_leverage"],
-        half_kelly_leverage=half_l,
-        interpretation=kelly_msg,
-    )
-
     logger.info(
         "optimizer: objective=%s, %d etf + %d envelope, total_capital=%.0f €, optimal σ=%.2f%% μ=%.2f%%",
         req.objective,
@@ -296,7 +273,6 @@ def build(req: OptimizerRequest, wealth: "Wealth | None" = None) -> OptimizerRes
             for e in envelope_assets
         ],
         unmapped_tickers=unmapped,
-        kelly_leverage=kelly_indicator,
     )
 
 

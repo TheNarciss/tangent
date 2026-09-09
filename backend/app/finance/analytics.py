@@ -112,22 +112,6 @@ def portfolio_stats(
     return PortfolioStat(expected_return=expected, volatility=vol, sharpe=sharpe)
 
 
-def cvar_95(returns_series: pd.Series) -> float:
-    """Conditional VaR à 95 % (Expected Shortfall) — annualisé.
-
-    = moyenne des rendements quotidiens dans le pire 5 %, × √252 pour annualiser
-    Plus honnête que VaR car prend la moyenne de la queue, pas juste le seuil.
-    Renvoie un nombre négatif (perte attendue dans les pires journées).
-    """
-    if returns_series.empty:
-        return 0.0
-    threshold = np.percentile(returns_series.values, 5)  # 5e percentile = seuil VaR
-    tail = returns_series[returns_series <= threshold]
-    if tail.empty:
-        return float(threshold * np.sqrt(TRADING_DAYS))
-    return float(tail.mean() * np.sqrt(TRADING_DAYS))
-
-
 def max_drawdown(price_series: pd.Series) -> float:
     """Plus grande chute peak-to-trough observée. Nombre négatif.
 
@@ -155,35 +139,6 @@ def shrunk_covariance(returns: pd.DataFrame, shrinkage: float = 0.20) -> np.ndar
     target = avg_var * np.eye(cov_sample.shape[0])
     s = max(0.0, min(1.0, shrinkage))
     return s * target + (1 - s) * cov_sample
-
-
-def kelly_leverage(
-    mu: np.ndarray, cov: np.ndarray, risk_free: float = RISK_FREE
-) -> dict[str, float]:
-    """Kelly leverage indicator : combien le solveur Kelly théorique investirait
-    si la contrainte sum(w)=1 et long-only étaient relâchées.
-
-    Formule : w_kelly = Σ⁻¹ (μ − r_f×1)  ;  leverage = sum(w_kelly)
-
-    Interprétation :
-    - leverage > 1 : Kelly suggère du levier (les actifs sont très attractifs ;
-      sans levier dispo, l'investissement plein sans cash est rationnel)
-    - leverage < 1 : Kelly suggère de garder du cash (risk-reward médiocre)
-    - leverage ≈ 1 : fully invested sans levier est juste
-
-    Half-Kelly applique un facteur 0,5 pour gérer l'incertitude sur μ.
-    """
-    excess = mu - risk_free
-    try:
-        raw = np.linalg.solve(cov, excess)
-    except np.linalg.LinAlgError:
-        # Σ singulière → fallback diagonale
-        raw = excess / np.maximum(np.diag(cov), 1e-10)
-    full_leverage = float(raw.sum())
-    return {
-        "full_kelly_leverage": full_leverage,
-        "half_kelly_leverage": full_leverage / 2,
-    }
 
 
 def correlation_matrix(returns: pd.DataFrame) -> dict[str, dict[str, float]]:
@@ -229,36 +184,6 @@ def rolling_sharpe(
 
 
 # ─── DCA projection ────────────────────────────────────────────────────────
-
-
-def deterministic_projection(
-    initial: float,
-    monthly_contribution: float,
-    annual_return: float,
-    annual_vol: float,
-    months: int,
-    monthly_fee: "Callable[[float], float] | None" = None,
-) -> dict[str, list[float]]:
-    """Three deterministic DCA paths: bear (μ-σ), base (μ), bull (μ+σ).
-
-    If `monthly_fee(value) -> €` is supplied, fees are deducted at each month-end
-    so they compound (lost money does not grow further).
-    """
-    fee = monthly_fee or (lambda _v: 0.0)
-    paths: dict[str, list[float]] = {}
-    for label, mu in (
-        ("bear", annual_return - annual_vol),
-        ("base", annual_return),
-        ("bull", annual_return + annual_vol),
-    ):
-        rm = (1 + mu) ** (1 / 12) - 1 if mu > -1 else -0.99
-        v = initial
-        series = [v]
-        for _ in range(months):
-            v = v * (1 + rm) + monthly_contribution - fee(v)
-            series.append(v)
-        paths[label] = series
-    return paths
 
 
 def _simulate_gross_monthly(
@@ -403,8 +328,8 @@ def _solve_slsqp(
 ) -> dict[str, float | list[float]]:
     """Common SLSQP body. mu, cov, bounds already finalized (possibly augmented).
 
-    ``max_sharpe`` and ``from_strategy`` are non-convex: a single start can
-    report a local optimum as "optimal". They are solved from several starts
+    ``from_strategy`` is non-convex: a single start can report a local
+    optimum as "optimal". It is solved from several starts
     (equal weight, each vertex, a few Dirichlet draws with a fixed seed) and
     the best converged solution is kept. The result's ``success`` flag is the
     caller's to check: a non-converged solve must never be shown as optimal.
@@ -415,12 +340,7 @@ def _solve_slsqp(
     w0 = np.full(n, 1 / n)
     constraints: list[dict] = [{"type": "eq", "fun": lambda w: w.sum() - 1.0}]
 
-    if objective == "max_sharpe":
-
-        def fn(w: np.ndarray) -> float:
-            vol = float(np.sqrt(w @ cov @ w))
-            return -(float(w @ mu) - risk_free) / vol if vol > 1e-10 else 1e6
-    elif objective == "min_variance":
+    if objective == "min_variance":
 
         def fn(w: np.ndarray) -> float:
             return float(w @ cov @ w)
@@ -462,7 +382,7 @@ def _solve_slsqp(
         raise ValueError(f"Unknown objective: {objective!r}")
 
     starts = [w0]
-    if objective in ("max_sharpe", "from_strategy"):
+    if objective == "from_strategy":
         starts += [np.eye(n)[i] for i in range(n)]
         starts += list(np.random.default_rng(0).dirichlet(np.ones(n), size=4))
 
@@ -544,7 +464,7 @@ def build_asset_stats(
 
 def optimize_portfolio(
     returns: pd.DataFrame,
-    objective: str = "max_sharpe",
+    objective: str = "from_strategy",
     risk_free: float = RISK_FREE,
     *,
     envelope_rates: list[float] | None = None,
@@ -553,7 +473,7 @@ def optimize_portfolio(
 ) -> dict[str, float | list[float]]:
     """Solve via SLSQP for a long-only fully-invested portfolio.
 
-    objective ∈ {"max_sharpe", "min_variance", "target_volatility"}.
+    objective ∈ {"min_variance", "target_volatility", "from_strategy"}.
     Returns weights aligned with `returns.columns` extended by envelopes if any.
     """
     mu, cov, bounds = build_asset_stats(returns, envelope_rates, envelope_max_weights)

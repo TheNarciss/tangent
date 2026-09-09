@@ -38,8 +38,6 @@ const OBJECTIVE_DESCRIPTIONS: Record<OptimizerObjective, string> = {
     "Maximise Sharpe sous tes contraintes σ ≤ vol max ET μ ≥ rendement cible (depuis ton profil). Te dit si ton intention est atteignable.",
   target_volatility:
     "Maximise μ sous contrainte σ_p ≤ cible. C'est ici que livrets et ETFs se mixent vraiment.",
-  max_sharpe:
-    "Maximise (μ − r_f) / σ. Sans contrainte de risque, l'optimiseur sature les actifs à plus haut ratio.",
   min_variance: "Minimise σ. Le portefeuille le moins volatil possible, peu importe le rendement.",
 };
 
@@ -82,7 +80,6 @@ export function Optimizer({
               <SelectContent>
                 <SelectItem value="from_strategy">Selon ma stratégie</SelectItem>
                 <SelectItem value="target_volatility">Cible vol max</SelectItem>
-                <SelectItem value="max_sharpe">Max Sharpe</SelectItem>
                 <SelectItem value="min_variance">Min variance</SelectItem>
               </SelectContent>
             </Select>
@@ -155,14 +152,6 @@ export function Optimizer({
               <p className="text-xs text-muted-foreground italic border-l-2 border-muted pl-3">
                 Sans hypothèse de rendement long terme, estimé sur l'historique seul :{" "}
                 {query.data.unmapped_tickers.join(", ")}.
-              </p>
-            )}
-            {includeEnvelopes && objective === "max_sharpe" && (
-              <p className="text-xs text-muted-foreground italic border-l-2 border-muted pl-3">
-                Note : avec livrets et <em>max Sharpe</em> sans contrainte de risque, le solveur
-                sature les livrets (σ ≈ 0, Sharpe ≈ ∞). Honnête mais peu nuancé. Passe en{" "}
-                <strong>« Selon ma stratégie »</strong> ou
-                <strong> « Cible vol max »</strong> pour un vrai mix livrets + ETFs.
               </p>
             )}
           </>

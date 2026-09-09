@@ -69,9 +69,6 @@ def build(
     deflator = np.array([(1.0 + inflation) ** (t / 12.0) for t in range(months + 1)])
 
     # Net projection (with fees compounding) — primary curves
-    det = analytics.deterministic_projection(
-        initial, monthly_contribution, mu_simple, sigma_annual, months, monthly_fee=fee_fn
-    )
     mc = analytics.monte_carlo_projection(
         log_rets, initial, monthly_contribution, months, monthly_fee=fee_fn
     )
@@ -144,12 +141,7 @@ def build(
     return ProjectionResponse(
         months=list(range(months + 1)),
         invested=_real(invested_nominal),
-        bands=ProjectionBands(
-            bear=_real(det["bear"]),
-            base=_real(det["base"]),
-            bull=_real(det["bull"]),
-            **{k: _real(v) for k, v in mc.items()},
-        ),
+        bands=ProjectionBands(**{k: _real(v) for k, v in mc.items()}),
         annual_return=mu_simple,
         annual_vol=sigma_annual,
         goal=goal,

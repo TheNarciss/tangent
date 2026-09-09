@@ -91,11 +91,9 @@ def build(
 
     pf_stats = analytics.portfolio_stats(returns, weights, risk_free=rf, mu_override=mu_override)
 
-    # Risque de queue : CVaR 95 % et max drawdown observé sur la fenêtre choisie.
+    # Risque de queue : max drawdown observé sur la fenêtre choisie.
     # NaN propagates: a date where one line has no price is not a portfolio value.
     equity_curve = analytics.portfolio_value_series(prices, qty_by_ticker)
-    pf_returns = returns @ weights
-    pf_cvar = analytics.cvar_95(pf_returns)
     pf_max_dd = analytics.max_drawdown(equity_curve)
 
     stress_results = _stress_tests(qty_by_ticker)
@@ -111,7 +109,6 @@ def build(
             v,
             latest[t],
             asset_stats[t],
-            analytics.cvar_95(returns[t]),
             analytics.max_drawdown(prices[t]),
         )
         for t, w, v in zip(tickers, weights.tolist(), values.tolist(), strict=True)
@@ -126,7 +123,6 @@ def build(
         volatility=pf_stats["volatility"],
         sharpe=pf_stats["sharpe"],
         drawdown_estimate=-2.0 * pf_stats["volatility"],
-        cvar_95=pf_cvar,
         max_drawdown_observed=pf_max_dd,
         assets=assets,
         correlation=analytics.correlation_matrix(returns),
@@ -157,7 +153,6 @@ def _asset_metric(
     value: float,
     price: float,
     stat,
-    cvar: float,
     max_dd: float,
 ) -> AssetMetrics:
     cost = quantity * avg_cost
@@ -174,6 +169,5 @@ def _asset_metric(
         annual_vol=stat["sigma"],
         sharpe=stat["sharpe"],
         drawdown_estimate=-2.0 * stat["sigma"],
-        cvar_95=cvar,
         max_drawdown_observed=max_dd,
     )

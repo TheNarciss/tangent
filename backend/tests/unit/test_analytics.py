@@ -43,24 +43,6 @@ def test_max_drawdown_empty_series_returns_zero():
     assert result == 0.0
 
 
-# ── cvar_95 ──────────────────────────────────────────────────────────────────
-
-
-def test_cvar_negative_on_losing_returns():
-    """CVaR is the mean of the 5% worst returns — negative when losses dominate the tail."""
-    rets = pd.Series([-0.10, -0.08, -0.05, -0.02, 0.01, 0.02, 0.03, 0.05, 0.10, 0.15])
-    result = analytics.cvar_95(rets)
-    assert result < 0
-
-
-def test_cvar_zero_or_negative_on_all_positive_returns():
-    """All-positive returns: CVaR is the worst few — should be the smallest positive value, ≥ 0."""
-    rets = pd.Series([0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.10])
-    result = analytics.cvar_95(rets)
-    # Worst 5% should still be a small positive number
-    assert result >= 0
-
-
 # ── portfolio_value_series ──────────────────────────────────────────────────
 
 
@@ -157,7 +139,7 @@ def _three_assets():
     return mu, cov, [(0.0, 1.0)] * 3
 
 
-@pytest.mark.parametrize("objective", ["max_sharpe", "min_variance", "target_volatility"])
+@pytest.mark.parametrize("objective", ["min_variance", "target_volatility"])
 def test_solve_slsqp_converges_on_well_posed_problem(objective):
     mu, cov, bounds = _three_assets()
     res = analytics._solve_slsqp(mu, cov, bounds, objective, 0.02, 0.10)
@@ -173,13 +155,20 @@ def test_solve_slsqp_from_strategy_reports_infeasible_as_failure():
     assert res["success"] is False
 
 
-def test_max_sharpe_multistart_is_not_worse_than_equal_weight_start():
-    """The best of several starts must be at least as good as the 1/N start alone."""
+def test_from_strategy_multistart_is_not_worse_than_the_equal_weight_start():
+    """A non-convex objective solved from one start can report a local optimum."""
     mu, cov, bounds = _three_assets()
-    res = analytics._solve_slsqp(mu, cov, bounds, "max_sharpe", 0.02, None)
-    w0 = np.full(3, 1 / 3)
-    sharpe_w0 = (w0 @ mu - 0.02) / np.sqrt(w0 @ cov @ w0)
-    assert res["sharpe"] >= sharpe_w0 - 1e-9
+    res = analytics._solve_slsqp(mu, cov, bounds, "from_strategy", 0.02, 0.20, target_return=0.06)
+    assert res["success"]
+    w = np.asarray(res["weights"])
+    assert w.min() >= -1e-6 and abs(w.sum() - 1) < 1e-6
+
+
+def test_the_max_sharpe_objective_is_gone():
+    """§8.3: it saturates the highest-ratio asset, and the default did too."""
+    with pytest.raises(ValueError, match="Unknown objective"):
+        mu, cov, bounds = _three_assets()
+        analytics._solve_slsqp(mu, cov, bounds, "max_sharpe", 0.02, None)
 
 
 def test_annualized_arithmetic_mu_adds_half_variance():

@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { clearProfile } from "@/lib/profile";
-import { clearSettings } from "@/lib/settings";
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8000/api";
 // Backend root (without /api). Used for the Powens initiate/callback flow,
@@ -23,7 +22,6 @@ export interface AssetMetrics {
   annual_vol: number;
   sharpe: number;
   drawdown_estimate: number; // theoretical −2σ (normal law)
-  cvar_95: number; // mean loss on the worst 5% days (annualized)
   max_drawdown_observed: number; // worst peak-to-trough drop observed
 }
 
@@ -36,7 +34,6 @@ export interface PortfolioMetrics {
   volatility: number;
   sharpe: number;
   drawdown_estimate: number;
-  cvar_95: number;
   max_drawdown_observed: number;
   assets: AssetMetrics[];
   correlation: Record<string, Record<string, number>>;
@@ -84,9 +81,6 @@ export interface TimeseriesResponse {
 }
 
 export interface ProjectionBands {
-  bear: number[];
-  base: number[];
-  bull: number[];
   p10: number[];
   p25: number[];
   p50: number[];
@@ -163,8 +157,9 @@ export class ApiError extends Error {
   }
 }
 
-export type OptimizerObjective =
-  "max_sharpe" | "min_variance" | "target_volatility" | "from_strategy";
+/** « Max Sharpe » was removed (étude §8.3): with a livret in the universe it
+ *  saturates the zero-volatility asset and calls the result optimal. */
+export type OptimizerObjective = "min_variance" | "target_volatility" | "from_strategy";
 
 export interface PortfolioPoint {
   weights: number[];
@@ -217,13 +212,6 @@ export interface OptimizerRequest {
   fiscal_shares?: number;
   ceilings_used?: CeilingsUsedDTO;
   total_capital?: number;
-  expert?: ExpertSettingsPayload;
-}
-
-export interface KellyLeverage {
-  full_kelly_leverage: number;
-  half_kelly_leverage: number;
-  interpretation: string;
 }
 
 export interface OptimizerResponse {
@@ -240,7 +228,6 @@ export interface OptimizerResponse {
   frontier_curve: FrontierCurve;
   envelope_points: EnvelopePoint[];
   unmapped_tickers: string[];
-  kelly_leverage: KellyLeverage | null;
 }
 
 /* ── Auth types ─────────────────────────────────────────────────────── */
@@ -381,7 +368,13 @@ export function useLogout() {
       // Then wipe other cached data so next user doesn't see previous content.
       qc.removeQueries({ predicate: (q) => !(q.queryKey[0] === "user" && q.queryKey[1] === "me") });
       clearProfile();
-      clearSettings();
+      // Legacy: the expert knobs (CMA shrinkage, σ estimator, risk-free) went
+      // with the Scanner (§8.3); drop what a previous version stored.
+      try {
+        window.localStorage.removeItem("tangent.settings");
+      } catch {
+        /* private mode: nothing stored, nothing to clear */
+      }
     },
   });
 }
@@ -414,18 +407,11 @@ export function useWealthSummary() {
   });
 }
 
-/** Portfolio analytics. `expert` maps to the /dashboard query params (CMA
- *  shrinkage, historical period, risk-free rate) from the advanced options. */
-export function useDashboard(expert?: ExpertSettingsPayload) {
-  const params = new URLSearchParams();
-  if (expert?.cma_shrinkage !== undefined)
-    params.set("cma_shrinkage", String(expert.cma_shrinkage));
-  if (expert?.historical_period) params.set("historical_period", expert.historical_period);
-  if (expert?.risk_free_rate !== undefined) params.set("risk_free", String(expert.risk_free_rate));
-  const qs = params.toString();
+/** Portfolio analytics on the user's positions. */
+export function useDashboard() {
   return useQuery({
-    queryKey: ["dashboard", qs],
-    queryFn: () => http<DashboardResponse>(`/dashboard${qs ? `?${qs}` : ""}`),
+    queryKey: ["dashboard"],
+    queryFn: () => http<DashboardResponse>("/dashboard"),
   });
 }
 
@@ -474,69 +460,6 @@ export function useOptimizer(req: OptimizerRequest) {
     enabled:
       req.objective !== "target_volatility" ||
       (req.max_volatility !== undefined && req.max_volatility >= 0),
-  });
-}
-
-/* ── Scanner types ──────────────────────────────────────────────────── */
-
-export interface ExpertSettingsPayload {
-  cma_shrinkage?: number;
-  historical_period?: string;
-  risk_free_rate?: number;
-  cma_overrides?: Record<string, number>;
-  cov_estimator?: "sample" | "shrunk";
-  cov_shrinkage?: number;
-}
-
-export interface ScanRequest {
-  modes: string[];
-  hypothesis_fraction: number;
-  n_results: number;
-  expert?: ExpertSettingsPayload;
-}
-
-export interface ScanCandidate {
-  ticker: string;
-  name: string;
-  sector: string; // category via origin mode
-  market_cap: number;
-  own_mu: number;
-  own_sigma: number;
-  own_sharpe: number;
-  correlation_with_portfolio: number;
-  delta_sharpe: number;
-  pea_eligible: boolean;
-  rationale: string;
-}
-
-export interface ScanResponse {
-  candidates: ScanCandidate[];
-  universe_size: number;
-  modes_used: string[];
-  elapsed_seconds: number;
-}
-
-/** Scanner — mutation (not a useQuery since triggered manually by button).
-    Long (~5-30s), no retry, no RQ cache. */
-export function useScan() {
-  return useMutation({
-    mutationFn: (req: ScanRequest) =>
-      http<ScanResponse>("/scan", { method: "POST", body: JSON.stringify(req) }),
-  });
-}
-
-/* ── Watchlist ──────────────────────────────────────────────────────── */
-
-export function useWatchlistAdd() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (ticker: string) =>
-      http<string[]>(`/watchlist/${encodeURIComponent(ticker)}`, { method: "POST" }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["watchlist"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-      qc.invalidateQueries({ queryKey: ["optimizer"] });
-    },
   });
 }
 
