@@ -1,4 +1,4 @@
-"""Analysis routes — optimizer, projection, scanner."""
+"""Analysis routes — optimizer and projection."""
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.concurrency import run_in_threadpool
@@ -6,13 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import User, current_active_user
 from ..deps import get_session, get_user_wealth
-from ..finance import optimizer, projection, scanner
+from ..finance import optimizer, projection
 from ..models import (
     OptimizerRequest,
     OptimizerResponse,
     ProjectionResponse,
-    ScanRequest,
-    ScanResponse,
     Wealth,
 )
 from ..repositories import account_holdings as holdings_repo
@@ -56,13 +54,3 @@ async def read_projection(
         wealth=wealth,
         weighted_ter=weighted_ter,
     )
-
-
-@router.post("/scan", response_model=ScanResponse)
-async def read_scan(
-    req: ScanRequest,
-    wealth: Wealth = Depends(get_user_wealth),
-) -> ScanResponse:
-    """Discovers PEA-eligible assets via dynamic yfinance screening,
-    computes their marginal ΔSharpe against the current portfolio."""
-    return await run_in_threadpool(scanner.scan, req, wealth=wealth)

@@ -17,7 +17,6 @@ import {
 } from "@/api";
 import { fmt } from "@/lib/format";
 import { ageFromBirthDate, ceilingsFromEnvelopes, useProfile } from "@/lib/profile";
-import { useSettings } from "@/lib/settings";
 import { cn } from "@/lib/utils";
 import { PlacementsAdvanced } from "@/components/PlacementsAdvanced";
 import { NAV_PATHS } from "@/components/Sidebar";
@@ -37,8 +36,7 @@ const MATERIAL_EUR = 500;
  * under « Mode avancé ».
  */
 export function Placements() {
-  const [settings] = useSettings();
-  const dashboard = useDashboard(settings.expert);
+  const dashboard = useDashboard();
   const [profile] = useProfile();
   const wealth = useWealthSummary();
   const riskLevels = useRiskLevels();
@@ -62,7 +60,6 @@ export function Placements() {
           ceilings_used: ceilingsUsed,
         }
       : {}),
-    expert: settings.expert,
   };
   const proposal = useOptimizer(req);
 

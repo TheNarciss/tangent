@@ -18,7 +18,6 @@ class AssetMetrics(BaseModel):
     annual_vol: float
     sharpe: float
     drawdown_estimate: float = 0.0  # = −2 × annual_vol (normal law, 97.5%)
-    cvar_95: float = 0.0  # average loss on the worst 5% days (annualized)
     max_drawdown_observed: float = 0.0  # largest peak-to-trough drop in history
 
 
@@ -31,7 +30,6 @@ class PortfolioMetrics(BaseModel):
     volatility: float
     sharpe: float
     drawdown_estimate: float = 0.0  # = −2 × volatility
-    cvar_95: float = 0.0  # CVaR 95% of the aggregated portfolio
     max_drawdown_observed: float = 0.0  # max drawdown of the reconstructed portfolio
     assets: list[AssetMetrics]
     correlation: dict[str, dict[str, float]]
@@ -69,9 +67,9 @@ class TimeseriesResponse(BaseModel):
 
 
 class ProjectionBands(BaseModel):
-    bear: list[float]
-    base: list[float]
-    bull: list[float]
+    """Monte-Carlo quantiles only: a « bear » at μ − σ every year for ten years
+    is a 3σ event, not a scenario (étude §3.2)."""
+
     p10: list[float]
     p25: list[float]
     p50: list[float]
@@ -185,14 +183,6 @@ class ExpertSettings(BaseModel):
     cov_shrinkage: float = Field(default=0.20, ge=0, le=1)
 
 
-class KellyLeverage(BaseModel):
-    """Kelly indicator: how much the Kelly solver would invest under relaxed constraints."""
-
-    full_kelly_leverage: float
-    half_kelly_leverage: float
-    interpretation: str
-
-
 class StressTestResult(BaseModel):
     id: str
     label: str
@@ -201,44 +191,6 @@ class StressTestResult(BaseModel):
     end: str
     pnl_pct: float
     drawdown_pct: float
-
-
-class ScanRequest(BaseModel):
-    """Scan configuration: enabled modes + ΔSharpe parameters."""
-
-    modes: list[str] = Field(
-        default_factory=lambda: ["broad_eu", "tech_growth", "defensive"],
-        description="Modes to enable: broad_eu, tech_growth, defensive",
-    )
-    hypothesis_fraction: float = Field(
-        default=0.10,
-        gt=0,
-        le=0.50,
-        description="Simulated allocation fraction for ΔSharpe (10% = 0.10)",
-    )
-    n_results: int = Field(default=10, ge=1, le=50)
-    expert: ExpertSettings | None = None
-
-
-class ScanCandidate(BaseModel):
-    ticker: str
-    name: str
-    sector: str
-    market_cap: float
-    own_mu: float  # candidate's blended μ
-    own_sigma: float  # historical σ
-    own_sharpe: float  # standalone Sharpe
-    correlation_with_portfolio: float  # ρ with the current portfolio
-    delta_sharpe: float  # ΔSharpe if added at h% of the portfolio
-    pea_eligible: bool
-    rationale: str  # short explanation string
-
-
-class ScanResponse(BaseModel):
-    candidates: list[ScanCandidate]
-    universe_size: int  # raw number of tickers screened before ranking
-    modes_used: list[str]
-    elapsed_seconds: float
 
 
 class EnvelopePoint(BaseModel):
@@ -262,7 +214,7 @@ class CeilingsUsed(BaseModel):
 
 class OptimizerRequest(BaseModel):
     objective: str = Field(
-        default="max_sharpe", pattern="^(max_sharpe|min_variance|target_volatility|from_strategy)$"
+        default="from_strategy", pattern="^(min_variance|target_volatility|from_strategy)$"
     )
     # Risk-target objective (required when objective == 'target_volatility' or 'from_strategy')
     max_volatility: float | None = Field(default=None, ge=0, le=1)
@@ -307,18 +259,6 @@ class OptimizerResponse(BaseModel):
     frontier_curve: FrontierCurve  # ETF-only curve (envelope-augmented frontier is just a kink)
     envelope_points: list[EnvelopePoint] = Field(default_factory=list)
     unmapped_tickers: list[str] = Field(default_factory=list)
-    kelly_leverage: KellyLeverage | None = (
-        None  # sanity check: does Kelly recommend leverage or cash?
-    )
-
-
-class StrategyRequest(BaseModel):
-    """Computes the recommended strategy via glide path from the minimal profile."""
-
-    age: int = Field(ge=0, le=120)
-    horizon_years: int = Field(ge=1, le=100)
-    rule: str = Field(default="120_age", pattern="^(100_age|120_age|custom)$")
-    custom_multiplier: float | None = Field(default=None, ge=0, le=1)
 
 
 # Forward-ref resolution: DashboardResponse references StressTestResult defined later

@@ -8,13 +8,11 @@ import {
   type OptimizerRequest,
 } from "@/api";
 import { ageFromBirthDate, ceilingsFromEnvelopes, useProfile } from "@/lib/profile";
-import { useSettings } from "@/lib/settings";
 import { Assets } from "@/components/Assets";
 import { Correlation } from "@/components/Correlation";
 import { Metrics } from "@/components/Metrics";
 import { Optimizer } from "@/components/Optimizer";
 import { RiskReturn } from "@/components/RiskReturn";
-import { Scanner } from "@/components/Scanner";
 
 /**
  * « Mode avancé » of Placements: the quant views (μ/σ/Sharpe, positions
@@ -46,7 +44,6 @@ export function PlacementsAdvanced({ dashboard }: { dashboard: DashboardResponse
 }
 
 function AdvancedContent({ dashboard }: { dashboard: DashboardResponse }) {
-  const [settings] = useSettings();
   const [profile] = useProfile();
   const wealth = useWealthSummary();
   const age = profile ? ageFromBirthDate(profile.birth_date) : null;
@@ -58,10 +55,11 @@ function AdvancedContent({ dashboard }: { dashboard: DashboardResponse }) {
 
   const [objective, setObjective] = useState<OptimizerObjective>(() => {
     const saved = window.localStorage.getItem("tangent.optimizer.objective");
-    // Never « max Sharpe » by default: it saturates the highest-ratio asset.
-    return (
-      (saved as OptimizerObjective | null) ?? (hasProfile ? "from_strategy" : "target_volatility")
-    );
+    // « Max Sharpe » is gone (§8.3): a stored one falls back on the profile.
+    const fallback: OptimizerObjective = hasProfile ? "from_strategy" : "target_volatility";
+    return saved === "min_variance" || saved === "target_volatility" || saved === "from_strategy"
+      ? saved
+      : fallback;
   });
   const [includeEnvelopes, setIncludeEnvelopes] = useState<boolean>(
     () => window.localStorage.getItem("tangent.optimizer.include_envelopes") === "true",
@@ -102,7 +100,6 @@ function AdvancedContent({ dashboard }: { dashboard: DashboardResponse }) {
     ...(typeof totalCapital === "number" && totalCapital > 0
       ? { total_capital: totalCapital }
       : {}),
-    expert: settings.expert,
   };
   const optimizer = useOptimizer(req);
 
@@ -111,13 +108,11 @@ function AdvancedContent({ dashboard }: { dashboard: DashboardResponse }) {
         sigma: optimizer.data.optimal.volatility,
         mu: optimizer.data.optimal.expected_return,
         label:
-          objective === "max_sharpe"
-            ? "Max Sharpe"
-            : objective === "min_variance"
-              ? "Min variance"
-              : objective === "from_strategy"
-                ? "Selon ton profil"
-                : "Cible vol max",
+          objective === "min_variance"
+            ? "Min variance"
+            : objective === "from_strategy"
+              ? "Selon ton profil"
+              : "Cible vol max",
       }
     : undefined;
 
@@ -145,7 +140,6 @@ function AdvancedContent({ dashboard }: { dashboard: DashboardResponse }) {
         profileTargetReturn={profileTargetReturn}
         profileMaxVol={profileMaxVol}
       />
-      <Scanner />
       <Correlation matrix={dashboard.metrics.correlation} />
     </>
   );

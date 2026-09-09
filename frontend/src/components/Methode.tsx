@@ -72,10 +72,6 @@ export function Methode() {
           )}
         </VerdictCard>
       ))}
-      <p className="text-xs text-muted-foreground">
-        Prochains verdicts : rééquilibrage entre actions et taux, crises longues rejouées (2000,
-        2008, 2011), effet du dollar sur tes fonds monde, fonds euros et PER pris en compte.
-      </p>
     </div>
   );
 }
