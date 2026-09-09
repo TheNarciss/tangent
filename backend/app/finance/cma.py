@@ -1,7 +1,12 @@
-"""Capital Market Assumptions — forward-looking expected returns per ticker.
+"""Capital Market Assumptions — forward-looking expected returns per asset class.
 
 Source : moyennes long-terme (Dimson-Marsh-Staunton 100y, Vanguard CMAs, JP Morgan LTCMA).
 Moins biaisé que les μ historiques 5y de yfinance qui sont gonflés par le bull-run post-COVID.
+
+Keyed by asset class, not by ticker: the old table listed six tickers, so any
+other user's world tracker had no assumption at all and fell back on its
+inflated five-year history. What an instrument is comes from `classification`
+(ADR-025).
 """
 
 import logging
@@ -23,9 +28,7 @@ SHRINKAGE_DEFAULT = 0.70
 
 
 class CMAConfig(BaseModel):
-    tickers: dict[str, float] = Field(default_factory=dict)
-    # Kept for backward-compatible parsing of cma.yaml; no longer applied.
-    default_return: float | None = None
+    classes: dict[str, float] = Field(default_factory=dict)
 
 
 @lru_cache(maxsize=1)
@@ -40,20 +43,27 @@ def config() -> CMAConfig:
         raise ConfigurationError(f"cma.yaml malformé: {exc}") from exc
 
 
-def get_return(ticker: str, overrides: dict[str, float] | None = None) -> float | None:
-    """μ forward-looking. Overrides > config > None (no CMA known for this ticker)."""
+def get_return(
+    ticker: str, asset_class: str, overrides: dict[str, float] | None = None
+) -> float | None:
+    """μ forward-looking. Overrides (by ticker) > config (by class) > None."""
     if overrides and ticker in overrides:
         return overrides[ticker]
-    return config().tickers.get(ticker)
+    return config().classes.get(asset_class)
 
 
-def unmapped_tickers(tickers: list[str], overrides: dict[str, float] | None = None) -> list[str]:
-    """Tickers with no CMA (neither in cma.yaml nor in the expert overrides)."""
-    return [t for t in tickers if get_return(t, overrides) is None]
+def unmapped_tickers(
+    tickers: list[str], classes: list[str], overrides: dict[str, float] | None = None
+) -> list[str]:
+    """Tickers whose class carries no CMA, and that no override covers."""
+    return [
+        t for t, cls in zip(tickers, classes, strict=True) if get_return(t, cls, overrides) is None
+    ]
 
 
 def blended_mu(
     tickers: list[str],
+    classes: list[str],
     historical_mu: np.ndarray,
     shrinkage: float | None = None,
     overrides: dict[str, float] | None = None,
@@ -64,15 +74,15 @@ def blended_mu(
     gonflés de +10 points sur la période post-2020. Tire l'optimisation vers des
     espérances réalistes long-terme.
 
-    A ticker with no CMA keeps its historical μ untouched: assigning it a
-    generic equity-like return (the old ``default_return``) paired with its own
-    small σ made money-market or bond funds look like the best asset on earth.
-    Callers surface such tickers via :func:`unmapped_tickers`.
+    An instrument whose class has no CMA keeps its historical μ untouched:
+    assigning it a generic equity-like return paired with its own small σ made
+    money-market or bond funds look like the best asset on earth. Callers
+    surface such tickers via :func:`unmapped_tickers`.
     """
     s = SHRINKAGE_DEFAULT if shrinkage is None else max(0.0, min(1.0, shrinkage))
     out = np.array(historical_mu, dtype=float).copy()
-    for i, t in enumerate(tickers):
-        cma_mu = get_return(t, overrides)
+    for i, (t, cls) in enumerate(zip(tickers, classes, strict=True)):
+        cma_mu = get_return(t, cls, overrides)
         if cma_mu is not None:
             out[i] = (1 - s) * historical_mu[i] + s * cma_mu
         else:

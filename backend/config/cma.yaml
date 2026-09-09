@@ -1,15 +1,20 @@
-# Capital Market Assumptions — long-term forward-looking annualized returns.
-# Source : Dimson-Marsh-Staunton Yearbook (100+ years), Vanguard CMAs, JP Morgan LTCMA.
-# Moins biaisé que yfinance 5y qui gonfle à cause du bull-run post-COVID.
-# À mettre à jour annuellement. Dernière revue : 2026-09.
-# Un ticker absent d'ici garde son μ historique (aucune valeur par défaut) et
-# est signalé à l'utilisateur comme « sans hypothèse long terme ».
-tickers:
-  DCAM.PA: 0.07   # Amundi MSCI World UCITS ETF — actions monde diversifiées
-  CW8.PA: 0.07    # Amundi MSCI World UCITS ETF (benchmark de l'app) — même indice que DCAM
-  EWLD.PA: 0.07   # Lyxor/Amundi MSCI World PEA — même indice que DCAM
-  WPEA.PA: 0.07   # iShares MSCI World Swap PEA — même indice que DCAM
-  PUST.PA: 0.10   # Amundi Nasdaq-100 UCITS ETF — tech long-terme
-  ETZ.PA: 0.06    # BNP Easy Stoxx Europe 600 — actions Europe larges
-
-# Plus aucun fallback : un ticker absent garde son μ historique (voir cma.py).
+# Capital Market Assumptions — rendements annualisés long terme attendus,
+# **par classe d'actifs** et non plus par ticker.
+#
+# La table était une liste de six tickers : ceux du premier utilisateur. Le
+# fonds monde de n'importe qui d'autre n'avait aucune hypothèse et retombait
+# sur son µ historique 5 ans, gonflé par le bull-run post-COVID. La classe
+# vient maintenant de ce qu'est l'instrument (ADR-025).
+#
+# Source : Dimson-Marsh-Staunton Yearbook (100+ ans), Vanguard CMAs, JP Morgan
+# LTCMA. À revoir annuellement. Dernière revue : 2026-09.
+#
+# Une classe absente d'ici garde son µ historique — aucune valeur par défaut —
+# et l'app le signale à l'utilisateur. C'est volontaire : donner un rendement
+# d'actions à un fonds obligataire, avec sa petite volatilité, en faisait le
+# meilleur actif du monde aux yeux de l'optimiseur.
+classes:
+  equity_world: 0.07      # actions monde diversifiées
+  equity_us: 0.07         # même hypothèse que le monde : les États-Unis en font les deux tiers
+  equity_us_tech: 0.10    # Nasdaq-100 — prime de croissance, et volatilité qui va avec
+  equity_europe: 0.06     # actions européennes larges

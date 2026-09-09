@@ -11,6 +11,10 @@
 # vu d'un investisseur en dollars ; l'écart entre les deux est ce que la devise
 # a coûté ou rapporté.
 #
+# L'or vient des fixings LBMA (ADR-024), composés sur la fenêtre de chaque
+# épisode, en euros à partir de 1999 et en dollars avant — la monnaie n'existait
+# pas. C'est la seule classe dont le chiffre est calculé et non recopié.
+#
 # Source : docs/ETUDE_METHODE_FINANCIERE_2026-09.md §7.6 (MSCI World EUR et USD,
 # Bloomberg Euro Aggregate, Fama-French développés raccordés en euro synthétique
 # avant 1999). Dernière revue : 2026-09.
@@ -19,16 +23,31 @@
 # et 1987 (~−28 à −30 %). L'étude ne donne qu'une fourchette ; on préfère une
 # fenêtre en moins à un chiffre inventé.
 
-# Ticker → classe. Un ticker absent est traité en actions monde : c'est
-# l'hypothèse la plus fréquente pour un ETF de PEA, et la plus prudente.
-asset_classes:
-  DCAM.PA: equity_world
-  CW8.PA: equity_world
-  EWLD.PA: equity_world
-  WPEA.PA: equity_world
-  PUST.PA: equity_world     # Nasdaq-100 : rejoué en actions monde faute de série par épisode
-  ETZ.PA: equity_world      # Europe 600 : idem
+# La classe d'une ligne vient de ce qu'elle est (finance/classification.py,
+# ADR-025), plus d'une table de six tickers qui ne connaissait que ceux du
+# premier utilisateur. Ici on dit seulement comment une classe reconnue se
+# rejoue dans les scénarios ci-dessous.
+#
+# Toutes les actions se rejouent en actions monde : l'étude ne fournit pas de
+# série par région et par épisode. Un fonds Nasdaq ou Europe est donc rejoué
+# avec l'amplitude du monde, ce qui sous-estime les fonds sectoriels — c'est
+# écrit sous le tableau dans l'app.
+class_map:
+  equity_world: equity_world
+  equity_us: equity_world
+  equity_us_tech: equity_world
+  equity_europe: equity_world
+  equity_japan: equity_world
+  equity_emerging: equity_world
+  bonds: bonds_euro
+  money_market: cash
+  gold: gold
+  silver: gold
 
+# Une ligne non reconnue est rejouée en actions monde : c'est l'hypothèse la
+# plus fréquente pour un titre logé dans un PEA, et la plus prudente. L'écran
+# Placements affiche l'indice reconnu sous chaque ligne, donc l'utilisateur
+# voit lesquelles ne le sont pas.
 default_asset_class: equity_world
 
 # Type d'enveloppe → classe. Les livrets ne bougent pas en crise (capital
@@ -63,49 +82,49 @@ scenarios:
     start: "juillet 1990"
     end: "septembre 1990"
     description: "Le Japon perd la moitié de sa valeur sur 1990-92"
-    returns: { equity_world: -0.235, equity_world_usd: -0.203, bonds_euro: 0.0, fonds_euros: 0.0, cash: 0.0 }
+    returns: { equity_world: -0.235, equity_world_usd: -0.203, bonds_euro: 0.0, fonds_euros: 0.0, cash: 0.0, gold: 0.143 }   # or : en dollars : l'euro n'existait pas encore
 
   - id: ltcm_1998
     label: "Faillite de LTCM (1998)"
     start: "juillet 1998"
     end: "septembre 1998"
     description: "Chute rapide, remontée tout aussi rapide"
-    returns: { equity_world: -0.181, equity_world_usd: -0.144, bonds_euro: 0.0, fonds_euros: 0.0, cash: 0.0 }
+    returns: { equity_world: -0.181, equity_world_usd: -0.144, bonds_euro: 0.0, fonds_euros: 0.0, cash: 0.0, gold: -0.010 }   # or : en dollars : l'euro n'existait pas encore
 
   - id: dotcom_2000
     label: "Éclatement de la bulle internet (2000-2003)"
     start: "août 2000"
     end: "mars 2003"
     description: "Trente et un mois de glissade, la pire baisse des quarante dernières années pour un Européen"
-    returns: { equity_world: -0.525, equity_world_usd: -0.446, bonds_euro: 0.16, fonds_euros: 0.12, cash: 0.08 }
+    returns: { equity_world: -0.525, equity_world_usd: -0.446, bonds_euro: 0.16, fonds_euros: 0.12, cash: 0.08, gold: 0.027 }
 
   - id: gfc_2008
     label: "Crise financière (2007-2009)"
     start: "octobre 2007"
     end: "mars 2009"
     description: "Les obligations et le dollar ont amorti le choc"
-    returns: { equity_world: -0.482, equity_world_usd: -0.536, bonds_euro: 0.06, fonds_euros: 0.06, cash: 0.05 }
+    returns: { equity_world: -0.482, equity_world_usd: -0.536, bonds_euro: 0.06, fonds_euros: 0.06, cash: 0.05, gold: 0.321 }
 
   - id: euro_2011
     label: "Crise de la dette en zone euro (2011)"
     start: "avril 2011"
     end: "septembre 2011"
     description: "Risque souverain domestique : l'Italie et l'Espagne perdent 10 à 15 %"
-    returns: { equity_world: -0.153, equity_world_usd: -0.204, bonds_euro: 0.03, fonds_euros: 0.02, cash: 0.01 }
+    returns: { equity_world: -0.153, equity_world_usd: -0.204, bonds_euro: 0.03, fonds_euros: 0.02, cash: 0.01, gold: 0.197 }
 
   - id: china_2015
     label: "Chine et pétrole (2015-2016)"
     start: "avril 2015"
     end: "février 2016"
     description: "Deux corrections de 10 % en six mois"
-    returns: { equity_world: -0.121, equity_world_usd: -0.125, bonds_euro: 0.0, fonds_euros: 0.01, cash: 0.0 }
+    returns: { equity_world: -0.121, equity_world_usd: -0.125, bonds_euro: 0.0, fonds_euros: 0.01, cash: 0.0, gold: 0.019 }
 
   - id: q4_2018
     label: "Quatrième trimestre 2018"
     start: "septembre 2018"
     end: "décembre 2018"
     description: "Resserrement monétaire et guerre commerciale"
-    returns: { equity_world: -0.127, equity_world_usd: -0.141, bonds_euro: 0.004, fonds_euros: 0.005, cash: 0.0 }
+    returns: { equity_world: -0.127, equity_world_usd: -0.141, bonds_euro: 0.004, fonds_euros: 0.005, cash: 0.0, gold: 0.080 }
 
   - id: covid_2020
     label: "Krach du COVID (février-mars 2020)"
@@ -114,18 +133,18 @@ scenarios:
     # Le chiffre USD publié est quotidien (−34 %), l'euro est en fin de mois :
     # les deux ne sont pas comparables, donc pas d'effet devise affiché ici.
     description: "La baisse de 30 % la plus rapide de l'histoire"
-    returns: { equity_world: -0.204, bonds_euro: -0.05, fonds_euros: 0.0, cash: 0.0 }
+    returns: { equity_world: -0.204, bonds_euro: -0.05, fonds_euros: 0.0, cash: 0.0, gold: -0.051 }
 
   - id: inflation_2022
     label: "Inflation et remontée des taux (2022)"
     start: "janvier 2022"
     end: "octobre 2022"
     description: "Les deux jambes du 60/40 tombent ensemble, le seul régime d'inflation de la série"
-    returns: { equity_world: -0.142, equity_world_usd: -0.255, bonds_euro: -0.17, fonds_euros: 0.0, cash: 0.0 }
+    returns: { equity_world: -0.142, equity_world_usd: -0.255, bonds_euro: -0.17, fonds_euros: 0.0, cash: 0.0, gold: 0.032 }
 
   - id: tariffs_2025
     label: "Droits de douane (2025)"
     start: "février 2025"
     end: "avril 2025"
     description: "C'est la devise, pas les actions, qui a fait la perte en euros"
-    returns: { equity_world: -0.118, equity_world_usd: -0.05, bonds_euro: 0.0, fonds_euros: 0.0, cash: 0.0 }
+    returns: { equity_world: -0.118, equity_world_usd: -0.05, bonds_euro: 0.0, fonds_euros: 0.0, cash: 0.0, gold: 0.054 }

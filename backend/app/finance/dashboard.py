@@ -61,11 +61,24 @@ def build(
     except ValueError as exc:
         raise InsufficientHistoryError(f"Calcul des rendements impossible: {exc}") from exc
 
+    # What each line is (fund or share, which index): drives the CMA, the
+    # diagnostic and what the Positions table shows.
+    classes = dict(
+        zip(
+            tickers,
+            classification.classify_many(
+                [(label_by_ticker.get(t, t), isin_by_ticker.get(t)) for t in tickers]
+            ),
+            strict=True,
+        )
+    )
+
     # Blend μ historiques avec CMAs forward-looking. Shrinkage overridable.
     rf = risk_free if risk_free is not None else macro.risk_free_rate()
     hist_mu = analytics.annualized_arithmetic_mu(returns).values
-    blended = cma.blended_mu(tickers, hist_mu, shrinkage=cma_shrinkage)
-    unmapped = cma.unmapped_tickers(tickers)
+    class_of = [classes[t].asset_class for t in tickers]
+    blended = cma.blended_mu(tickers, class_of, hist_mu, shrinkage=cma_shrinkage)
+    unmapped = cma.unmapped_tickers(tickers, class_of)
     mu_override = {t: float(blended[i]) for i, t in enumerate(tickers)}
 
     asset_stats = analytics.annualized_stats(returns, risk_free=rf, mu_override=mu_override)
@@ -82,16 +95,6 @@ def build(
     pf_max_dd = analytics.max_drawdown(equity_curve)
 
     stress_results = stress.compute(wealth)
-
-    classes = dict(
-        zip(
-            tickers,
-            classification.classify_many(
-                [(label_by_ticker.get(t, t), isin_by_ticker.get(t)) for t in tickers]
-            ),
-            strict=True,
-        )
-    )
 
     total_cost = sum(cost_by_ticker.values())
     assets = [
