@@ -45,8 +45,12 @@ export function Assets({ assets }: Props) {
                 <TableRow key={a.ticker}>
                   <TableCell className="font-medium">
                     <div className="truncate">{a.label ?? a.ticker}</div>
-                    {a.label && (
-                      <div className="font-mono text-xs text-muted-foreground">{a.ticker}</div>
+                    {(a.label || a.index_label) && (
+                      <div className="truncate text-xs text-muted-foreground">
+                        {a.label && <span className="font-mono">{a.ticker}</span>}
+                        {a.label && a.index_label && " · "}
+                        {a.index_label}
+                      </div>
                     )}
                   </TableCell>
                   <TableCell className="hidden text-right font-mono tabular md:table-cell">

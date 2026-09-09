@@ -581,3 +581,18 @@ def risk_contributions(returns: pd.DataFrame, weights: np.ndarray) -> dict[str, 
     marginal = (cov @ weights) / vol  # ∂σ_p/∂w_i
     rc = weights * marginal  # contribution; sums to σ_p
     return {"tickers": list(returns.columns), "fraction": (rc / vol).tolist()}
+
+
+def worst_rolling_year(monthly_returns: pd.Series) -> float:
+    """Worst twelve consecutive months of a monthly return series, as a fraction.
+
+    Used to say what a bad year has actually cost on this asset class, instead
+    of deducing it from a normal law that has no fat tails.
+    """
+    if len(monthly_returns) < 12:
+        raise ValueError("Moins de douze mois d'historique.")
+    rolling = (1.0 + monthly_returns).rolling(12).apply(np.prod, raw=True) - 1.0
+    worst = rolling.min()
+    if pd.isna(worst):
+        raise ValueError("Aucune fenêtre de douze mois exploitable.")
+    return float(worst)

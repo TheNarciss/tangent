@@ -23,6 +23,11 @@ export interface AssetMetrics {
   sharpe: number;
   drawdown_estimate: number; // theoretical −2σ (normal law)
   max_drawdown_observed: number; // worst peak-to-trough drop observed
+  /** What the instrument is, resolved from its official name (ADR-024). */
+  asset_class: string;
+  index_label: string | null; // index it tracks, e.g. "Actions monde"
+  kind: string; // "fund" | "stock" | "unknown"
+  is_diversified: boolean; // a fund, and on a broad index
 }
 
 export interface PortfolioMetrics {

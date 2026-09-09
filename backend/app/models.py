@@ -19,6 +19,11 @@ class AssetMetrics(BaseModel):
     sharpe: float
     drawdown_estimate: float = 0.0  # = −2 × annual_vol (normal law, 97.5%)
     max_drawdown_observed: float = 0.0  # largest peak-to-trough drop in history
+    # What the instrument is, resolved from its official name (ADR-024).
+    asset_class: str = "unknown"
+    index_label: str | None = None  # index it tracks, e.g. "Actions monde"
+    kind: str = "unknown"  # "fund" | "stock" | "unknown"
+    is_diversified: bool = False  # a fund, and on a broad index
 
 
 class PortfolioMetrics(BaseModel):

@@ -1,0 +1,90 @@
+# Reconnaissance d'un instrument à partir de son nom officiel.
+#
+# Le nom vient d'OpenFIGI quand on a l'ISIN (« AM MSCI WORLD SP ETF EUR ACC »),
+# sinon du libellé renvoyé par la banque. Les règles sont évaluées dans l'ordre :
+# la première qui correspond gagne, donc les cas les plus précis sont en haut.
+#
+# Un instrument non reconnu reste `unknown` : on préfère afficher « classe
+# inconnue » plutôt que de le ranger d'office en actions monde, ce qui donnait
+# des chiffres faux pour tout portefeuille autre que celui du premier
+# utilisateur.
+#
+# Les motifs sont comparés en minuscules, sans accents.
+
+unknown_class: unknown
+
+# Type d'instrument, tiré de `securityType2` chez OpenFIGI. Sert à distinguer
+# une ligne diversifiée (un fonds) d'un pari sur une seule société (une action).
+instrument_kinds:
+  fund:
+    - "mutual fund"
+    - "etp"
+    - "fund of funds"
+    - "open-end fund"
+  stock:
+    - "common stock"
+    - "preference"
+    - "depositary receipt"
+
+rules:
+  - class: gold
+    index: "Or physique"
+    broad: false
+    any: ["physical gold", "gold etc", "or physique", "xetra-gold"]
+
+  - class: silver
+    index: "Argent physique"
+    broad: false
+    any: ["physical silver", "silver etc"]
+
+  - class: equity_us_tech
+    index: "Nasdaq-100"
+    broad: false   # 100 valeurs, très concentrées sur la tech
+    any: ["nasdaq-100", "nasdaq 100", "nasdaq100"]
+
+  - class: equity_emerging
+    index: "Marchés émergents"
+    broad: true
+    any: ["emerging market", "msci em", "emergents", "emerging"]
+
+  - class: equity_world
+    index: "Actions monde"
+    broad: true
+    any: ["msci world", "msci acwi", "ftse all-world", "ftse aw", "all country world"]
+
+  - class: equity_us
+    index: "Actions américaines"
+    broad: true
+    any: ["s&p 500", "s&p500", "msci usa", "russell 1000", "russell 2000"]
+
+  - class: equity_europe
+    index: "Actions européennes"
+    broad: true
+    any: ["stoxx europe", "euro stoxx", "msci europe", "cac 40", "eurostoxx"]
+
+  - class: equity_japan
+    index: "Actions japonaises"
+    broad: true
+    any: ["msci japan", "topix", "nikkei"]
+
+  - class: bonds
+    index: "Obligations"
+    broad: true
+    any: ["bond", "obligat", "aggregate", "treasury", "gilt", "oat "]
+
+  - class: money_market
+    index: "Monétaire"
+    broad: true
+    any: ["money market", "monetaire", "€str", "eonia", "overnight"]
+
+# Classe → région Ken French, pour retrouver la pire année réellement observée
+# depuis 1990 au lieu d'annoncer une baisse au doigt mouillé. Une classe absente
+# d'ici n'a pas d'historique long : on retombe sur un calcul à partir de la
+# volatilité, et le texte le dit.
+history_regions:
+  equity_world: equity_world
+  equity_us: equity_us
+  equity_us_tech: equity_us        # pas de série Nasdaq par région : approximé par les actions US
+  equity_europe: equity_europe
+  equity_japan: equity_japan
+  equity_emerging: equity_emerging
