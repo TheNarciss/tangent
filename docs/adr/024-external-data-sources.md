@@ -32,6 +32,7 @@ décide quoi en faire.
 | `ecb` | BCE Data Portal | taux directeur, cours de référence EUR/USD |
 | `eurostat` | Eurostat | IPC harmonisé France (contre-expertise) |
 | `ken_french` | Kenneth French Data Library | rendements mensuels de marché monde / Europe / US / Japon / émergents, depuis 1990 |
+| `lbma` | London Bullion Market Association | fixings or et argent en USD / GBP / EUR, depuis 1968 |
 | `openfigi` | OpenFIGI | ISIN → ticker, place, nom |
 
 Trois règles :
@@ -72,8 +73,11 @@ quand même, parce que c'est la plus fragile de toutes.
 - Ken French publie en **dollar** et en **fin de mois** : convertir en euro
   demande une série de change, et la granularité mensuelle interdit de rejouer
   un krach de trois jours.
-- Ken French couvre les actions, pas les obligations, pas l'or, pas les fonds
-  euros. Ces classes restent déclaratives.
+- Ken French couvre les actions seulement. L'or vient de la LBMA ; les
+  **obligations** et les **fonds euros** n'ont toujours aucune source gratuite
+  et non bridée, et restent déclaratifs.
+- La LBMA ne publie la jambe euro qu'à partir de 1999 : avant, il faut passer
+  par le dollar et une série de change.
 - Le cache est en mémoire du process : deux workers font deux appels.
 
 ## Alternatives considérées

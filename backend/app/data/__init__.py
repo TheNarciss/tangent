@@ -8,6 +8,7 @@ Nothing here knows about a user, a portfolio or a verdict: consumers in
 - `ecb`        : taux directeur et cours de référence (Banque centrale européenne)
 - `eurostat`   : IPC harmonisé France
 - `ken_french` : rendements mensuels de marché par région, depuis 1990
+- `lbma`       : fixings or et argent, depuis 1968
 - `openfigi`   : ISIN → ticker / place / nom
 
 None of them needs an account or an API key (ADR-024). `probe.py` checks that

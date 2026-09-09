@@ -51,6 +51,11 @@ class KenFrenchConfig(BaseModel):
     regions: dict[str, str] = Field(default_factory=dict)
 
 
+class LbmaConfig(BaseModel):
+    base_url: str
+    series: dict[str, str] = Field(default_factory=dict)
+
+
 class OpenFigiConfig(BaseModel):
     base_url: str
     max_isins_per_request: int = Field(default=10, gt=0)
@@ -64,6 +69,7 @@ class DataSourcesConfig(BaseModel):
     ecb: EcbConfig
     eurostat: EurostatConfig
     ken_french: KenFrenchConfig
+    lbma: LbmaConfig
     openfigi: OpenFigiConfig
 
 

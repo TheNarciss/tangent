@@ -10,7 +10,7 @@ import zipfile
 
 import pytest
 
-from app.data import ecb, eurostat, fred, http, ken_french, openfigi
+from app.data import ecb, eurostat, fred, http, ken_french, lbma, openfigi
 from app.data.config import config
 from app.errors import DataSourceError
 
@@ -136,6 +136,39 @@ def test_ken_french_compounds_a_window(monkeypatch):
 def test_ken_french_rejects_an_unknown_region():
     with pytest.raises(DataSourceError, match="Région inconnue"):
         ken_french.monthly_returns("crypto")
+
+
+LBMA_JSON = """[
+  {"d": "1998-12-31", "v": [287.8, 173.0, null]},
+  {"d": "2008-01-02", "v": [846.75, 425.0, 576.0]},
+  {"d": "2008-12-31", "v": [869.75, 601.0, 621.0]}
+]"""
+
+
+def test_lbma_skips_the_euro_leg_before_the_euro(monkeypatch):
+    monkeypatch.setattr(http, "get_text", lambda *a, **k: LBMA_JSON)
+
+    in_euro = lbma.price("gold", "EUR")
+    in_dollar = lbma.price("gold", "USD")
+
+    assert len(in_euro) == 2  # the 1998 session has no euro quote
+    assert len(in_dollar) == 3
+    assert in_euro.iloc[-1] == pytest.approx(621.0)
+
+
+def test_lbma_computes_a_window_return(monkeypatch):
+    monkeypatch.setattr(http, "get_text", lambda *a, **k: LBMA_JSON)
+
+    assert lbma.window_return("gold", "2008-01-01", "2008-12-31") == pytest.approx(621 / 576 - 1)
+
+
+def test_lbma_rejects_an_unknown_metal_or_currency(monkeypatch):
+    monkeypatch.setattr(http, "get_text", lambda *a, **k: LBMA_JSON)
+
+    with pytest.raises(DataSourceError, match="Métal inconnu"):
+        lbma.price("platine")
+    with pytest.raises(DataSourceError, match="Devise LBMA inconnue"):
+        lbma.price("gold", "CHF")
 
 
 def test_openfigi_maps_an_unknown_isin_to_an_empty_list(monkeypatch):

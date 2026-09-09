@@ -19,7 +19,7 @@ from datetime import date
 
 import pandas as pd
 
-from . import ecb, eurostat, fred, ken_french, openfigi
+from . import ecb, eurostat, fred, ken_french, lbma, openfigi
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +73,15 @@ def _eurostat() -> str:
     return f"{_coverage(eurostat.hicp_index())} · inflation a/a {eurostat.inflation_yoy():+.2%}"
 
 
+def _metal(metal: str) -> Callable[[], str]:
+    def run() -> str:
+        quotes = lbma.price(metal, "EUR")
+        crash = lbma.window_return(metal, "2008-01-01", "2008-12-31")
+        return f"{_coverage(quotes, ' €')} · 2008 : {crash:+.1%}"
+
+    return run
+
+
 def _openfigi() -> str:
     records = openfigi.map_isins([SAMPLE_ISIN]).get(SAMPLE_ISIN, [])
     if not records:
@@ -96,6 +105,7 @@ PROBES: tuple[Probe, ...] = (
     Probe("ecb", "EUR/USD référence", _ecb("eur_usd", "")),
     Probe("eurostat", "IPC harmonisé France", _eurostat),
     *(Probe("ken_french", region, _region(region)) for region in ken_french.regions()),
+    *(Probe("lbma", metal, _metal(metal)) for metal in lbma.metals()),
     Probe("openfigi", "ISIN → ticker", _openfigi),
     Probe("yahoo", "Cours quotidiens", _yahoo),
 )

@@ -55,6 +55,14 @@ ken_french:
     equity_japan: "Japan_3_Factors_CSV.zip"            # depuis 1990-07
     equity_emerging: "Emerging_5_Factors_CSV.zip"      # depuis 1989-07
 
+lbma:
+  # Fixings officiels de la London Bullion Market Association, en USD / GBP / EUR.
+  # Or depuis 1968, argent depuis 1968. Gratuit, sans clé, sans compte.
+  base_url: "https://prices.lbma.org.uk/json"
+  series:
+    gold: gold_pm      # fixing de l'après-midi, celui qui fait référence
+    silver: silver
+
 openfigi:
   base_url: "https://api.openfigi.com/v3/mapping"
   # Sans clé : 25 requêtes/minute, 10 ISIN par requête. Une clé gratuite
