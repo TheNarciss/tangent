@@ -53,3 +53,4 @@ Template : [`TEMPLATE.md`](./TEMPLATE.md).
 - [ADR-023](023-verdicts.md) — Verdicts : un contrat unique du moteur vers l'écran simple, l'onglet Méthode et le briefing
 - [ADR-024](024-external-data-sources.md) — Sources de vérité externes dans `app/data`
 - [ADR-025](025-instrument-classification.md) — Ce qu'est un instrument, décidé sur son nom officiel
+- [ADR-026](026-macro-observed.md) — Taux sans risque et inflation deviennent des valeurs observées

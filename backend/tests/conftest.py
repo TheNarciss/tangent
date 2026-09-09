@@ -62,3 +62,25 @@ def _reset_auth_rate_limits():
 
     _attempts.clear()
     yield
+
+
+@pytest.fixture(autouse=True)
+def _no_outbound_http(monkeypatch):
+    """No test reaches an external source of truth.
+
+    Every read through `app.data.http` fails, so each consumer takes the
+    degraded path it promises in its docstring: macro falls back to the values
+    in `config/macro.yaml`, classification falls back to the bank's label, the
+    diagnostic falls back to a modelled bad year. A test that wants the happy
+    path patches its own provider (`ecb.named`, `fred.named`, …).
+    """
+    from app.data import http as data_http
+    from app.errors import DataSourceError
+
+    def _blocked(*args, **kwargs):
+        raise DataSourceError("réseau coupé dans les tests")
+
+    monkeypatch.setattr(data_http, "_request", _blocked)
+    data_http.clear_cache()
+    yield
+    data_http.clear_cache()

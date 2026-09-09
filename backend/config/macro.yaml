@@ -1,0 +1,20 @@
+# Valeurs macro observées (ADR-026). Les séries sont déclarées dans
+# data_sources.yaml ; ici on dit laquelle sert, sur quelle fenêtre, et sur quoi
+# se replier quand la source ne répond pas.
+
+risk_free:
+  # Taux directeur BCE : le taux court sans risque d'un épargnant en euros.
+  series: policy_rate
+  # Repli = l'ancienne constante analytics.RISK_FREE. Utilisé seulement si la
+  # BCE est injoignable, et une ligne de log le signale.
+  fallback: 0.025
+
+inflation:
+  # Indice des prix harmonisé France, relayé par FRED (l'API Eurostat sert un
+  # instantané en retard de plusieurs mois — voir la sonde).
+  series: cpi_france
+  # Moyenne sur trois ans, pas le dernier glissement annuel : une projection à
+  # vingt ans ne doit pas basculer sur le chiffre d'un seul mois.
+  years: 3
+  # Repli = l'ancienne constante de verdicts.yaml.
+  fallback: 0.02

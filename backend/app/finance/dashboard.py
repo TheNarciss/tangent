@@ -13,7 +13,7 @@ from ..models import (
     PortfolioMetrics,
     Wealth,
 )
-from . import analytics, classification, cma, diagnostic, market, stress
+from . import analytics, classification, cma, diagnostic, macro, market, stress
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,7 @@ def build(
         raise InsufficientHistoryError(f"Calcul des rendements impossible: {exc}") from exc
 
     # Blend μ historiques avec CMAs forward-looking. Shrinkage overridable.
-    rf = risk_free if risk_free is not None else analytics.RISK_FREE
+    rf = risk_free if risk_free is not None else macro.risk_free_rate()
     hist_mu = analytics.annualized_arithmetic_mu(returns).values
     blended = cma.blended_mu(tickers, hist_mu, shrinkage=cma_shrinkage)
     unmapped = cma.unmapped_tickers(tickers)

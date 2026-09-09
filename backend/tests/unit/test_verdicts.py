@@ -481,9 +481,14 @@ def test_tax_on_gains_falls_back_to_the_flat_tax():
 
 
 def test_inflation_is_declared_once_for_the_whole_app():
-    """Projection and « objectif » verdict deflate with the same rate."""
-    assert verdicts.config().inflation > 0
+    """Projection and « objectif » verdict deflate with the same rate (ADR-026)."""
+    from app.finance import macro
+
+    assert macro.inflation() > 0
+    # It used to live here too, and two copies of one number drift apart.
+    assert not hasattr(verdicts.config(), "inflation")
     assert not hasattr(verdicts.config().goal, "inflation")
+    assert not hasattr(verdicts.config().goal, "risk_free")
 
 
 # ── Performance et baisse depuis le plus haut ──────────────────────────────

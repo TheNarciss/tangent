@@ -11,7 +11,9 @@ import numpy as np
 import pandas as pd
 
 TRADING_DAYS = 252
-RISK_FREE = 0.025  # ECB deposit rate, override at call site if needed
+# Fallback only. The observed rate comes from `macro.risk_free_rate()`; this
+# module stays pure and takes it as an argument (ADR-026).
+RISK_FREE = 0.025
 
 
 class AssetStat(TypedDict):

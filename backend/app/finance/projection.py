@@ -15,7 +15,7 @@ import numpy as np
 
 from ..errors import PortfolioEmptyError
 from ..models import ProjectionBands, ProjectionResponse, Wealth
-from . import analytics, fees, market, verdicts
+from . import analytics, fees, macro, market, verdicts
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ def build(
     fee_fn = broker_fee_fn
 
     cfg = verdicts.config()
-    inflation = cfg.inflation
+    inflation = macro.inflation()
     # Today's euros: a nominal amount t months out is worth that much less now.
     deflator = np.array([(1.0 + inflation) ** (t / 12.0) for t in range(months + 1)])
 
