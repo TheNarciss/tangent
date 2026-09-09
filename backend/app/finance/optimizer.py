@@ -23,7 +23,7 @@ from ..models import (
     RiskContribution,
     Wealth,
 )
-from . import analytics, cma, envelopes, market
+from . import analytics, cma, envelopes, macro, market
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +78,7 @@ def build(req: OptimizerRequest, wealth: "Wealth | None" = None) -> OptimizerRes
     rf = (
         expert.risk_free_rate
         if expert and expert.risk_free_rate is not None
-        else analytics.RISK_FREE
+        else macro.risk_free_rate()
     )
     cma_shrink = expert.cma_shrinkage if expert and expert.cma_shrinkage is not None else None
     cma_overrides = expert.cma_overrides if expert else {}

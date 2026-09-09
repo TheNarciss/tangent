@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from ..db.models import Profile
 from ..errors import ConfigurationError, UnknownBrokerError
 from ..models import Verdict, VerdictsResponse, Wealth
-from . import envelopes, fees, performance, risk_profile
+from . import envelopes, fees, macro, performance, risk_profile
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +76,6 @@ class SavingsRateThresholds(BaseModel):
 class GoalThresholds(BaseModel):
     target_probability: float = Field(gt=0, lt=1)
     amber_probability: float = Field(gt=0, lt=1)
-    risk_free: float = Field(ge=0)
     n_paths: int = Field(gt=0)
     seed: int = 0
 
@@ -102,7 +101,6 @@ class DrawdownThresholds(BaseModel):
 
 
 class VerdictsConfig(BaseModel):
-    inflation: float = Field(ge=0)
     performance: PerformanceThresholds
     drawdown: DrawdownThresholds
     projection: ProjectionThresholds
@@ -971,7 +969,7 @@ def goal_verdict(
     goal to the target probability."""
     cfg = thresholds or config().goal
     rcfg = risk_thresholds or config().risk_share
-    inflation = config().inflation
+    inflation = macro.inflation()
     title = "Épargne pour ton objectif"
     goal = profile.goal_amount
     if not goal or goal <= 0:
@@ -995,7 +993,7 @@ def goal_verdict(
         share = merton_share(risk_profile.resolve(level).max_annual_volatility, rcfg.equity_sigma)
     else:
         share = 0.5
-    mu_nominal = cfg.risk_free + share * rcfg.equity_premium
+    mu_nominal = macro.risk_free_rate() + share * rcfg.equity_premium
     mu_real = mu_nominal - inflation
     sigma = share * rcfg.equity_sigma
 

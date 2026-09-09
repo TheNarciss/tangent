@@ -270,14 +270,12 @@ def test_http_serves_the_second_call_from_the_cache(monkeypatch):
     class _Response:
         text = "observation_date,X\n2026-01-01,1\n"
 
-        def raise_for_status(self):
-            return None
-
     def _fake_request(method, url, **kwargs):
         calls["n"] += 1
         return _Response()
 
-    monkeypatch.setattr(http.httpx, "request", _fake_request)
+    # Overrides the conftest fixture that blocks every outbound call.
+    monkeypatch.setattr(http, "_request", _fake_request)
 
     http.get_text("https://example.test/series", ttl_hours=1)
     http.get_text("https://example.test/series", ttl_hours=1)
