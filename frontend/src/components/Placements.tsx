@@ -222,7 +222,8 @@ function RiskBlock({
 
       <ul className="mt-3 space-y-2 text-sm">
         {stress.map((s) => {
-          const loss = s.pnl_pct * metrics.total_value;
+          const loss = s.loss_eur;
+          const fx = s.currency_effect_eur;
           return (
             <li key={s.id} className="rounded-md border px-3 py-2">
               <div className="flex flex-wrap items-baseline justify-between gap-x-3">
@@ -233,16 +234,22 @@ function RiskBlock({
                     loss < 0 ? "text-[hsl(var(--loss))]" : "text-[hsl(var(--gain))]",
                   )}
                 >
-                  {fmt.eur(Math.abs(loss))}{" "}
+                  {fmt.eur0(Math.abs(loss))}{" "}
                   <span className="text-xs text-muted-foreground">
                     ({fmt.signedPct(s.pnl_pct)})
                   </span>
                 </span>
               </div>
               <div className="text-xs text-muted-foreground">
-                avec tes placements d'aujourd'hui, tu aurais {loss < 0 ? "perdu" : "gagné"} cette
-                somme
+                {s.start} → {s.end} · {s.description}
               </div>
+              {fx !== null && Math.abs(fx) >= 1 && (
+                <div className="text-xs text-muted-foreground">
+                  Dont le dollar : {fx > 0 ? "il t'a fait gagner" : "il t'a coûté"}{" "}
+                  {fmt.eur0(Math.abs(fx))}, soit {fmt.signedPct(s.currency_effect_pct ?? 0)} sur tes
+                  fonds monde.
+                </div>
+              )}
             </li>
           );
         })}
@@ -258,6 +265,11 @@ function RiskBlock({
           </div>
         </li>
       </ul>
+      <p className="mt-2 text-xs text-muted-foreground">
+        Les crises sont rejouées sur les classes d'actifs, pas sur les cours de tes lignes : aucun
+        ETF français n'a d'historique avant 2009. Chaque perte est en euros, change compris ; tes
+        livrets ne bougent pas et ton fonds euros ne perd pas sa valeur, seul son taux futur baisse.
+      </p>
     </Block>
   );
 }

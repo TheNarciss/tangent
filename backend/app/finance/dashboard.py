@@ -10,7 +10,6 @@ from ..models import (
     AssetMetrics,
     DashboardResponse,
     PortfolioMetrics,
-    StressTestResult,
     Wealth,
 )
 from . import analytics, cma, diagnostic, market, stress
@@ -19,25 +18,6 @@ logger = logging.getLogger(__name__)
 
 # Stress tests need a 10y history (2020 + 2022): fetched once a day per
 # portfolio composition, not on every /dashboard call.
-_StressKey = tuple[tuple[str, float], ...]
-_STRESS_CACHE: dict[_StressKey, tuple[date, list[StressTestResult]]] = {}
-
-
-def _stress_tests(qty_by_ticker: dict[str, float]) -> list[StressTestResult]:
-    key: _StressKey = tuple(sorted((t, round(q, 6)) for t, q in qty_by_ticker.items()))
-    today = date.today()
-    cached = _STRESS_CACHE.get(key)
-    if cached is not None and cached[0] == today:
-        return cached[1]
-
-    long_prices = market.fetch_prices(list(qty_by_ticker), period="10y")
-    results = [StressTestResult(**s) for s in stress.compute(long_prices, qty_by_ticker)]
-
-    # Drop yesterday's entries so the cache stays bounded by live compositions.
-    for stale in [k for k, (day, _) in _STRESS_CACHE.items() if day != today]:
-        _STRESS_CACHE.pop(stale, None)
-    _STRESS_CACHE[key] = (today, results)
-    return results
 
 
 def build(
@@ -96,7 +76,7 @@ def build(
     equity_curve = analytics.portfolio_value_series(prices, qty_by_ticker)
     pf_max_dd = analytics.max_drawdown(equity_curve)
 
-    stress_results = _stress_tests(qty_by_ticker)
+    stress_results = stress.compute(wealth)
 
     total_cost = sum(cost_by_ticker.values())
     assets = [

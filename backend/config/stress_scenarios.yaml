@@ -1,0 +1,131 @@
+# Rejeu historique : ce que tes placements auraient fait pendant les crises passées.
+#
+# Pourquoi des classes d'actifs et pas les cours de tes lignes : aucun ETF
+# français n'a d'historique avant 2009, donc rejouer 2000 ou 2008 sur les prix
+# réels est impossible — c'est ce qui limitait Tangent à trois fenêtres
+# post-2020. On mappe chaque ligne vers une classe et on rejoue la classe,
+# comme le fait un gérant (« rejeu historique », vocabulaire EBA 2018).
+#
+# Tous les rendements sont pic-à-creux, **du point de vue d'un investisseur en
+# euros** : le change est déjà dedans. `equity_world_usd` est le même épisode
+# vu d'un investisseur en dollars ; l'écart entre les deux est ce que la devise
+# a coûté ou rapporté.
+#
+# Source : docs/ETUDE_METHODE_FINANCIERE_2026-09.md §7.6 (MSCI World EUR et USD,
+# Bloomberg Euro Aggregate, Fama-French développés raccordés en euro synthétique
+# avant 1999). Dernière revue : 2026-09.
+#
+# Non rejoués faute de chiffre ferme : 1973-74 (stagflation, ~−45 à −50 % en DEM)
+# et 1987 (~−28 à −30 %). L'étude ne donne qu'une fourchette ; on préfère une
+# fenêtre en moins à un chiffre inventé.
+
+# Ticker → classe. Un ticker absent est traité en actions monde : c'est
+# l'hypothèse la plus fréquente pour un ETF de PEA, et la plus prudente.
+asset_classes:
+  DCAM.PA: equity_world
+  CW8.PA: equity_world
+  EWLD.PA: equity_world
+  WPEA.PA: equity_world
+  PUST.PA: equity_world     # Nasdaq-100 : rejoué en actions monde faute de série par épisode
+  ETZ.PA: equity_world      # Europe 600 : idem
+
+default_asset_class: equity_world
+
+# Type d'enveloppe → classe. Les livrets ne bougent pas en crise (capital
+# garanti) ; le fonds euros non plus en prix, seul son taux futur baisse.
+envelope_classes:
+  livret_a: cash
+  livret_a_jeune: cash
+  livret_b: cash
+  ldds: cash
+  lep: cash
+  csl: cash
+  cat: cash
+  pel: cash
+  cel: cash
+
+# Compte d'investissement valorisé en bloc (pas de détail des lignes) → classe.
+account_classes:
+  life_insurance: fonds_euros
+  capitalisation: fonds_euros
+  per: fonds_euros
+  perp: fonds_euros
+  perco: fonds_euros
+  madelin: fonds_euros
+  article_83: fonds_euros
+  pee: equity_world
+  cto: equity_world
+  pea: equity_world
+
+scenarios:
+  - id: gulf_1990
+    label: "Guerre du Golfe et krach japonais (1990)"
+    start: "juillet 1990"
+    end: "septembre 1990"
+    description: "Le Japon perd la moitié de sa valeur sur 1990-92"
+    returns: { equity_world: -0.235, equity_world_usd: -0.203, bonds_euro: 0.0, fonds_euros: 0.0, cash: 0.0 }
+
+  - id: ltcm_1998
+    label: "Faillite de LTCM (1998)"
+    start: "juillet 1998"
+    end: "septembre 1998"
+    description: "Chute rapide, remontée tout aussi rapide"
+    returns: { equity_world: -0.181, equity_world_usd: -0.144, bonds_euro: 0.0, fonds_euros: 0.0, cash: 0.0 }
+
+  - id: dotcom_2000
+    label: "Éclatement de la bulle internet (2000-2003)"
+    start: "août 2000"
+    end: "mars 2003"
+    description: "Trente et un mois de glissade, la pire baisse des quarante dernières années pour un Européen"
+    returns: { equity_world: -0.525, equity_world_usd: -0.446, bonds_euro: 0.16, fonds_euros: 0.12, cash: 0.08 }
+
+  - id: gfc_2008
+    label: "Crise financière (2007-2009)"
+    start: "octobre 2007"
+    end: "mars 2009"
+    description: "Les obligations et le dollar ont amorti le choc"
+    returns: { equity_world: -0.482, equity_world_usd: -0.536, bonds_euro: 0.06, fonds_euros: 0.06, cash: 0.05 }
+
+  - id: euro_2011
+    label: "Crise de la dette en zone euro (2011)"
+    start: "avril 2011"
+    end: "septembre 2011"
+    description: "Risque souverain domestique : l'Italie et l'Espagne perdent 10 à 15 %"
+    returns: { equity_world: -0.153, equity_world_usd: -0.204, bonds_euro: 0.03, fonds_euros: 0.02, cash: 0.01 }
+
+  - id: china_2015
+    label: "Chine et pétrole (2015-2016)"
+    start: "avril 2015"
+    end: "février 2016"
+    description: "Deux corrections de 10 % en six mois"
+    returns: { equity_world: -0.121, equity_world_usd: -0.125, bonds_euro: 0.0, fonds_euros: 0.01, cash: 0.0 }
+
+  - id: q4_2018
+    label: "Quatrième trimestre 2018"
+    start: "septembre 2018"
+    end: "décembre 2018"
+    description: "Resserrement monétaire et guerre commerciale"
+    returns: { equity_world: -0.127, equity_world_usd: -0.141, bonds_euro: 0.004, fonds_euros: 0.005, cash: 0.0 }
+
+  - id: covid_2020
+    label: "Krach du COVID (février-mars 2020)"
+    start: "19 février 2020"
+    end: "23 mars 2020"
+    # Le chiffre USD publié est quotidien (−34 %), l'euro est en fin de mois :
+    # les deux ne sont pas comparables, donc pas d'effet devise affiché ici.
+    description: "La baisse de 30 % la plus rapide de l'histoire"
+    returns: { equity_world: -0.204, bonds_euro: -0.05, fonds_euros: 0.0, cash: 0.0 }
+
+  - id: inflation_2022
+    label: "Inflation et remontée des taux (2022)"
+    start: "janvier 2022"
+    end: "octobre 2022"
+    description: "Les deux jambes du 60/40 tombent ensemble, le seul régime d'inflation de la série"
+    returns: { equity_world: -0.142, equity_world_usd: -0.255, bonds_euro: -0.17, fonds_euros: 0.0, cash: 0.0 }
+
+  - id: tariffs_2025
+    label: "Droits de douane (2025)"
+    start: "février 2025"
+    end: "avril 2025"
+    description: "C'est la devise, pas les actions, qui a fait la perte en euros"
+    returns: { equity_world: -0.118, equity_world_usd: -0.05, bonds_euro: 0.0, fonds_euros: 0.0, cash: 0.0 }

@@ -184,13 +184,19 @@ class ExpertSettings(BaseModel):
 
 
 class StressTestResult(BaseModel):
+    """One historical episode replayed on the user's asset classes."""
+
     id: str
     label: str
     description: str
     start: str
     end: str
-    pnl_pct: float
-    drawdown_pct: float
+    pnl_pct: float  # ∈ [-1, 1], share of the whole patrimony
+    loss_eur: float  # negative when the episode is a loss
+    # What the euro/dollar move added to (or took from) world equities during
+    # the episode; None when the published figures are not comparable.
+    currency_effect_pct: float | None = None
+    currency_effect_eur: float | None = None
 
 
 class EnvelopePoint(BaseModel):

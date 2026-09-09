@@ -1,97 +1,156 @@
-"""Stress tests — performance du portefeuille pendant les crises historiques.
+"""Stress tests — what the past crises would have done to this patrimony.
 
-Chaque scénario est une fenêtre temporelle bien définie ; on calcule la performance
-cumulée du portefeuille reconstruit (qty actuelles × prix historiques) sur la fenêtre.
+Replayed on **asset classes**, not on the user's own price history: no
+French ETF has data before 2009, so replaying 2000 or 2008 on real prices is
+impossible — which is why this screen used to hold three windows, all after
+2020, and left out the deepest fall of the last forty years. Mapping each
+line to a class and replaying the class is what a manager does («  rejeu
+historique », EBA 2018 vocabulary), and it works from the first day.
+
+Every figure in `config/stress_scenarios.yaml` is peak-to-trough **for a euro
+investor**, so the currency move is already inside it. The same episode seen
+from a dollar investor is stored next to it, and the gap between the two is
+what the dollar cost or paid — in 2008 it cushioned five points, in 2000-03
+it deepened the fall by eight, and in 2025 it *was* the loss.
 """
 
+from __future__ import annotations
+
 import logging
+from pathlib import Path
 
-import pandas as pd
+import yaml
+from pydantic import BaseModel, Field
 
-from . import analytics
+from ..errors import ConfigurationError
+from ..models import StressTestResult, Wealth
 
 logger = logging.getLogger(__name__)
 
-# A period is only scored when every holding has a price at most this many
-# calendar days before the window starts (holidays, listing gaps).
-MAX_START_GAP_DAYS = 10
+_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "stress_scenarios.yaml"
 
-# Périodes calibrées sur les pires drawdowns récents.
-# Format: (id, label, start, end_or_None_for_recovery).
-STRESS_PERIODS: list[dict] = [
-    {
-        "id": "covid_2020",
-        "label": "Crash COVID (fév-mar 2020)",
-        "start": "2020-02-19",
-        "end": "2020-03-23",
-        "description": "5 semaines, S&P 500 −34 % à son point bas",
-    },
-    {
-        "id": "inflation_2022",
-        "label": "Inflation + Ukraine (jan-oct 2022)",
-        "start": "2022-01-03",
-        "end": "2022-10-12",
-        "description": "Hausse de taux brutale, S&P 500 −25 %, Nasdaq −36 %",
-    },
-    {
-        "id": "regional_banks_2023",
-        "label": "Banques régionales US (mars 2023)",
-        "start": "2023-03-08",
-        "end": "2023-03-13",
-        "description": "Chute SVB / Credit Suisse en 5 jours",
-    },
-]
+# Livrets are capital-guaranteed and the euro fund never marks to market:
+# a class we cannot place is treated as cash rather than as a market asset.
+FALLBACK_CLASS = "cash"
 
 
-def compute(prices: pd.DataFrame, quantities: dict[str, float]) -> list[dict]:
-    """Pour chaque période, calcule la performance cumulée du portefeuille
-    reconstruit (qty actuelles × prix historiques) sur la fenêtre.
+class Scenario(BaseModel):
+    id: str
+    label: str
+    start: str
+    end: str
+    description: str
+    returns: dict[str, float]
 
-    Retourne une liste de dicts JSON-friendly avec start, end, pnl_pct, drawdown.
-    Une période n'est scorée que si *chaque* ligne a un prix sur toute la
-    fenêtre : un panier partiel (ETF lancé après la crise) donnerait un
-    rendement de sous-ensemble que l'UI multiplie ensuite par la valeur totale.
-    Les périodes non couvertes sont ignorées.
+    def ret(self, asset_class: str) -> float:
+        return self.returns.get(asset_class, 0.0)
+
+    @property
+    def currency_effect(self) -> float | None:
+        """Points the euro/dollar move added to (or took from) world equities.
+
+        None when the episode has no comparable dollar figure: comparing a
+        month-end loss with a daily one would invent a number.
+        """
+        if "equity_world_usd" not in self.returns:
+            return None
+        return self.returns["equity_world"] - self.returns["equity_world_usd"]
+
+
+class ScenariosConfig(BaseModel):
+    asset_classes: dict[str, str]
+    default_asset_class: str
+    envelope_classes: dict[str, str]
+    account_classes: dict[str, str]
+    scenarios: list[Scenario] = Field(min_length=1)
+
+
+def _load() -> ScenariosConfig:
+    if not _PATH.exists():
+        raise ConfigurationError(f"Fichier de scénarios de stress manquant: {_PATH}.")
+    try:
+        raw = yaml.safe_load(_PATH.read_text())
+    except yaml.YAMLError as exc:
+        raise ConfigurationError(f"YAML invalide dans {_PATH.name}: {exc}") from exc
+    try:
+        return ScenariosConfig.model_validate(raw)
+    except Exception as exc:
+        raise ConfigurationError(f"Schéma {_PATH.name} invalide: {exc}") from exc
+
+
+_CONFIG: ScenariosConfig | None = None
+
+
+def config() -> ScenariosConfig:
+    """Lazy-load the scenario library; cached for the process lifetime."""
+    global _CONFIG
+    if _CONFIG is None:
+        _CONFIG = _load()
+    return _CONFIG
+
+
+def exposure(wealth: Wealth, cfg: ScenariosConfig | None = None) -> dict[str, float]:
+    """€ held in each asset class, across the whole patrimony.
+
+    Listed lines take the class of their ticker, a wrapper valued in bulk the
+    class of its type, an envelope the class of its type. Everything is
+    counted, so the euro amount a scenario produces is about the patrimony
+    the user actually has, not about one pocket of it.
     """
-    if prices.empty:
+    c = cfg or config()
+    by_class: dict[str, float] = {}
+
+    def add(asset_class: str, amount: float) -> None:
+        if amount:
+            by_class[asset_class] = by_class.get(asset_class, 0.0) + amount
+
+    for account in wealth.investment_accounts:
+        if account.positions:
+            for position in account.positions:
+                add(
+                    c.asset_classes.get(position.ticker, c.default_asset_class),
+                    position.current_value,
+                )
+        else:
+            add(c.account_classes.get(account.account_type, c.default_asset_class), account.balance)
+    for cash in wealth.pea_cash_accounts:
+        add(FALLBACK_CLASS, cash.balance)
+    for envelope in wealth.envelopes:
+        add(c.envelope_classes.get(envelope.envelope_type, FALLBACK_CLASS), envelope.balance)
+    return by_class
+
+
+def compute(wealth: Wealth) -> list[StressTestResult]:
+    """Every scenario, worst loss first, in € and in % of the patrimony."""
+    cfg = config()
+    by_class = exposure(wealth, cfg)
+    total = sum(by_class.values())
+    if total <= 0:
         return []
 
-    quantities = {t: q for t, q in quantities.items() if t in prices.columns}
-    if not quantities:
-        return []
-
-    # NaN propagates: the curve only exists on dates where every line is priced.
-    equity = analytics.portfolio_value_series(prices, quantities)
-    if equity.empty:
-        return []
-
-    results: list[dict] = []
-    for p in STRESS_PERIODS:
-        start = pd.Timestamp(p["start"])
-        end = pd.Timestamp(p["end"])
-        before = equity.loc[:start]
-        window = equity.loc[start:end]
-        if before.empty or window.empty:
-            continue  # at least one holding has no history here → skip
-        if (start - before.index[-1]).days > MAX_START_GAP_DAYS:
-            continue  # coverage starts inside the window → partial basket → skip
-        if (window.index[0] - start).days > MAX_START_GAP_DAYS:
-            continue
-        value_start = float(before.iloc[-1])
-        value_end = float(window.iloc[-1])
-        min_value = float(window.min())
-        pnl_pct = (value_end - value_start) / value_start if value_start else 0.0
-        drawdown = (min_value - value_start) / value_start if value_start else 0.0
+    results: list[StressTestResult] = []
+    for scenario in cfg.scenarios:
+        loss_eur = sum(amount * scenario.ret(cls) for cls, amount in by_class.items())
+        equity_eur = by_class.get("equity_world", 0.0)
+        effect = scenario.currency_effect
         results.append(
-            {
-                "id": p["id"],
-                "label": p["label"],
-                "description": p["description"],
-                "start": p["start"],
-                "end": p["end"],
-                "pnl_pct": pnl_pct,
-                "drawdown_pct": drawdown,
-            }
+            StressTestResult(
+                id=scenario.id,
+                label=scenario.label,
+                description=scenario.description,
+                start=scenario.start,
+                end=scenario.end,
+                pnl_pct=loss_eur / total,
+                loss_eur=loss_eur,
+                currency_effect_pct=effect,
+                currency_effect_eur=effect * equity_eur if effect is not None else None,
+            )
         )
-    logger.info("stress tests computed: %d scenarios", len(results))
+    results.sort(key=lambda r: r.pnl_pct)
+    logger.info(
+        "stress: %d scenarios on %.0f € (%s)",
+        len(results),
+        total,
+        ", ".join(f"{k} {v:.0f}" for k, v in sorted(by_class.items())),
+    )
     return results
