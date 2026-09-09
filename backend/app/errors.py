@@ -49,6 +49,12 @@ class InsufficientHistoryError(AppError):
     status_code = 422
 
 
+class DataSourceError(AppError):
+    """External source of truth (FRED, ECB, Eurostat, Ken French, OpenFIGI) failed."""
+
+    status_code = 502
+
+
 class ConfigurationError(AppError):
     """A static config file (YAML, env) is missing or malformed."""
 

@@ -42,7 +42,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["app", "app.powens", "app.db", "app.auth", "app.finance", "app.repositories", "app.routers"]
+packages = ["app", "app.powens", "app.db", "app.auth", "app.data", "app.finance", "app.repositories", "app.routers"]
 
 [tool.ruff]
 line-length = 100

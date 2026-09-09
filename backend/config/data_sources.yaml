@@ -1,0 +1,62 @@
+# Sources de vérité externes consommées par `app/data`.
+#
+# Une entrée = un fournisseur. Aucune de ces sources n'exige de compte ni de
+# clé API : c'est un critère de sélection, pas une coïncidence (voir ADR-024).
+#
+# `cache_hours` : durée de vie du cache mémoire par famille de données.
+#   macro     → taux, change, inflation (révisés, publiés au mieux quotidiennement)
+#   factors   → séries longues Ken French (mise à jour mensuelle)
+#   reference → référentiel instrument par ISIN (quasi immuable)
+
+http_timeout_seconds: 20
+user_agent: "tangent/1.0 (+https://riskybusinesses.uk)"
+
+cache_hours:
+  macro: 12
+  factors: 24
+  reference: 168
+
+fred:
+  base_url: "https://fred.stlouisfed.org/graph/fredgraph.csv"
+  # Les séries d'indices actions/obligataires de FRED sont bridées par licence
+  # (S&P 500 : 10 ans, ICE BofA : 3 ans). On n'y prend que du macro, jamais des
+  # indices — les séries longues viennent de Ken French.
+  series:
+    oat_10y: IRLTLT01FRM156N      # taux OAT 10 ans France, mensuel, depuis 1960, en %
+    eur_usd: DEXUSEU              # USD par EUR, quotidien, depuis 1999
+    cpi_france: CP0000FRM086NEST  # IPC harmonisé France (source Eurostat), mensuel, base 2015
+
+ecb:
+  base_url: "https://data-api.ecb.europa.eu/service/data"
+  series:
+    policy_rate: "FM/D.U2.EUR.4F.KR.MRR_FR.LEV"   # taux directeur BCE (MRO), en %
+    eur_usd: "EXR/D.USD.EUR.SP00.A"               # cours de référence USD/EUR, depuis 1999
+
+eurostat:
+  # Contre-expertise de l'IPC. Attention : l'API de diffusion Eurostat sert un
+  # instantané en retard de plusieurs mois sur la même série relayée par FRED —
+  # `python -m app.data.probe` affiche l'âge de chaque série, vérifie avant de
+  # brancher un calcul dessus.
+  base_url: "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data"
+  hicp:
+    dataset: prc_hicp_midx
+    geo: FR
+    coicop: CP00
+    unit: I15        # indice base 2015 = 100
+
+ken_french:
+  # Kenneth French Data Library (Tuck, Dartmouth). Rendements mensuels de marché
+  # en USD, dividendes inclus, construits sur la base Bloomberg. Gratuit, sans clé.
+  base_url: "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp"
+  regions:
+    equity_world: "Developed_3_Factors_CSV.zip"        # depuis 1990-07
+    equity_europe: "Europe_3_Factors_CSV.zip"          # depuis 1990-07
+    equity_us: "North_America_3_Factors_CSV.zip"       # depuis 1990-07
+    equity_japan: "Japan_3_Factors_CSV.zip"            # depuis 1990-07
+    equity_emerging: "Emerging_5_Factors_CSV.zip"      # depuis 1989-07
+
+openfigi:
+  base_url: "https://api.openfigi.com/v3/mapping"
+  # Sans clé : 25 requêtes/minute, 10 ISIN par requête. Une clé gratuite
+  # monterait à 250/min — inutile à notre volume (quelques lignes par user).
+  max_isins_per_request: 10
