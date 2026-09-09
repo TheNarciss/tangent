@@ -40,6 +40,11 @@ export interface PortfolioMetrics {
   sharpe: number;
   drawdown_estimate: number;
   max_drawdown_observed: number;
+  /** Days of price history common to every line (a recent fund truncates the basket). */
+  history_days: number;
+  /** Worst twelve months ever seen on the dominant asset class, and its label. */
+  worst_year_class: number | null;
+  worst_year_label: string | null;
   assets: AssetMetrics[];
   correlation: Record<string, Record<string, number>>;
   /** Tickers with no long-term return assumption: their μ is historical only. */

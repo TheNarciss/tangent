@@ -113,6 +113,8 @@ def build(
         for t, w, v in zip(tickers, weights.tolist(), values.tolist(), strict=True)
     ]
 
+    context = _diagnostic_context(classes, weights, tickers)
+
     metrics = PortfolioMetrics(
         total_value=total_value,
         total_cost=total_cost,
@@ -123,6 +125,9 @@ def build(
         sharpe=pf_stats["sharpe"],
         drawdown_estimate=-2.0 * pf_stats["volatility"],
         max_drawdown_observed=pf_max_dd,
+        history_days=len(equity_curve.dropna()),
+        worst_year_class=context.worst_year,
+        worst_year_label=context.worst_year_label,
         assets=assets,
         correlation=analytics.correlation_matrix(returns),
         unmapped_tickers=unmapped,
@@ -138,7 +143,7 @@ def build(
     return DashboardResponse(
         as_of=date.today(),
         metrics=metrics,
-        insights=diagnostic.generate(metrics, _diagnostic_context(classes, weights, tickers)),
+        insights=diagnostic.generate(metrics, context),
         stress_tests=stress_results,
     )
 

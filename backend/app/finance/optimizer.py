@@ -109,7 +109,11 @@ def build(req: OptimizerRequest, wealth: "Wealth | None" = None) -> OptimizerRes
 
     asset_ids = tickers + [e["id"] for e in envelope_assets]
     asset_kinds = ["etf"] * len(tickers) + ["envelope"] * len(envelope_assets)
-    asset_labels = tickers + [e["name"] for e in envelope_assets]
+    # The fund's name, not its ticker: the same line was called « AM.PEA MSCI
+    # WORLD » in one block and « DCAM.PA » in the next.
+    asset_labels = [label_by_ticker.get(t, t) for t in tickers] + [
+        e["name"] for e in envelope_assets
+    ]
 
     # Build augmented stats and solve
     envelope_rates = [e["rate"] for e in envelope_assets]
