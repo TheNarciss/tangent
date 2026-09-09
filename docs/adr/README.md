@@ -54,3 +54,4 @@ Template : [`TEMPLATE.md`](./TEMPLATE.md).
 - [ADR-024](024-external-data-sources.md) — Sources de vérité externes dans `app/data`
 - [ADR-025](025-instrument-classification.md) — Ce qu'est un instrument, décidé sur son nom officiel
 - [ADR-026](026-macro-observed.md) — Taux sans risque et inflation deviennent des valeurs observées
+- [ADR-027](027-assumptions-follow-the-class.md) — Les hypothèses suivent la classe d'actifs, plus le ticker

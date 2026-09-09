@@ -23,7 +23,7 @@ from ..models import (
     RiskContribution,
     Wealth,
 )
-from . import analytics, cma, envelopes, macro, market
+from . import analytics, classification, cma, envelopes, macro, market
 
 logger = logging.getLogger(__name__)
 
@@ -69,8 +69,14 @@ def build(req: OptimizerRequest, wealth: "Wealth | None" = None) -> OptimizerRes
 
     # Aggregate quantities by ticker (same ticker may appear in PEA + CTO)
     qty_by_ticker: dict[str, float] = {}
+    label_by_ticker: dict[str, str] = {}
+    isin_by_ticker: dict[str, str] = {}
     for p in positions:
         qty_by_ticker[p.ticker] = qty_by_ticker.get(p.ticker, 0.0) + p.quantity
+        if p.label and p.label != p.ticker:
+            label_by_ticker.setdefault(p.ticker, p.label)
+        if p.isin:
+            isin_by_ticker.setdefault(p.ticker, p.isin)
 
     # Expert settings: all optional with smart defaults
     expert = req.expert
@@ -111,11 +117,17 @@ def build(req: OptimizerRequest, wealth: "Wealth | None" = None) -> OptimizerRes
 
     # Blend historical μ with forward-looking CMAs (with expert overrides if provided).
     hist_mu = analytics.annualized_arithmetic_mu(returns).values
+    class_of = [
+        c.asset_class
+        for c in classification.classify_many(
+            [(label_by_ticker.get(t, t), isin_by_ticker.get(t)) for t in tickers]
+        )
+    ]
     blended = cma.blended_mu(
-        tickers, hist_mu, shrinkage=cma_shrink, overrides=cma_overrides or None
+        tickers, class_of, hist_mu, shrinkage=cma_shrink, overrides=cma_overrides or None
     )
     mu_override = {t: float(blended[i]) for i, t in enumerate(tickers)}
-    unmapped = cma.unmapped_tickers(tickers, cma_overrides or None)
+    unmapped = cma.unmapped_tickers(tickers, class_of, cma_overrides or None)
 
     mu, cov, bounds = analytics.build_asset_stats(
         returns,

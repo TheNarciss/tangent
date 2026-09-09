@@ -17,9 +17,22 @@ import pandas as pd
 
 from ..errors import PortfolioEmptyError
 from ..models import TimeseriesResponse, Wealth
-from . import analytics, market
+from . import analytics, classification, market
 
 BENCHMARK_TICKER = "CW8.PA"  # Amundi MSCI World, 5y+ history, broad-market proxy
+# Classes the world-equity benchmark is a fair yardstick for. A bond or gold
+# portfolio compared to world equities is a comparison without object, so it
+# gets no benchmark line at all rather than a misleading one.
+BENCHMARKABLE_CLASSES = frozenset(
+    {
+        "equity_world",
+        "equity_us",
+        "equity_us_tech",
+        "equity_europe",
+        "equity_japan",
+        "equity_emerging",
+    }
+)
 ROLLING_WINDOW = 126  # trading days ≈ 6 months
 
 
@@ -47,7 +60,9 @@ def build(wealth: Wealth) -> TimeseriesResponse:
     dd = analytics.drawdown_series(pf_value)
     rs = analytics.rolling_sharpe(pf_returns, window=ROLLING_WINDOW)
 
-    benchmark_norm, benchmark_ticker = _benchmark_aligned(pf_value.index)
+    benchmark_norm, benchmark_ticker = (None, None)
+    if _is_mostly_equity(positions):
+        benchmark_norm, benchmark_ticker = _benchmark_aligned(pf_value.index)
 
     return TimeseriesResponse(
         dates=[d.date() for d in pf_value.index],
@@ -59,6 +74,18 @@ def build(wealth: Wealth) -> TimeseriesResponse:
         rolling_window_days=ROLLING_WINDOW,
         is_backtest=True,
     )
+
+
+def _is_mostly_equity(positions) -> bool:
+    """True when equities carry most of the value: only then is the world index a yardstick."""
+    classes = classification.classify_many([(p.label, p.isin) for p in positions])
+    equity = sum(
+        p.current_value
+        for p, what in zip(positions, classes, strict=True)
+        if what.asset_class in BENCHMARKABLE_CLASSES
+    )
+    total = sum(p.current_value for p in positions)
+    return total > 0 and equity / total > 0.5
 
 
 def _benchmark_aligned(index: pd.DatetimeIndex) -> tuple[pd.Series | None, str | None]:

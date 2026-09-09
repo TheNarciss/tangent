@@ -18,6 +18,7 @@ def _wealth(
     life: float = 0.0,
     pea_cash: float = 0.0,
     ticker: str = "CW8.PA",
+    label: str | None = None,
 ) -> Wealth:
     accounts = []
     if equity:
@@ -29,7 +30,7 @@ def _wealth(
                 positions=[
                     WealthPosition(
                         ticker=ticker,
-                        label=ticker,
+                        label=label or ticker,
                         quantity=1.0,
                         avg_cost=equity,
                         current_value=equity,
@@ -181,3 +182,41 @@ def test_the_currency_effect_is_priced_on_the_equity_pocket_only():
     gfc = next(r for r in results if r.id == "gfc_2008")
     assert gfc.currency_effect_pct is not None
     assert gfc.currency_effect_eur == pytest.approx(gfc.currency_effect_pct * 10_000)
+
+
+# ── L'or : la classe qui manquait ─────────────────────────────────────────
+
+
+def test_gold_is_replayed_on_its_own_history_not_as_equity():
+    """In 2008 gold gained 32 % in euros while world equities lost 48 %."""
+    cfg = stress.config()
+    gfc = next(s for s in cfg.scenarios if s.id == "gfc_2008")
+
+    assert gfc.ret("gold") > 0.3
+    assert gfc.ret("equity_world") < -0.4
+
+
+def test_a_gold_line_is_recognised_and_lands_in_the_gold_class():
+    wealth = _wealth(equity=10_000.0, ticker="GLD.PA", label="iShares Physical Gold ETC")
+
+    assert stress.exposure(wealth).get("gold") == pytest.approx(10_000.0)
+
+
+def test_a_gold_holder_does_not_lose_everything_in_2008():
+    """The whole point of the class: a diversifier must not be replayed as equity."""
+    gold_only = _wealth(equity=10_000.0, ticker="GLD.PA", label="iShares Physical Gold ETC")
+    equity_only = _wealth(equity=10_000.0, ticker="CW8.PA", label="Amundi MSCI World")
+
+    gold_2008 = next(r for r in stress.compute(gold_only) if r.id == "gfc_2008")
+    equity_2008 = next(r for r in stress.compute(equity_only) if r.id == "gfc_2008")
+
+    assert gold_2008.pnl_pct > 0
+    assert equity_2008.pnl_pct < -0.4
+
+
+def test_the_class_of_a_line_no_longer_depends_on_a_table_of_known_tickers():
+    """Any world tracker works, not only the six that used to be listed."""
+    mine = _wealth(equity=1_000.0, ticker="CW8.PA", label="Amundi MSCI World")
+    someone_else = _wealth(equity=1_000.0, ticker="SWDA.L", label="iShares Core MSCI World")
+
+    assert stress.exposure(mine) == stress.exposure(someone_else)
