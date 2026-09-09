@@ -8,11 +8,54 @@ permissions:
   contents: write
   pull-requests: write
 
+# Une exécution à la fois : plusieurs merges rapprochés lançaient des runs qui
+# écrivaient tous sur la même branche de release. On les met à la queue leu leu
+# au lieu de les laisser se marcher dessus.
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
 jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
-      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+      # release-please parcourt l'historique de main via l'API GraphQL de
+      # GitHub, et cette requête dépasse régulièrement le budget serveur :
+      # « Something went wrong while executing your query ». Rien de notre côté
+      # ne déclenche l'erreur, elle tombe au hasard — le 9 septembre 2026, cinq
+      # échecs pour deux succès en vingt minutes, parfois dès la première page.
+      #
+      # On réessaie donc, en laissant à GitHub le temps de souffler entre deux
+      # tentatives. L'action est idempotente : une tentative qui a créé le tag
+      # avant d'échouer ne recrée rien à la suivante.
+      - id: attempt1
+        continue-on-error: true
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          release-type: simple
+          target-branch: main
+          config-file: .release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      - if: steps.attempt1.outcome == 'failure'
+        run: sleep 30
+
+      - id: attempt2
+        if: steps.attempt1.outcome == 'failure'
+        continue-on-error: true
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          release-type: simple
+          target-branch: main
+          config-file: .release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      - if: steps.attempt1.outcome == 'failure' && steps.attempt2.outcome == 'failure'
+        run: sleep 60
+
+      - id: attempt3
+        if: steps.attempt1.outcome == 'failure' && steps.attempt2.outcome == 'failure'
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           release-type: simple
           target-branch: main
