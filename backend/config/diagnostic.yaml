@@ -1,0 +1,31 @@
+# Seuils du diagnostic affiché sur l'écran Placements.
+#
+# Ils étaient écrits en dur dans diagnostic.py, calibrés à l'œil sur un seul
+# portefeuille. Ils sont ici, avec la source quand il y en a une.
+
+# Au-delà, on n'affiche que les plus graves : dix lignes produisaient jusqu'à
+# quarante-cinq cartes, toutes affichées.
+max_insights: 4
+
+concentration:
+  # Poids au-delà duquel une ligne *non diversifiée* est signalée. Un fonds
+  # indiciel large n'est jamais signalé, quel que soit son poids : détenir un
+  # seul ETF monde est la recommandation la plus courante, pas un risque.
+  single_line_max: 0.40
+
+sharpe:
+  # Rapport rendement/risque des actions américaines sur 1928-2025 (Damodaran).
+  # Les anciens seuils, 0,30 et 0,60, encadraient cette valeur : un portefeuille
+  # parfaitement normal était donc classé « ni bon ni mauvais », et un peu en
+  # dessous « critique ».
+  reference: 0.43
+  # Marge d'incertitude d'un rapport estimé sur cinq ans d'historique. En
+  # dessous, l'écart avec la référence n'est pas interprétable.
+  margin: 0.25
+
+volatility:
+  # En dessous, l'épargne ne bouge pas assez pour qu'on en parle.
+  alert_min: 0.20
+  # Repli quand aucun historique long n'existe pour la classe dominante :
+  # 1,65 écart-type = la mauvaise année sur vingt d'une loi normale.
+  bad_year_sigmas: 1.65

@@ -5,14 +5,15 @@ from datetime import date
 
 import numpy as np
 
-from ..errors import InsufficientHistoryError, PortfolioEmptyError
+from ..data import ken_french
+from ..errors import DataSourceError, InsufficientHistoryError, PortfolioEmptyError
 from ..models import (
     AssetMetrics,
     DashboardResponse,
     PortfolioMetrics,
     Wealth,
 )
-from . import analytics, cma, diagnostic, market, stress
+from . import analytics, classification, cma, diagnostic, market, stress
 
 logger = logging.getLogger(__name__)
 
@@ -39,11 +40,15 @@ def build(
     avg_cost_by_ticker: dict[str, float] = {}
     cost_by_ticker: dict[str, float] = {}
     label_by_ticker: dict[str, str] = {}
+    isin_by_ticker: dict[str, str] = {}
     for p in positions:
         qty_by_ticker[p.ticker] = qty_by_ticker.get(p.ticker, 0.0) + p.quantity
         cost_by_ticker[p.ticker] = cost_by_ticker.get(p.ticker, 0.0) + p.cost_basis
         if p.label and p.label != p.ticker:
             label_by_ticker.setdefault(p.ticker, p.label)
+        isin = getattr(p, "isin", None)
+        if isin:
+            isin_by_ticker.setdefault(p.ticker, isin)
     for t in qty_by_ticker:
         avg_cost_by_ticker[t] = cost_by_ticker[t] / qty_by_ticker[t] if qty_by_ticker[t] else 0.0
 
@@ -78,6 +83,16 @@ def build(
 
     stress_results = stress.compute(wealth)
 
+    classes = dict(
+        zip(
+            tickers,
+            classification.classify_many(
+                [(label_by_ticker.get(t, t), isin_by_ticker.get(t)) for t in tickers]
+            ),
+            strict=True,
+        )
+    )
+
     total_cost = sum(cost_by_ticker.values())
     assets = [
         _asset_metric(
@@ -90,6 +105,7 @@ def build(
             latest[t],
             asset_stats[t],
             analytics.max_drawdown(prices[t]),
+            classes[t],
         )
         for t, w, v in zip(tickers, weights.tolist(), values.tolist(), strict=True)
     ]
@@ -119,7 +135,7 @@ def build(
     return DashboardResponse(
         as_of=date.today(),
         metrics=metrics,
-        insights=diagnostic.generate(metrics),
+        insights=diagnostic.generate(metrics, _diagnostic_context(classes, weights, tickers)),
         stress_tests=stress_results,
     )
 
@@ -134,6 +150,7 @@ def _asset_metric(
     price: float,
     stat,
     max_dd: float,
+    what: classification.Classification,
 ) -> AssetMetrics:
     cost = quantity * avg_cost
     pnl = value - cost
@@ -150,4 +167,49 @@ def _asset_metric(
         sharpe=stat["sharpe"],
         drawdown_estimate=-2.0 * stat["sigma"],
         max_drawdown_observed=max_dd,
+        asset_class=what.asset_class,
+        index_label=what.index_label,
+        kind=what.kind,
+        is_diversified=what.is_diversified,
     )
+
+
+def _diagnostic_context(
+    classes: dict[str, classification.Classification],
+    weights,
+    tickers: list[str],
+) -> diagnostic.Context:
+    """Worst twelve months ever observed for the portfolio's dominant asset class.
+
+    Degrades to an empty context — the diagnostic then falls back on a modelled
+    figure and says so — when the class has no long history or the source is
+    unreachable.
+    """
+    by_class: dict[str, float] = {}
+    for ticker, weight in zip(tickers, weights.tolist(), strict=True):
+        asset_class = classes[ticker].asset_class
+        by_class[asset_class] = by_class.get(asset_class, 0.0) + weight
+    if not by_class:
+        return diagnostic.Context()
+
+    dominant = max(by_class, key=lambda c: by_class[c])
+    region = classification.history_region(dominant)
+    if not region:
+        return diagnostic.Context()
+
+    try:
+        worst = analytics.worst_rolling_year(ken_french.monthly_returns(region))
+    except (DataSourceError, ValueError):
+        logger.warning("pas d'historique long pour %s, repli sur la volatilité", region)
+        return diagnostic.Context()
+
+    label = classes_label(classes, dominant)
+    return diagnostic.Context(worst_year=worst, worst_year_label=label)
+
+
+def classes_label(classes: dict[str, classification.Classification], asset_class: str) -> str:
+    """Human label of a class, e.g. 'Actions monde'. Falls back to the raw key."""
+    for what in classes.values():
+        if what.asset_class == asset_class and what.index_label:
+            return what.index_label
+    return asset_class
