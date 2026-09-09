@@ -13,6 +13,8 @@ dependencies = [
     "pydantic-settings>=2.2",
     "scipy>=1.12",
     "pyyaml>=6.0",
+    "openpyxl>=3.1",           # classeurs .xlsx des sources externes (Damodaran, ADR-024)
+    "xlrd>=2.0",               # classeur .xls historique de Shiller (ADR-024)
     "httpx>=0.27",
     "python-dotenv>=1.0",
     # ─ DB & Auth (Phase 1-2) ─
@@ -42,7 +44,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["app", "app.powens", "app.db", "app.auth", "app.finance", "app.repositories", "app.routers"]
+packages = ["app", "app.powens", "app.db", "app.auth", "app.data", "app.finance", "app.repositories", "app.routers"]
 
 [tool.ruff]
 line-length = 100
