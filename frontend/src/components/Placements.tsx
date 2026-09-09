@@ -253,6 +253,19 @@ function RiskBlock({
             </li>
           );
         })}
+        {metrics.worst_year_class !== null && (
+          <li className="rounded-md border px-3 py-2">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+              <span>Pire année déjà vue sur {metrics.worst_year_label ?? "cette classe"}</span>
+              <span className="font-mono tabular text-[hsl(var(--loss))]">
+                {fmt.signedPct(metrics.worst_year_class)}
+              </span>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              douze mois consécutifs, sur l'historique complet de la classe depuis 1990
+            </div>
+          </li>
+        )}
         <li className="rounded-md border px-3 py-2">
           <div className="flex flex-wrap items-baseline justify-between gap-x-3">
             <span>Pire baisse vécue par ce panier</span>
@@ -261,17 +274,35 @@ function RiskBlock({
             </span>
           </div>
           <div className="text-xs text-muted-foreground">
-            du plus-haut au creux suivant, sur l'historique
+            du plus-haut au creux suivant, sur {historyLabel(metrics.history_days)} d'historique
+            commun à tes lignes
+            {metrics.history_days > 0 && metrics.history_days < SHORT_HISTORY_DAYS
+              ? " — trop court pour être comparé aux crises ci-dessus"
+              : ""}
           </div>
         </li>
       </ul>
       <p className="mt-2 text-xs text-muted-foreground">
         Les crises sont rejouées sur les classes d'actifs, pas sur les cours de tes lignes : aucun
-        ETF français n'a d'historique avant 2009. Chaque perte est en euros, change compris ; tes
+        ETF français n'a d'historique avant 2009. Chaque perte est en euros, change compris, et le
+        pourcentage porte sur <strong>tout ton patrimoine</strong>, pas seulement sur tes placements
+        — d'où un pourcentage plus petit que si on le rapportait aux seules lignes ci-dessus. Tes
         livrets ne bougent pas et ton fonds euros ne perd pas sa valeur, seul son taux futur baisse.
+        Un fonds sectoriel est rejoué avec l'amplitude des actions monde, ce qui le sous-estime.
       </p>
     </Block>
   );
+}
+
+/** Below this, the basket's own history says more about a fund's launch date
+ * than about risk: a single recent line truncates every other one. */
+const SHORT_HISTORY_DAYS = 3 * 252;
+
+function historyLabel(days: number): string {
+  if (days <= 0) return "l'historique disponible";
+  const months = Math.round(days / 21);
+  if (months < 24) return `${months} mois`;
+  return `${Math.round(months / 12)} ans`;
 }
 
 /* ── 3. Est-ce que je peux faire mieux ? ──────────────────────────────── */

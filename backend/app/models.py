@@ -36,6 +36,14 @@ class PortfolioMetrics(BaseModel):
     sharpe: float
     drawdown_estimate: float = 0.0  # = −2 × volatility
     max_drawdown_observed: float = 0.0  # max drawdown of the reconstructed portfolio
+    # Days of price history common to every line. A recently launched fund
+    # truncates the whole basket, so `max_drawdown_observed` can cover a few
+    # months and read as reassuring next to a stress test.
+    history_days: int = 0
+    # Worst twelve months ever observed on the portfolio's dominant asset class,
+    # and its label. None when no long history covers that class.
+    worst_year_class: float | None = None
+    worst_year_label: str | None = None
     assets: list[AssetMetrics]
     correlation: dict[str, dict[str, float]]
     # Tickers without a forward-looking μ (not in cma.yaml): their expected

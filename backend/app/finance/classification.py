@@ -111,9 +111,34 @@ def classify_many(instruments: list[tuple[str | None, str | None]]) -> list[Clas
     out: list[Classification] = []
     for label, isin in instruments:
         record = records.get((isin or "").strip().upper())
-        name = _official_name(record) or label
-        source = "openfigi" if record else ("label" if label else "none")
-        out.append(_from_name(name, _kind(record), source))
+        official = _official_name(record)
+        kind = _kind(record)
+
+        # Try both names and keep whichever one we recognise. The official name
+        # is usually the better one, but not always: Amundi's Nasdaq tracker is
+        # registered as « NASDQ-100 », a typo the bank's own label does not have.
+        for name, source in ((official, "openfigi"), (label, "label")):
+            if not name:
+                continue
+            found = _from_name(name, kind, source)
+            if found.is_known:
+                out.append(found)
+                break
+        else:
+            fallback = official or label
+            if fallback:
+                logger.info("instrument non reconnu: %s", fallback)
+                out.append(
+                    Classification(
+                        config().unknown_class,
+                        None,
+                        kind,
+                        "openfigi" if official else "label",
+                        fallback,
+                    )
+                )
+            else:
+                out.append(unknown())
     return out
 
 
@@ -127,7 +152,6 @@ def _from_name(name: str | None, kind: str, source: str) -> Classification:
         if any(_normalize(pattern) in haystack for pattern in rule.any):
             return Classification(rule.asset_class, rule.index, kind, source, name, rule.broad)
 
-    logger.info("instrument non reconnu: %s", name)
     return Classification(cfg.unknown_class, None, kind, source, name)
 
 

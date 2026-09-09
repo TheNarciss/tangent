@@ -28,6 +28,7 @@ BENCHMARKABLE_CLASSES = frozenset(
         "equity_world",
         "equity_us",
         "equity_us_tech",
+        "equity_sector",
         "equity_europe",
         "equity_japan",
         "equity_emerging",

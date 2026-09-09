@@ -39,6 +39,7 @@ class_map:
   equity_europe: equity_world
   equity_japan: equity_world
   equity_emerging: equity_world
+  equity_sector: equity_world     # un pari sectoriel bouge plus que le monde : sous-estimé ici
   bonds: bonds_euro
   money_market: cash
   gold: gold

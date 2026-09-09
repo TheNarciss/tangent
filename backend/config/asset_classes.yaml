@@ -37,20 +37,52 @@ rules:
     broad: false
     any: ["physical silver", "silver etc"]
 
+  # Les paris sectoriels d'abord : « BNP Easy BBG Europe Defense » est un pari
+  # sur la défense, pas une exposition large aux actions européennes, et il
+  # doit être reconnu comme tel avant la règle « Europe ».
+  - class: equity_sector
+    index: "Actions d'un secteur"
+    broad: false
+    any:
+      - "defense"
+      - "defence"
+      - "technology"
+      - "semiconductor"
+      - "healthcare"
+      - "health care"
+      - "biotech"
+      - "energy"
+      - "clean energy"
+      - "water"
+      - "robotics"
+      - "cybersecurity"
+      - "real estate"
+      - "immobilier"
+      - "banks"
+      - "luxury"
+
   - class: equity_us_tech
     index: "Nasdaq-100"
     broad: false   # 100 valeurs, très concentrées sur la tech
-    any: ["nasdaq-100", "nasdaq 100", "nasdaq100"]
+    # « nasdq » sans le A : c'est l'orthographe du référentiel officiel pour
+    # le tracker Amundi. Ne pas la retirer en croyant corriger une faute.
+    any: ["nasdaq-100", "nasdaq 100", "nasdaq100", "nasdq-100", "nasdq 100"]
 
   - class: equity_emerging
     index: "Marchés émergents"
     broad: true
-    any: ["emerging market", "msci em", "emergents", "emerging"]
+    any: ["emerging market", "msci em", "emergents", "emerging", "marches emergents"]
 
   - class: equity_world
     index: "Actions monde"
     broad: true
-    any: ["msci world", "msci acwi", "ftse all-world", "ftse aw", "all country world"]
+    any:
+      - "msci world"
+      - "msci monde"
+      - "msci acwi"
+      - "ftse all-world"
+      - "ftse aw"
+      - "all country world"
 
   - class: equity_us
     index: "Actions américaines"
@@ -60,7 +92,15 @@ rules:
   - class: equity_europe
     index: "Actions européennes"
     broad: true
-    any: ["stoxx europe", "euro stoxx", "msci europe", "cac 40", "eurostoxx"]
+    any:
+      - "stoxx europe"
+      - "stox.eu"        # « BNP PAR.EASY STOX.EU.600 » chez BNP
+      - "stoxx eu"
+      - "euro stoxx"
+      - "eurostoxx"
+      - "msci europe"
+      - "europe 600"
+      - "cac 40"
 
   - class: equity_japan
     index: "Actions japonaises"
