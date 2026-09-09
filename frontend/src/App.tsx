@@ -118,7 +118,10 @@ function getViewConfig(pathname: string, inputs: ViewConfigInputs): ViewConfig {
         headerActions,
       };
     case NAV_PATHS.projection:
-      return { title: "Projection", subtitle: "Où tu en seras dans quelques années" };
+      return {
+        title: "Projection",
+        subtitle: "Où tu en seras, en euros d'aujourd'hui",
+      };
     case NAV_PATHS.investments:
       return {
         title: "Placements",

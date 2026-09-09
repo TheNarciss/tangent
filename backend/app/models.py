@@ -91,6 +91,15 @@ class ProjectionResponse(BaseModel):
     multi_broker_warning: str | None = None
     # ADR-021: weighted average TER (Total Expense Ratio) applied as monthly fee
     weighted_ter: float = 0.0  # ratio (0.0025 = 0.25%/an), shown, not simulated (ADR-023)
+    # Every amount above is in today's euros: the simulation runs in nominal
+    # euros and is divided by (1 + inflation)^(t/12) before being returned.
+    inflation: float = 0.0
+    # Inverse problem: contribution reaching the goal with `target_probability`
+    required_monthly: float | None = None
+    target_probability: float | None = None
+    # Tax due on the gains at exit, weighted by the user's wrappers
+    tax_on_gains_pct: float = 0.0
+    median_after_tax: float | None = None  # median at the horizon, net of that tax
 
 
 class BrokerInfo(BaseModel):

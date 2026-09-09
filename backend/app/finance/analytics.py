@@ -261,6 +261,83 @@ def deterministic_projection(
     return paths
 
 
+def _simulate_gross_monthly(
+    daily_log_returns: pd.Series,
+    months: int,
+    n_paths: int,
+    seed: int,
+    parameter_uncertainty: bool,
+) -> np.ndarray:
+    """(n_paths, months) matrix of monthly gross returns (1 + r).
+
+    μ̂ and σ̂ come from the daily history rescaled to a month. With
+    `parameter_uncertainty` each path draws its own drift from N(μ̂, SE²),
+    SE = σ_month / √(months of history): five years of data leave an error on
+    μ̂ larger than the dispersion σ alone produces at ten years.
+
+    Shared by the fan chart and the required-contribution solver so both read
+    the same simulated futures for a given seed.
+    """
+    if daily_log_returns is None or daily_log_returns.empty:
+        raise ValueError("Aucun rendement historique pour la simulation Monte-Carlo.")
+    rng = np.random.default_rng(seed)
+    days_per_month = TRADING_DAYS / 12  # ≈ 21
+    mu = float(daily_log_returns.mean()) * days_per_month
+    sigma = float(daily_log_returns.std()) * np.sqrt(days_per_month)
+    if parameter_uncertainty:
+        months_of_history = max(len(daily_log_returns) / days_per_month, 1.0)
+        se_mu = sigma / np.sqrt(months_of_history)
+        mu_paths = rng.normal(mu, se_mu, size=(n_paths, 1))
+    else:
+        mu_paths = np.full((n_paths, 1), mu)
+    return np.exp(rng.normal(mu_paths, sigma, size=(n_paths, months)))
+
+
+def required_monthly_contribution(
+    daily_log_returns: pd.Series,
+    initial: float,
+    months: int,
+    goal: float,
+    probability: float,
+    *,
+    fixed_monthly: float = 0.0,
+    proportional_monthly: float = 0.0,
+    courtage_pct: float = 0.0,
+    n_paths: int = 1000,
+    seed: int = 42,
+    parameter_uncertainty: bool = True,
+) -> float | None:
+    """Monthly contribution reaching `goal` with probability `probability`.
+
+    The inverse problem of the projection. On a given path terminal wealth is
+    affine in the contribution C, since the broker's fees are a fixed amount
+    plus a share of the value and a share of the contribution:
+
+        v(t+1) = v(t)·(g(t) − prop) + C·(1 − courtage) − fixed
+
+    so W = A + C·B and the contribution that path needs is (goal − A)/B. The
+    answer is the `probability` quantile of those, exact on the simulated
+    paths and without bisection (étude §7.8, point 3).
+
+    `goal` is a nominal amount at the horizon. Returns None when no sane
+    contribution reaches it.
+    """
+    if months <= 0 or goal <= 0 or not 0 < probability < 1:
+        return None
+    gross = _simulate_gross_monthly(daily_log_returns, months, n_paths, seed, parameter_uncertainty)
+    growth = gross - proportional_monthly  # fees are charged on the month's opening value
+    a = np.full(gross.shape[0], float(initial))
+    b = np.zeros(gross.shape[0])
+    per_euro = 1.0 - courtage_pct
+    for t in range(months):
+        a = a * growth[:, t] - fixed_monthly
+        b = b * growth[:, t] + per_euro
+    with np.errstate(divide="ignore", invalid="ignore"):
+        needed = np.where(b > 0, (goal - a) / b, np.inf)
+    value = float(np.quantile(np.maximum(needed, 0.0), probability))
+    return value if np.isfinite(value) else None
+
+
 def monte_carlo_projection(
     daily_log_returns: pd.Series,
     initial: float,
@@ -283,22 +360,7 @@ def monte_carlo_projection(
     return volatility alone produces at a 10-year horizon. A fan drawn from
     σ only is about half as wide as the honest one.
     """
-    if daily_log_returns is None or daily_log_returns.empty:
-        raise ValueError("Aucun rendement historique pour la simulation Monte-Carlo.")
-
-    rng = np.random.default_rng(seed)
-    days_per_month = TRADING_DAYS / 12  # ≈ 21
-    mu = float(daily_log_returns.mean()) * days_per_month
-    sigma = float(daily_log_returns.std()) * np.sqrt(days_per_month)
-
-    if parameter_uncertainty:
-        months_of_history = max(len(daily_log_returns) / days_per_month, 1.0)
-        se_mu = sigma / np.sqrt(months_of_history)
-        mu_paths = rng.normal(mu, se_mu, size=(n_paths, 1))
-    else:
-        mu_paths = np.full((n_paths, 1), mu)
-    log_rets = rng.normal(mu_paths, sigma, size=(n_paths, months))
-    gross = np.exp(log_rets)
+    gross = _simulate_gross_monthly(daily_log_returns, months, n_paths, seed, parameter_uncertainty)
 
     fee = monthly_fee or (lambda _v: 0.0)
 
