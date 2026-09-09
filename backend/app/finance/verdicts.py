@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from ..db.models import Profile
 from ..errors import ConfigurationError, UnknownBrokerError
 from ..models import Verdict, VerdictsResponse, Wealth
-from . import envelopes, fees, risk_profile
+from . import envelopes, fees, performance, risk_profile
 
 logger = logging.getLogger(__name__)
 
@@ -91,8 +91,20 @@ class ProjectionThresholds(BaseModel):
     default_tax_on_gains: float = Field(ge=0, le=1)
 
 
+class PerformanceThresholds(BaseModel):
+    min_days: int = Field(gt=0)
+    gap_amber: float
+
+
+class DrawdownThresholds(BaseModel):
+    alert_step: float = Field(gt=0, lt=1)
+    red_at: float = Field(gt=0, lt=1)
+
+
 class VerdictsConfig(BaseModel):
     inflation: float = Field(ge=0)
+    performance: PerformanceThresholds
+    drawdown: DrawdownThresholds
     projection: ProjectionThresholds
     fees: FeesThresholds
     next_euro: NextEuroThresholds
@@ -1047,11 +1059,180 @@ def goal_verdict(
     )
 
 
+def _signed_pct(fraction: float) -> str:
+    """0.031 → « +3,10 % » : a return without its sign reads as a promise."""
+    return ("+" if fraction >= 0 else "−") + _pct(abs(fraction))
+
+
+def performance_verdict(
+    perf: performance.Performance | None,
+    thresholds: PerformanceThresholds | None = None,
+) -> Verdict:
+    """« Ce que tes placements ont vraiment fait » : TWR against TRI (étude §7.7).
+
+    TWR judges the allocation, TRI judges the saver's own result; the gap
+    between them is what the timing of the contributions cost or won. Both
+    are read off the snapshot series, which is the only real history: the
+    curve on Placements applies today's weights to the past and is a
+    backtest, not this account's past.
+    """
+    cfg = thresholds or config().performance
+    title = "Ce que tes placements ont vraiment rapporté"
+    if perf is None or perf.days < cfg.min_days:
+        started = perf.start.strftime("%d/%m/%Y") if perf else None
+        missing = cfg.min_days - perf.days if perf else cfg.min_days
+        return Verdict(
+            id="performance",
+            title=title,
+            status="unknown",
+            headline=(
+                f"L'historique de ton compte commence le {started} : encore {missing} jours "
+                "avant un rendement qui veut dire quelque chose."
+                if started
+                else (
+                    "L'historique de ton compte commence aujourd'hui. Tangent en enregistre "
+                    "la valeur chaque nuit ; le vrai rendement s'affichera dans un mois."
+                )
+            ),
+            details={
+                "days": perf.days if perf else 0,
+                "min_days": cfg.min_days,
+                "start": started,
+            },
+        )
+
+    details: dict[str, Any] = {
+        "start": perf.start.isoformat(),
+        "end": perf.end.isoformat(),
+        "days": perf.days,
+        "twr": perf.twr,
+        "twr_annualized": perf.twr_annualized,
+        "irr": perf.irr,
+        "behaviour_gap": perf.behaviour_gap,
+        "net_flows_eur": perf.net_flows,
+        "first_value_eur": perf.first_value,
+        "last_value_eur": perf.last_value,
+        "max_drawdown": perf.max_drawdown,
+        "index": perf.index,
+    }
+    since = perf.start.strftime("%d/%m/%Y")
+    twr_txt = _signed_pct(perf.twr) if perf.twr is not None else "—"
+    if perf.irr is None or perf.behaviour_gap is None or perf.twr_annualized is None:
+        return Verdict(
+            id="performance",
+            title=title,
+            status="green",
+            headline=(
+                f"Depuis le {since}, tes placements ont fait {twr_txt}, versements mis à part."
+            ),
+            impact_eur_per_year=0.0,
+            details=details,
+        )
+
+    strategy = f"{_signed_pct(perf.twr_annualized)} par an pour tes fonds"
+    yours = f"{_signed_pct(perf.irr)} par an pour ton argent"
+    if perf.behaviour_gap >= cfg.gap_amber:
+        return Verdict(
+            id="performance",
+            title=title,
+            status="green",
+            headline=(
+                f"Depuis le {since} : {strategy}, {yours}. Le moment de tes versements "
+                "ne t'a rien coûté."
+            ),
+            impact_eur_per_year=0.0,
+            details=details,
+        )
+    cost = abs(perf.behaviour_gap) * perf.last_value
+    return Verdict(
+        id="performance",
+        title=title,
+        status="amber",
+        headline=(
+            f"Depuis le {since} : {strategy}, mais seulement {yours}. Le calendrier de tes "
+            f"versements te coûte {_pct(abs(perf.behaviour_gap))} par an, soit {_eur(cost)}."
+        ),
+        impact_eur_per_year=cost,
+        action=(
+            "Verse le même montant tous les mois, par virement automatique, plutôt qu'au "
+            "moment où le marché te semble bien orienté."
+        ),
+        details=details,
+    )
+
+
+def drawdown_verdict(
+    perf: performance.Performance | None,
+    thresholds: DrawdownThresholds | None = None,
+) -> Verdict:
+    """« Où tu en es par rapport à ton plus haut » (MiFID II art. 62).
+
+    A discretionary manager owes the client a notice the same day the
+    portfolio falls 10 % below the start of the period, then at every
+    further 10 %. The rule is a better alert than a daily commentary: it
+    fires on the drop that makes people sell, and says not to.
+    """
+    cfg = thresholds or config().drawdown
+    title = "Baisse depuis le plus haut"
+    if perf is None or not perf.index:
+        return Verdict(
+            id="drawdown",
+            title=title,
+            status="unknown",
+            headline="Pas encore d'historique : la baisse depuis le plus haut sera suivie ici.",
+        )
+    dd = perf.drawdown
+    peak_day = perf.peak_day.strftime("%d/%m/%Y") if perf.peak_day else "?"
+    # Euros missing against the peak, at today's size of the pocket.
+    missing = perf.last_value * (-dd / (1 + dd)) if dd < 0 and dd > -1 else 0.0
+    # +1e-9: a drawdown of exactly one step must count as crossed.
+    steps = int((abs(dd) + 1e-9) / cfg.alert_step)
+    details: dict[str, Any] = {
+        "drawdown": dd,
+        "max_drawdown": perf.max_drawdown,
+        "peak_day": perf.peak_day.isoformat() if perf.peak_day else None,
+        "missing_eur": missing,
+        "alert_step": cfg.alert_step,
+        "red_at": cfg.red_at,
+        "steps_crossed": steps,
+        "last_value_eur": perf.last_value,
+    }
+    if steps == 0:
+        return Verdict(
+            id="drawdown",
+            title=title,
+            status="green",
+            headline=(
+                f"Tes placements sont à {_pct(abs(dd))} de leur plus haut du {peak_day} : "
+                "rien d'anormal."
+                if dd < 0
+                else f"Tes placements sont à leur plus haut, atteint le {peak_day}."
+            ),
+            impact_eur_per_year=0.0,
+            details=details,
+        )
+    return Verdict(
+        id="drawdown",
+        title=title,
+        status="red" if abs(dd) >= cfg.red_at else "amber",
+        headline=(
+            f"Tes placements ont baissé de {_pct(abs(dd))} depuis leur plus haut du {peak_day}, "
+            f"soit {_eur(missing)}."
+        ),
+        action=(
+            "Rien à faire, et surtout pas vendre : une baisse ne devient une perte qu'au "
+            "moment où on vend. Continue tes versements, ils achètent moins cher."
+        ),
+        details=details,
+    )
+
+
 def compute_all(
     wealth: Wealth,
     profile: Profile,
     monthly_spending: float | None = None,
     monthly_saved: float | None = None,
+    perf: performance.Performance | None = None,
 ) -> VerdictsResponse:
     """Every verdict the method can give on this patrimony, in display order.
 
@@ -1066,11 +1247,13 @@ def compute_all(
         _, broker_fees = fees.get(None)
     monthly = float(profile.monthly_dca or 0.0)
     verdicts = [
+        drawdown_verdict(perf),
         savings_rate_verdict(profile, monthly_saved),
         goal_verdict(wealth, profile, monthly_saved),
         next_euro_verdict(wealth, profile, monthly_spending),
         risk_share_verdict(wealth, profile),
         fees_verdict(wealth, broker_fees, monthly),
+        performance_verdict(perf),
     ]
     logger.info("verdicts computed: %s", {v.id: v.status for v in verdicts})
     return VerdictsResponse(computed_at=datetime.now(tz=UTC), verdicts=verdicts)

@@ -57,6 +57,7 @@ def build(wealth: Wealth) -> TimeseriesResponse:
         drawdown=dd.tolist(),
         rolling_sharpe=[_nullable(v) for v in rs.reindex(pf_value.index).tolist()],
         rolling_window_days=ROLLING_WINDOW,
+        is_backtest=True,
     )
 
 

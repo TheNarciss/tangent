@@ -158,6 +158,14 @@ function TimelineTooltipContent({ ts, idx }: { ts: TimeseriesResponse; idx: numb
       <div className="font-sans text-[10px] text-muted-foreground pt-1 leading-tight">
         Base 100 au {formatDateTick(ts.dates[0])}. Drawdown = baisse depuis le dernier plus-haut.
         Sharpe glissant calculé sur {ts.rolling_window_days} jours de bourse (≈ 6 mois).
+        {ts.is_backtest !== false && (
+          <>
+            {" "}
+            Cette courbe applique tes lignes d'aujourd'hui au passé : c'est une simulation de ton
+            allocation actuelle, pas l'historique de ton compte. Le vrai rendement de ton compte est
+            dans Méthode.
+          </>
+        )}
       </div>
     </div>
   );

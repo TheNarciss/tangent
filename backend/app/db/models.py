@@ -23,6 +23,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -484,6 +485,39 @@ class Loan(Base):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+class PortfolioSnapshot(Base):
+    """One day's valuation of the investable pocket, with the quantities behind it.
+
+    Powens syncs no transaction for investment wrappers, so the only way to
+    tell a market move from a contribution is to compare two snapshots: what
+    the quantities gained, priced at the day's prices, is the money paid in;
+    the rest is performance. TWR, TRI and the −10 % alert all read this table.
+    """
+
+    __tablename__ = "portfolio_snapshots"
+    __table_args__ = (
+        UniqueConstraint("user_id", "snapshot_date", name="uq_snapshot_user_date"),
+        Index("ix_portfolio_snapshots_user_date", "user_id", "snapshot_date"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    snapshot_date: Mapped[date] = mapped_column(Date, nullable=False)
+    total_value: Mapped[float] = mapped_column(Float, nullable=False)
+    quantities: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    """{ticker: quantity} on that date — the flow detector."""
+    net_flow: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    """Money paid in since the previous snapshot, at that day's prices."""
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+    )
+
+
 # Append this block to backend/app/db/models.py (after the Loan class).
 # See ADR-015 for context.
 # ─────────────────────────────────────────────────────────────────────────────

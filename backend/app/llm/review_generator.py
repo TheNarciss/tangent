@@ -29,6 +29,7 @@ from ..models import OptimizerResponse, Wealth
 from ..repositories import bank_transactions as tx_repo
 from ..repositories import profile as profile_repo
 from ..repositories import reviews as reviews_repo
+from ..snapshot_job import performance_for
 from . import anthropic_client, cost_tracker, prompt_builder
 
 logger = logging.getLogger(__name__)
@@ -90,8 +91,9 @@ async def generate_review_stream(
     profile = await profile_repo.get_or_create(session, user_id)
     spending = await tx_repo.monthly_outflow(session, user_id)
     saved = await tx_repo.monthly_inflow_to_savings(session, user_id)
+    perf = await performance_for(session, user_id)
     verdicts = verdicts_engine.compute_all(
-        wealth, profile, monthly_spending=spending, monthly_saved=saved
+        wealth, profile, monthly_spending=spending, monthly_saved=saved, perf=perf
     ).verdicts
     snapshot = prompt_builder.build_anonymized_snapshot(
         wealth, profile, optimizer_response, verdicts=verdicts

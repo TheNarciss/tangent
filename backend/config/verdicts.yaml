@@ -87,3 +87,15 @@ projection:
     capitalisation: 0.247
     per: 0.30
   default_tax_on_gains: 0.30
+
+performance:
+  # En dessous, la série d'instantanés est trop courte pour un chiffre honnête.
+  min_days: 30
+  # Écart TRI − TWR annualisé : en dessous, le calendrier des versements coûte.
+  gap_amber: -0.01
+
+drawdown:
+  # Alerte à chaque tranche de baisse (MiFID II art. 62 : −10 %, le jour même,
+  # puis à chaque multiple de 10 %). Mesurée sur l'indice TWR, hors versements.
+  alert_step: 0.10
+  red_at: 0.20

@@ -9,6 +9,7 @@ from ..finance import verdicts
 from ..models import VerdictsResponse, Wealth
 from ..repositories import bank_transactions as tx_repo
 from ..repositories import profile as profile_repo
+from ..snapshot_job import performance_for
 
 router = APIRouter(tags=["verdicts"])
 
@@ -27,4 +28,11 @@ async def read_verdicts(
     profile = await profile_repo.get_or_create(session, user.id)
     spending = await tx_repo.monthly_outflow(session, user.id)
     saved = await tx_repo.monthly_inflow_to_savings(session, user.id)
-    return verdicts.compute_all(wealth, profile, monthly_spending=spending, monthly_saved=saved)
+    perf = await performance_for(session, user.id)
+    return verdicts.compute_all(
+        wealth,
+        profile,
+        monthly_spending=spending,
+        monthly_saved=saved,
+        perf=perf,
+    )

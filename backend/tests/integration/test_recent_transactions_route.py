@@ -98,9 +98,7 @@ async def _cleanup(user_id: uuid.UUID) -> None:
         await session.execute(
             BankTransaction.__table__.delete().where(BankTransaction.user_id == user_id)
         )
-        await session.execute(
-            BankAccount.__table__.delete().where(BankAccount.user_id == user_id)
-        )
+        await session.execute(BankAccount.__table__.delete().where(BankAccount.user_id == user_id))
         await session.commit()
 
 

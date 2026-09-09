@@ -61,6 +61,11 @@ class TimeseriesResponse(BaseModel):
     drawdown: list[float]  # ∈ [-1, 0]
     rolling_sharpe: list[float | None]  # None for the first `window` days
     rolling_window_days: int
+    # GIPS 2020: modelled performance must be labelled as such and never
+    # chained to real performance. This curve applies today's weights to the
+    # past, so it is a backtest of the current allocation, not the account's
+    # history — that one is the TWR of the « performance » verdict.
+    is_backtest: bool = True
 
 
 class ProjectionBands(BaseModel):
