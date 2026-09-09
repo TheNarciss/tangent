@@ -1,5 +1,41 @@
 # Changelog
 
+## [1.3.0](https://github.com/TheNarciss/tangent/compare/v1.2.0...v1.3.0) (2026-09-09)
+
+
+### Features
+
+* **data:** ajoute Damodaran et Shiller pour les crises anciennes ([ce5256d](https://github.com/TheNarciss/tangent/commit/ce5256df760d075b440c69bc1de20b382e74e9db))
+* **data:** ajoute les fixings LBMA pour l'or et l'argent ([72a47ef](https://github.com/TheNarciss/tangent/commit/72a47effd07a2ffe02d758b7d052e98f38374679))
+* **data:** un service pour les sources de vérité externes ([b6d7030](https://github.com/TheNarciss/tangent/commit/b6d70306228cfc3b89edc8fe4d589b6e0c28cd32))
+* **data:** un service pour les sources de vérité externes ([aabc241](https://github.com/TheNarciss/tangent/commit/aabc2414eb64b73868082bb741b14095001021ab))
+* **methode:** Méthode tab with folded verdict cards, fees verdict on Placements ([65e4e44](https://github.com/TheNarciss/tangent/commit/65e4e44f795f996826cc861c50a172499cecadfe))
+* **methode:** Méthode tab with folded verdict cards, fees verdict on Placements ([00fa149](https://github.com/TheNarciss/tangent/commit/00fa149ae5b11edd07e9bca6561f990e5dd00a34))
+* **performance:** TWR, TRI and the −10 % alert, on a real history of the account ([3c3c7f8](https://github.com/TheNarciss/tangent/commit/3c3c7f80e95ec60681dbd92bf0cb606f5db94610))
+* **performance:** TWR, TRI and the −10 % alert, on a real history of the account ([fb81ef9](https://github.com/TheNarciss/tangent/commit/fb81ef9de69c6729c2e0e806de5d009223a4bfab))
+* **projection:** today's euros, tax at exit, and the contribution the goal requires ([35a1c44](https://github.com/TheNarciss/tangent/commit/35a1c44cf0818e38ad3ead5dfef88f32444c211f))
+* **projection:** today's euros, tax at exit, and the contribution the goal requires ([a66da7c](https://github.com/TheNarciss/tangent/commit/a66da7c782f687f4bf1a149ae9cef1c42f10f9c0))
+* **stress:** replay the long crises, and say what the dollar did ([5ab19eb](https://github.com/TheNarciss/tangent/commit/5ab19eb7d505ecaf671b391f6a2451d753a4147c))
+* **stress:** replay the long crises, and say what the dollar did ([338aa40](https://github.com/TheNarciss/tangent/commit/338aa408da60710a51c1db55d48e200e55ce261f))
+* **verdicts:** « épargne pour ton objectif », the inverse problem of the projection ([2bdb2b9](https://github.com/TheNarciss/tangent/commit/2bdb2b9673c06489f0229d8ff1843417b81d2d1b))
+* **verdicts:** « épargne pour ton objectif », the inverse problem of the projection ([3e29a31](https://github.com/TheNarciss/tangent/commit/3e29a312c89da0a4279a7ba8ec590d2b566cbe7e))
+* **verdicts:** « où placer le prochain euro », the envelope sequencing rule ([de11182](https://github.com/TheNarciss/tangent/commit/de1118239c2ba3c0d9ad4cc44b9521d41a3af705))
+* **verdicts:** « où placer le prochain euro », the envelope sequencing rule ([a77f692](https://github.com/TheNarciss/tangent/commit/a77f6925a9fbe287a1015e2a9006050edb9527ee))
+* **verdicts:** « part d'actions », Merton share against the long-term pocket ([2bb898c](https://github.com/TheNarciss/tangent/commit/2bb898c9199adc495ab8877258b7c2c56d751e07))
+* **verdicts:** « part d'actions », Merton share against the long-term pocket ([0bbbc57](https://github.com/TheNarciss/tangent/commit/0bbbc57092127046983f77881758139f9293b9cd))
+* **verdicts:** « taux d'épargne », contributions against income with escalation ([39124ce](https://github.com/TheNarciss/tangent/commit/39124cea39e5231fc2f4b1549cad31878ad6d9ce))
+* **verdicts:** « taux d'épargne », contributions against income with escalation ([cc8a88d](https://github.com/TheNarciss/tangent/commit/cc8a88d8f79df24adc2b7a70ee968d10aadbec9e))
+* **verdicts:** one verdict contract, first verdict « frais réels », TER out of the projection ([06371b7](https://github.com/TheNarciss/tangent/commit/06371b7e0799a885e0efb59cff55d14fa3eb20ae))
+* **verdicts:** one verdict contract, first verdict « frais réels », TER out of the projection ([d973ef8](https://github.com/TheNarciss/tangent/commit/d973ef8dfa1b969a005e3c0259bff9aebe29352b))
+
+
+### Bug Fixes
+
+* **diagnostic:** des règles qui tiennent pour un autre portefeuille que le mien ([5c736fa](https://github.com/TheNarciss/tangent/commit/5c736fad911fa6266dc523e092b25768b59edfd3))
+* **diagnostic:** des règles qui tiennent pour un autre portefeuille que le mien ([4dc3172](https://github.com/TheNarciss/tangent/commit/4dc31724265e15b7bc74394fdff001683b86dc40))
+* **retraite:** one sustainable withdrawal rate, 3.5 % from config instead of a 4 % copied twice ([d016b32](https://github.com/TheNarciss/tangent/commit/d016b32217102bbf6ced91ecc34a2c0c236bd4b3))
+* **retraite:** one sustainable withdrawal rate, 3.5 % from config instead of a 4 % copied twice ([e7971d8](https://github.com/TheNarciss/tangent/commit/e7971d8b60781e8d6cd36d65b8da8a684ab2224e))
+
 ## [1.2.0](https://github.com/TheNarciss/tangent/compare/v1.1.0...v1.2.0) (2026-09-08)
 
 
