@@ -38,6 +38,7 @@ from ..finance.gap_filler import engine as gap_filler_engine
 from ..repositories import bank_transactions as tx_repo
 from ..repositories import profile as profile_repo
 from ..repositories import review_batches as batches_repo
+from ..snapshot_job import performance_for
 from . import anthropic_client, cost_tracker
 from ._retry import retry_on_overload
 from .prompt_builder import SYSTEM_PROMPT, build_anonymized_snapshot, build_user_prompt
@@ -141,8 +142,9 @@ async def submit_nightly_batch(session: AsyncSession) -> ReviewBatch | None:
             wealth = await get_user_wealth(user=user, session=session)
             spending = await tx_repo.monthly_outflow(session, user.id)
             saved = await tx_repo.monthly_inflow_to_savings(session, user.id)
+            perf = await performance_for(session, user.id)
             verdicts = verdicts_engine.compute_all(
-                wealth, profile, monthly_spending=spending, monthly_saved=saved
+                wealth, profile, monthly_spending=spending, monthly_saved=saved, perf=perf
             ).verdicts
             snapshot = build_anonymized_snapshot(wealth, profile, verdicts=verdicts)
             user_prompt = build_user_prompt(snapshot)

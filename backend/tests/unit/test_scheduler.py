@@ -12,13 +12,14 @@ from zoneinfo import ZoneInfo
 from app.scheduler import setup_scheduler
 
 
-def test_setup_scheduler_registers_two_jobs() -> None:
+def test_setup_scheduler_registers_the_three_nightly_jobs() -> None:
     """The factory must register the two expected jobs."""
     scheduler = setup_scheduler()
     job_ids = {j.id for j in scheduler.get_jobs()}
+    assert "record_portfolio_snapshots" in job_ids
     assert "submit_nightly_batch" in job_ids
     assert "poll_pending_batches" in job_ids
-    assert len(job_ids) == 2
+    assert len(job_ids) == 3
 
 
 def test_setup_scheduler_uses_paris_timezone() -> None:

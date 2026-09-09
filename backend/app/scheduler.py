@@ -5,6 +5,7 @@ election needed. If we scale horizontally later, switch to a Redis/PG
 jobstore with locking.
 
 Jobs registered:
+- record_portfolio_snapshots : daily at 02:00 Europe/Paris -> snapshot_job
 - submit_nightly_batch  : daily at 03:00 Europe/Paris -> batch_submitter
 - poll_pending_batches  : every 15 min from 03:00 to 09:45 Paris
                           -> batch_poller (idempotent, skips finished)
@@ -24,6 +25,7 @@ from apscheduler.triggers.cron import CronTrigger
 
 from .db import async_session_factory
 from .llm import batch_poller, batch_submitter
+from .snapshot_job import record_all_users
 
 logger = logging.getLogger(__name__)
 
@@ -69,13 +71,35 @@ async def _job_poll_pending() -> None:
             logger.exception("Scheduler: batch polling failed")
 
 
+async def _job_record_snapshots() -> None:
+    """Store the day's portfolio value for every user, at 02:00 Paris.
+
+    Runs before the nightly briefing so the day's figures are available to
+    it. Failures on one user never stop the others.
+    """
+    async with async_session_factory() as session:
+        try:
+            await record_all_users(session)
+        except Exception:
+            logger.exception("Scheduler: portfolio snapshots failed")
+
+
 def setup_scheduler() -> AsyncIOScheduler:
-    """Build the scheduler with the 2 nightly jobs (not started yet).
+    """Build the scheduler with the 3 nightly jobs (not started yet).
 
     The caller (FastAPI lifespan) is responsible for .start() and
     .shutdown(). The scheduler uses Europe/Paris time for all crons.
     """
     scheduler = AsyncIOScheduler(timezone=_PARIS)
+
+    scheduler.add_job(
+        _job_record_snapshots,
+        CronTrigger(hour=2, minute=0, timezone=_PARIS),
+        id="record_portfolio_snapshots",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
 
     scheduler.add_job(
         _job_submit_nightly,
@@ -96,7 +120,8 @@ def setup_scheduler() -> AsyncIOScheduler:
     )
 
     logger.info(
-        "Scheduler configured: %d jobs registered (submit_nightly_batch, poll_pending_batches)",
+        "Scheduler configured: %d jobs registered (record_portfolio_snapshots, "
+        "submit_nightly_batch, poll_pending_batches)",
         len(scheduler.get_jobs()),
     )
     return scheduler

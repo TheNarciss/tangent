@@ -77,6 +77,10 @@ export interface TimeseriesResponse {
   drawdown: number[];
   rolling_sharpe: (number | null)[];
   rolling_window_days: number;
+  /** This curve applies today's weights to the past: a backtest of the current
+   *  allocation, not the account's history (GIPS 2020). The real one is the
+   *  TWR of the « performance » verdict. */
+  is_backtest?: boolean;
 }
 
 export interface ProjectionBands {
@@ -1259,4 +1263,33 @@ export function useWithdrawalRate() {
     queryFn: () => http<WithdrawalRateResponse>("/withdrawal-rate"),
     staleTime: Infinity,
   });
+}
+
+/** `details` of the « ce que tes placements ont vraiment rapporté » verdict. */
+export interface PerformanceVerdictDetails {
+  start?: string;
+  end?: string;
+  days?: number;
+  min_days?: number;
+  twr?: number | null;
+  twr_annualized?: number | null;
+  irr?: number | null;
+  behaviour_gap?: number | null;
+  net_flows_eur?: number;
+  first_value_eur?: number;
+  last_value_eur?: number;
+  max_drawdown?: number;
+  index?: number[];
+}
+
+/** `details` of the « baisse depuis le plus haut » verdict. */
+export interface DrawdownVerdictDetails {
+  drawdown?: number;
+  max_drawdown?: number;
+  peak_day?: string | null;
+  missing_eur?: number;
+  alert_step?: number;
+  red_at?: number;
+  steps_crossed?: number;
+  last_value_eur?: number;
 }

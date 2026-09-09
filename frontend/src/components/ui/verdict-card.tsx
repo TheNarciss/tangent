@@ -88,10 +88,20 @@ export function VerdictCard({ verdict, children, defaultOpen = false }: VerdictC
  * sentence, nothing else, linking to the Méthode tab for the computation.
  * Renders nothing while loading or when the verdict is absent.
  */
-export function VerdictLine({ id, to }: { id: string; to: string }) {
+export function VerdictLine({
+  id,
+  to,
+  hideWhenGreen = false,
+}: {
+  id: string;
+  to: string;
+  /** For alerts: say nothing while there is nothing to say. */
+  hideWhenGreen?: boolean;
+}) {
   const q = useVerdicts();
   const v = q.data?.verdicts.find((x) => x.id === id);
   if (!v) return null;
+  if (hideWhenGreen && (v.status === "green" || v.status === "unknown")) return null;
   return (
     <Link
       to={to}

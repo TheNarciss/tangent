@@ -261,17 +261,6 @@ def test_incomplete_profile_asks_for_it():
     assert v.action is not None and "Renseigne ton profil" in v.action
 
 
-def test_compute_all_orders_next_euro_first():
-    resp = verdicts.compute_all(_wealth2(accounts=[_acc("pea", 1000.0)]), _profile(), 1000.0)
-    assert [v.id for v in resp.verdicts] == [
-        "savings_rate",
-        "goal",
-        "next_euro",
-        "risk_share",
-        "fees",
-    ]
-
-
 # ── « Part d'actions » ─────────────────────────────────────────────────────
 
 RISK = verdicts.RiskShareThresholds(
@@ -495,3 +484,97 @@ def test_inflation_is_declared_once_for_the_whole_app():
     """Projection and « objectif » verdict deflate with the same rate."""
     assert verdicts.config().inflation > 0
     assert not hasattr(verdicts.config().goal, "inflation")
+
+
+# ── Performance et baisse depuis le plus haut ──────────────────────────────
+
+from app.finance import performance as perf_mod  # noqa: E402
+
+PERF_CFG = verdicts.PerformanceThresholds(min_days=30, gap_amber=-0.01)
+DD_CFG = verdicts.DrawdownThresholds(alert_step=0.10, red_at=0.20)
+
+
+def _series(*points: tuple[str, float, float]) -> perf_mod.Performance | None:
+    return perf_mod.compute(
+        [perf_mod.Point(day=date.fromisoformat(d), value=v, net_flow=f) for d, v, f in points]
+    )
+
+
+def test_performance_says_when_the_history_is_too_young():
+    v = verdicts.performance_verdict(
+        _series(("2026-09-01", 1000, 0), ("2026-09-08", 1010, 0)), PERF_CFG
+    )
+    assert v.status == "unknown"
+    assert "01/09/2026" in v.headline
+    assert v.details["min_days"] == 30
+
+
+def test_performance_with_no_history_at_all():
+    v = verdicts.performance_verdict(None, PERF_CFG)
+    assert v.status == "unknown"
+    assert "aujourd'hui" in v.headline
+
+
+def test_performance_is_green_when_the_timing_costs_nothing():
+    v = verdicts.performance_verdict(
+        _series(("2025-09-09", 10_000, 0), ("2026-09-09", 11_000, 0)), PERF_CFG
+    )
+    assert v.status == "green"
+    assert "+10,00 %" in v.headline
+    assert v.impact_eur_per_year == 0.0
+
+
+def test_performance_names_the_behaviour_gap_in_euros():
+    v = verdicts.performance_verdict(
+        _series(
+            ("2025-09-09", 100_000, 0),
+            ("2026-03-09", 200_000, 0),
+            ("2026-03-10", 400_000, 200_000),
+            ("2026-09-09", 280_000, 0),
+        ),
+        PERF_CFG,
+    )
+    assert v.status == "amber"
+    assert v.impact_eur_per_year is not None and v.impact_eur_per_year > 0
+    assert v.action is not None and "virement automatique" in v.action
+
+
+def test_drawdown_is_green_near_the_high():
+    v = verdicts.drawdown_verdict(
+        _series(("2026-01-01", 10_000, 0), ("2026-02-01", 9_700, 0)), DD_CFG
+    )
+    assert v.status == "green"
+    assert "3,00 %" in v.headline
+
+
+def test_drawdown_alerts_at_ten_percent_and_says_not_to_sell():
+    v = verdicts.drawdown_verdict(
+        _series(("2026-01-01", 10_000, 0), ("2026-02-01", 12_000, 0), ("2026-03-01", 10_800, 0)),
+        DD_CFG,
+    )
+    assert v.status == "amber"
+    assert "10,00 %" in v.headline
+    assert v.action is not None and "pas vendre" in v.action
+    assert v.details["steps_crossed"] == 1
+
+
+def test_drawdown_turns_red_past_twenty_percent():
+    v = verdicts.drawdown_verdict(
+        _series(("2026-01-01", 10_000, 0), ("2026-02-01", 12_000, 0), ("2026-03-01", 9_000, 0)),
+        DD_CFG,
+    )
+    assert v.status == "red"
+    assert v.details["steps_crossed"] == 2
+
+
+def test_compute_all_puts_the_drawdown_first_and_performance_last():
+    resp = verdicts.compute_all(_wealth2(accounts=[_acc("pea", 1000.0)]), _profile(), 1000.0)
+    assert [v.id for v in resp.verdicts] == [
+        "drawdown",
+        "savings_rate",
+        "goal",
+        "next_euro",
+        "risk_share",
+        "fees",
+        "performance",
+    ]

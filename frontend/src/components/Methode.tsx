@@ -2,8 +2,10 @@ import { Link } from "react-router-dom";
 
 import {
   useVerdicts,
+  type DrawdownVerdictDetails,
   type FeesVerdictDetails,
   type GoalVerdictDetails,
+  type PerformanceVerdictDetails,
   type NextEuroVerdictDetails,
   type RiskShareVerdictDetails,
   type SavingsRateVerdictDetails,
@@ -61,14 +63,131 @@ export function Methode() {
             <SavingsRateDetails details={v.details as SavingsRateVerdictDetails} />
           ) : v.id === "goal" ? (
             <GoalDetails details={v.details as GoalVerdictDetails} />
+          ) : v.id === "performance" ? (
+            <PerformanceDetails details={v.details as PerformanceVerdictDetails} />
+          ) : v.id === "drawdown" ? (
+            <DrawdownDetails details={v.details as DrawdownVerdictDetails} />
           ) : (
             <GenericDetails verdict={v} />
           )}
         </VerdictCard>
       ))}
       <p className="text-xs text-muted-foreground">
-        Prochains verdicts : où placer le prochain euro (enveloppes et impôt), part d'actions selon
-        ton profil, rééquilibrage, épargne nécessaire pour ton objectif.
+        Prochains verdicts : rééquilibrage entre actions et taux, crises longues rejouées (2000,
+        2008, 2011), effet du dollar sur tes fonds monde, fonds euros et PER pris en compte.
+      </p>
+    </div>
+  );
+}
+
+/* ── Ce que tes placements ont vraiment rapporté ───────────────────────── */
+
+function PerformanceDetails({ details: d }: { details: PerformanceVerdictDetails }) {
+  if (d.twr === undefined || d.twr === null) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Tangent enregistre chaque nuit la valeur de tes placements et les quantités qui la
+        composent. C'est la seule façon de distinguer ce que le marché a fait de ce que tu as versé,
+        parce que ta banque ne transmet aucune opération sur un PEA ou un compte-titres.
+        {d.min_days ? ` Il faut ${d.min_days} jours pour un premier chiffre.` : ""}
+      </p>
+    );
+  }
+  const signed = (v: number) => `${v >= 0 ? "+" : ""}${fmt.pct(v)}`;
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Figure
+          label="Tes fonds (TWR)"
+          value={signed(d.twr_annualized ?? d.twr)}
+          sub={
+            d.twr_annualized !== null && d.twr_annualized !== undefined
+              ? "par an, versements mis à part"
+              : "depuis le début, versements mis à part"
+          }
+        />
+        <Figure
+          label="Ton argent (TRI)"
+          value={d.irr !== null && d.irr !== undefined ? signed(d.irr) : "—"}
+          sub={
+            d.irr !== null && d.irr !== undefined
+              ? "par an, avec le calendrier de tes versements"
+              : "six mois d'historique nécessaires"
+          }
+        />
+        <Figure
+          label="Écart de comportement"
+          value={
+            d.behaviour_gap !== null && d.behaviour_gap !== undefined
+              ? signed(d.behaviour_gap)
+              : "—"
+          }
+          sub="ce que le moment de tes versements ajoute ou retire"
+        />
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Historique du {d.start ? new Date(d.start).toLocaleDateString("fr-FR") : "?"} au{" "}
+        {d.end ? new Date(d.end).toLocaleDateString("fr-FR") : "?"}, {d.days ?? 0} jours.{" "}
+        {fmt.eur0(d.first_value_eur ?? 0)} au départ, {fmt.eur0(d.net_flows_eur ?? 0)} versés
+        depuis, {fmt.eur0(d.last_value_eur ?? 0)} aujourd'hui. Le TWR juge la stratégie, le TRI juge
+        ton résultat ; c'est la mesure que les fonds publient et celle que ton relevé devrait
+        porter.
+      </p>
+    </div>
+  );
+}
+
+/* ── Baisse depuis le plus haut ────────────────────────────────────────── */
+
+function DrawdownDetails({ details: d }: { details: DrawdownVerdictDetails }) {
+  if (d.drawdown === undefined) return null;
+  const dd = Math.abs(d.drawdown);
+  const max = Math.abs(d.max_drawdown ?? 0);
+  const scale = Math.max(0.25, max * 1.2, dd * 1.2);
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Figure
+          label="Sous le plus haut"
+          value={`−${fmt.pct(dd)}`}
+          sub={
+            d.peak_day
+              ? `plus haut du ${new Date(d.peak_day).toLocaleDateString("fr-FR")}`
+              : "depuis le début"
+          }
+        />
+        <Figure
+          label="En euros"
+          value={`−${fmt.eur0(d.missing_eur ?? 0)}`}
+          sub="par rapport à ce plus haut"
+        />
+        <Figure
+          label="Pire baisse connue"
+          value={`−${fmt.pct(max)}`}
+          sub="depuis que Tangent suit ton compte"
+        />
+      </div>
+      <div>
+        <div className="relative h-3 overflow-hidden rounded-full bg-muted">
+          <div
+            className="absolute inset-y-0 left-0 bg-[hsl(var(--loss))]/25"
+            style={{ width: `${Math.min(100, (dd / scale) * 100)}%` }}
+          />
+          <div
+            className="absolute inset-y-0 w-0.5 bg-foreground/60"
+            style={{ left: `calc(${Math.min(100, ((d.alert_step ?? 0.1) / scale) * 100)}% - 1px)` }}
+          />
+        </div>
+        <div className="mt-1 flex justify-between text-xs text-muted-foreground">
+          <span>au plus haut</span>
+          <span>seuil d'alerte {fmt.pct(d.alert_step ?? 0.1)}</span>
+          <span>−{fmt.pct(scale)}</span>
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Un gérant doit prévenir son client le jour où le portefeuille passe 10 % sous son point de
+        départ, puis à chaque tranche de 10 % (MiFID II, article 62). Tangent applique la même
+        règle, mesurée hors versements. Une baisse n'est une perte qu'au moment où on vend.
       </p>
     </div>
   );
