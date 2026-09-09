@@ -255,17 +255,17 @@ async def apply_gap_fill_response(
     # Write to DB
     model = _TABLE_TO_MODEL[gf.table]
     now = datetime.now(UTC)
-    stmt = (
-        update(model)
-        .where(model.id == row_id)
-        .values(
-            **{
-                gf.value_column: coerced,
-                gf.source_column: "llm",
-                gf.resolved_at_column: now,
-            }
-        )
-    )
+    values: dict[str, Any] = {
+        gf.value_column: coerced,
+        gf.source_column: "llm",
+        gf.resolved_at_column: now,
+    }
+    # The prompt asks the LLM to cite the document it read. Keeping the citation
+    # is what makes the figure checkable later.
+    if gf.source_url_column:
+        cited = tool_input.get("source_url")
+        values[gf.source_url_column] = str(cited)[:500] if isinstance(cited, str) else None
+    stmt = update(model).where(model.id == row_id).values(**values)
     await session.execute(stmt)
     logger.info(
         "apply_gap_fill_response: wrote field=%s row=%s value=%s",

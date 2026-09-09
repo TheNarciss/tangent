@@ -32,6 +32,10 @@ class BrokerFees(BaseModel):
     # TER, never charged to the client. Kept as information, not a cost.
     rebates_pct: float = Field(ge=0, default=0.0)
     courtage_pct: float = Field(ge=0)
+    # True for the neutral entry used when we do not know the user's broker.
+    # Its zeros are an absence of information, not a free broker: consumers
+    # must say so rather than display a total that looks complete.
+    placeholder: bool = False
 
 
 class BrokerConfig(BaseModel):

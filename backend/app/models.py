@@ -326,6 +326,9 @@ class WealthPosition(BaseModel):
     ter: float | None = Field(
         default=None, description="Annual fund expense ratio as a fraction (0.0025 = 0.25 %)"
     )
+    ter_source_url: str | None = Field(
+        default=None, description="Document the TER was read from (KID, factsheet)"
+    )
 
     @property
     def cost_basis(self) -> float:
