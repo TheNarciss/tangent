@@ -39,6 +39,8 @@ class GappableField:
         value_column: the actual data column (e.g. "ter").
         source_column: the *_source tracking column (e.g. "ter_source").
         resolved_at_column: the *_resolved_at tracking column.
+        source_url_column: optional column storing the document the LLM cited.
+            When set, `source_url` from the tool call is persisted there.
         build_prompt: fn(orm_row) -> str, returns the user-prompt content
             describing the row's context (ticker, label, etc.).
         response_schema: Anthropic tool_use input_schema (dict).
@@ -58,6 +60,7 @@ class GappableField:
     tool_name: str
     validate_value: Callable[[Any], bool]
     coerce_value: Callable[[Any], Any] = _field(default=lambda v: v)
+    source_url_column: str | None = None
     requires_web_search: bool = False
     """If True, the LLM request includes the web_search tool. Costs ~$0.01
     extra per gap (web_search is not batch-discounted) but enables sourcing

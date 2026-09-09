@@ -499,10 +499,14 @@ function FeesDetails({ details: d }: { details: FeesVerdictDetails }) {
         />
         <Figure
           label="Frais du courtier"
-          value={fmt.eur0(d.broker_fees_eur ?? 0)}
-          sub={`${d.broker_name ?? "courtier"} : garde, frais par ligne, courtage sur ${fmt.eur(
-            d.monthly_contribution_eur ?? 0,
-          )}/mois`}
+          value={d.broker_known === false ? "—" : fmt.eur0(d.broker_fees_eur ?? 0)}
+          sub={
+            d.broker_known === false
+              ? "banque non renseignée : ses frais ne sont pas comptés"
+              : `${d.broker_name ?? "courtier"} : garde, frais par ligne, courtage sur ${fmt.eur(
+                  d.monthly_contribution_eur ?? 0,
+                )}/mois`
+          }
         />
         <Figure
           label="Référence"
@@ -531,6 +535,16 @@ function FeesDetails({ details: d }: { details: FeesVerdictDetails }) {
                   <div className="font-mono text-xs tabular text-muted-foreground">
                     {fmt.pct(l.ter)} par an
                   </div>
+                  {l.ter_source_url && (
+                    <a
+                      href={l.ter_source_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs text-muted-foreground underline"
+                    >
+                      source
+                    </a>
+                  )}
                 </>
               )}
             </div>

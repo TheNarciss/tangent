@@ -1066,6 +1066,8 @@ export interface FeesVerdictLine {
   account: string;
   value_eur: number;
   ter: number | null;
+  /** Document the TER was read from (KID, factsheet). */
+  ter_source_url: string | null;
   fund_fee_eur: number | null;
 }
 
@@ -1077,6 +1079,8 @@ export interface FeesVerdictDetails {
   fund_fees_eur?: number;
   broker_fees_eur?: number;
   broker_name?: string;
+  /** False when we do not know the user's broker: its fees are not counted. */
+  broker_known?: boolean;
   monthly_contribution_eur?: number;
   reference_pct?: number;
   reference_eur?: number;

@@ -97,6 +97,7 @@ FIELD_TER = register_field(
         value_column="ter",
         source_column="ter_source",
         resolved_at_column="ter_resolved_at",
+        source_url_column="ter_source_url",
         build_prompt=build_prompt_ter,
         response_schema=RESPONSE_SCHEMA_TER,
         tool_name="resolve_ter",

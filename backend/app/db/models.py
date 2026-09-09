@@ -334,6 +334,9 @@ class AccountHolding(Base):
     ter_source: Mapped[str | None] = mapped_column(String(16), default=None)
     """Source of the TER: 'api' | 'llm' | 'user' | None (legacy/unknown)."""
     ter_resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    ter_source_url: Mapped[str | None] = mapped_column(String(500), default=None)
+    """Document the TER was read from (KID, factsheet). The gap-filler is asked
+    to cite it; storing it is what makes the figure checkable a year later."""
     isin_source: Mapped[str | None] = mapped_column(String(16), default=None)
     """Source of the ISIN: 'api' | 'llm' | 'user' | None."""
     isin_resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)

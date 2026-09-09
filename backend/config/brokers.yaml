@@ -12,7 +12,10 @@
 # Si tu changes de banque, édite simplement `default_broker` ou passe
 # `?broker=fortuneo` à l'endpoint /projection.
 
-default_broker: bnp_start
+# Aucun frais par défaut. Appliquer ceux d'une banque au hasard à quelqu'un
+# dont on ne connaît pas le courtier, c'est afficher un coût inventé : mieux
+# vaut dire « frais du courtier inconnus » et ne compter que ceux des fonds.
+default_broker: unknown
 
 # Institution name (as returned by Powens) → broker_id
 # Used to autodetect a user's broker at first sync. Match is case-insensitive,
@@ -26,6 +29,14 @@ institution_to_broker:
   "Boursobank": boursorama
 
 brokers:
+  unknown:
+    name: "Courtier non renseigné"
+    fixed_per_line_eur: 0.0
+    custody_pct: 0.0
+    rebates_pct: 0.0
+    courtage_pct: 0.0
+    placeholder: true             # rien n'est connu : on n'invente pas, et l'app le dit
+
   bnp_start:
     name: "BNP Paribas — Offre Bourse Start"
     fixed_per_line_eur: 5.0       # 5 €/an par ligne en compte

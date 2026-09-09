@@ -183,6 +183,7 @@ def fees_verdict(
                     "account": acc.name,
                     "value_eur": p.current_value,
                     "ter": p.ter,
+                    "ter_source_url": p.ter_source_url,
                     "fund_fee_eur": p.current_value * p.ter if p.ter is not None else None,
                 }
             )
@@ -221,6 +222,7 @@ def fees_verdict(
         "fund_fees_eur": fund_fees,
         "broker_fees_eur": broker_eur,
         "broker_name": broker_fees.name,
+        "broker_known": not broker_fees.placeholder,
         "monthly_contribution_eur": monthly_contribution,
         "reference_pct": cfg.reference,
         "reference_eur": reference_eur,
@@ -249,14 +251,16 @@ def fees_verdict(
             details=details,
         )
 
-    at_least = "au moins " if missing else ""
+    # "au moins" as soon as something is missing: an unknown TER or an unknown
+    # broker both mean the real cost is above what we can show.
+    at_least = "au moins " if (missing or broker_fees.placeholder) else ""
     base = f"Tes placements te coûtent {at_least}{_pct(total_pct)} par an, soit {_eur(total)}"
-    complete = (
-        f" Renseigne le TER manquant sur {len(missing)} ligne{'s' if len(missing) > 1 else ''} "
-        "pour affiner."
-        if missing
-        else ""
-    )
+    to_complete: list[str] = []
+    if missing:
+        to_complete.append(f"le TER de {len(missing)} ligne{'s' if len(missing) > 1 else ''}")
+    if broker_fees.placeholder:
+        to_complete.append("ta banque (ses frais ne sont pas comptés)")
+    complete = f" Renseigne {' et '.join(to_complete)} pour affiner." if to_complete else ""
 
     if total_pct <= cfg.green_max:
         return Verdict(
