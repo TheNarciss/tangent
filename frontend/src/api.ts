@@ -47,6 +47,8 @@ export interface PortfolioMetrics {
   worst_year_label: string | null;
   /** Lines the stress tests replay with world-equity amplitude, though they are not. */
   replayed_as_world: string[];
+  /** Classes whose crisis figures are measured on their own daily index. */
+  measured_on_index: string[];
   assets: AssetMetrics[];
   correlation: Record<string, Record<string, number>>;
   /** Tickers with no long-term return assumption: their μ is historical only. */

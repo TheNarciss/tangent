@@ -49,6 +49,9 @@ class PortfolioMetrics(BaseModel):
     # harder, and no per-episode series exists for it. Named rather than
     # silently folded in (ADR-027).
     replayed_as_world: list[str] = Field(default_factory=list)
+    # Classes whose fall is measured on their own daily index rather than
+    # copied from the study — the loop in `finance/episodes.py`.
+    measured_on_index: list[str] = Field(default_factory=list)
     assets: list[AssetMetrics]
     correlation: dict[str, dict[str, float]]
     # Tickers without a forward-looking μ (not in cma.yaml): their expected

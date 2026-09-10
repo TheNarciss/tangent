@@ -132,6 +132,7 @@ def build(
         worst_year_class=worst_year,
         worst_year_label=worst_year_label,
         replayed_as_world=_replayed_as_world(classes, tickers),
+        measured_on_index=_measured_on_index(classes, tickers),
         assets=assets,
         correlation=analytics.correlation_matrix(returns),
         unmapped_tickers=unmapped,
@@ -203,6 +204,22 @@ def _replayed_as_world(
         replayed = scenarios.class_map.get(what.asset_class, scenarios.default_asset_class)
         if replayed == "equity_world" and what.asset_class != "equity_world":
             label = what.index_label or "classe non reconnue"
+            if label not in seen:
+                seen.append(label)
+    return seen
+
+
+def _measured_on_index(
+    classes: dict[str, classification.Classification],
+    tickers: list[str],
+) -> list[str]:
+    """The user's classes whose crisis figures are measured, not copied."""
+    measured = set(stress.measured_classes())
+    seen: list[str] = []
+    for ticker in tickers:
+        what = classes[ticker]
+        if what.asset_class in measured:
+            label = what.index_label or what.asset_class
             if label not in seen:
                 seen.append(label)
     return seen

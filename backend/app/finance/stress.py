@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 
 from ..errors import ConfigurationError
 from ..models import StressTestResult, Wealth
-from . import classification
+from . import classification, episodes
 
 logger = logging.getLogger(__name__)
 
@@ -35,15 +35,36 @@ _PATH = Path(__file__).resolve().parent.parent.parent / "config" / "stress_scena
 FALLBACK_CLASS = "cash"
 
 
+class Window(BaseModel):
+    """The episode's dates, machine-readable, next to the human ones."""
+
+    since: str = Field(alias="from")
+    until: str = Field(alias="to")
+
+    model_config = {"populate_by_name": True}
+
+
+class IndexSeries(BaseModel):
+    """Where to find a daily index for one asset class."""
+
+    provider: str
+    id: str
+    currency: str = "USD"
+
+
 class Scenario(BaseModel):
     id: str
     label: str
+    window: Window | None = None
     start: str
     end: str
     description: str
     returns: dict[str, float]
 
-    def ret(self, asset_class: str) -> float:
+    def ret(self, asset_class: str, measured: dict[str, float] | None = None) -> float:
+        """What the class did: measured on its own index when we could, declared otherwise."""
+        if measured and asset_class in measured:
+            return measured[asset_class]
         return self.returns.get(asset_class, 0.0)
 
     @property
@@ -59,6 +80,7 @@ class Scenario(BaseModel):
 
 
 class ScenariosConfig(BaseModel):
+    class_series: dict[str, IndexSeries] = Field(default_factory=dict)
     class_map: dict[str, str]
     default_asset_class: str
     envelope_classes: dict[str, str]
@@ -126,6 +148,41 @@ def exposure(wealth: Wealth, cfg: ScenariosConfig | None = None) -> dict[str, fl
     return by_class
 
 
+def measured_returns(scenario: Scenario, cfg: ScenariosConfig | None = None) -> dict[str, float]:
+    """Classes whose fall we could measure on their own index, for this episode.
+
+    The loop that replaces hand-copied figures: every class declaring a series
+    is tried, and the ones the series does not cover simply stay out. Adding a
+    class to `class_series` is enough — there is nothing to recompute by hand.
+    """
+    c = cfg or config()
+    if scenario.window is None:
+        return {}
+
+    out: dict[str, float] = {}
+    for asset_class, series in c.class_series.items():
+        fall = episodes.measure(
+            series.id,
+            series.provider,
+            series.currency,
+            (scenario.window.since, scenario.window.until),
+        )
+        if fall is not None:
+            out[asset_class] = fall
+    return out
+
+
+def measured_classes(cfg: ScenariosConfig | None = None) -> list[str]:
+    """Classes measured on a real index in at least one episode."""
+    c = cfg or config()
+    seen: list[str] = []
+    for scenario in c.scenarios:
+        for asset_class in measured_returns(scenario, c):
+            if asset_class not in seen:
+                seen.append(asset_class)
+    return seen
+
+
 def compute(wealth: Wealth) -> list[StressTestResult]:
     """Every scenario, worst loss first, in € and in % of the patrimony."""
     cfg = config()
@@ -136,7 +193,8 @@ def compute(wealth: Wealth) -> list[StressTestResult]:
 
     results: list[StressTestResult] = []
     for scenario in cfg.scenarios:
-        loss_eur = sum(amount * scenario.ret(cls) for cls, amount in by_class.items())
+        measured = measured_returns(scenario, cfg)
+        loss_eur = sum(amount * scenario.ret(cls, measured) for cls, amount in by_class.items())
         equity_eur = by_class.get("equity_world", 0.0)
         effect = scenario.currency_effect
         results.append(

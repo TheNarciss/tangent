@@ -161,6 +161,16 @@ function RiskDetail({
             compris, et le pourcentage porte sur <strong>tout ton patrimoine</strong>, pas seulement
             sur tes placements. Tes livrets ne bougent pas et ton fonds euros ne perd pas sa valeur,
             seul son taux futur baisse.
+            {metrics.measured_on_index.length > 0 && (
+              <>
+                {" "}
+                {metrics.measured_on_index.length === 1
+                  ? "Une de tes classes est mesurée"
+                  : `${metrics.measured_on_index.length} de tes classes sont mesurées`}{" "}
+                sur son propre indice quotidien, du plus haut au creux de chaque épisode —{" "}
+                <strong>{metrics.measured_on_index.join(", ")}</strong>.
+              </>
+            )}
             {metrics.replayed_as_world.length > 0 && (
               <>
                 {" "}
