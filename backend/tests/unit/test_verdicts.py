@@ -674,3 +674,33 @@ def test_no_lines_is_unknown_rather_than_green():
     v = verdicts.diversification_verdict(_wealth(balance_only=5_000.0), DIV)
 
     assert v.status == "unknown"
+
+
+# ── Références long terme : les sources qui ne servaient à rien ────────────
+
+
+def test_the_drawdown_verdict_carries_the_150_year_worst_year(monkeypatch):
+    """Shiller was probed and tested, and fed no screen at all."""
+    from app.finance import references
+
+    monkeypatch.setattr(references, "worst_year_since_1871", lambda: (-0.581, 1871, 2024))
+
+    v = verdicts.drawdown_verdict(
+        _series(("2026-01-01", 10_000, 0), ("2026-02-01", 8_800, 0)), DD_CFG
+    )
+
+    assert v.details["worst_year_ever"]["return"] == pytest.approx(-0.581)
+    assert v.details["worst_year_ever"]["from_year"] == 1871
+
+
+def test_an_unreachable_reference_is_simply_absent(monkeypatch):
+    """No fallback constant: a stale reference shown as a fact is worse than none."""
+    from app.finance import references
+
+    monkeypatch.setattr(references, "worst_year_since_1871", lambda: None)
+
+    v = verdicts.drawdown_verdict(
+        _series(("2026-01-01", 10_000, 0), ("2026-02-01", 8_800, 0)), DD_CFG
+    )
+
+    assert "worst_year_ever" not in v.details

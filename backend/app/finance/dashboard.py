@@ -131,6 +131,7 @@ def build(
         history_days=len(equity_curve.dropna()),
         worst_year_class=worst_year,
         worst_year_label=worst_year_label,
+        replayed_as_world=_replayed_as_world(classes, tickers),
         assets=assets,
         correlation=analytics.correlation_matrix(returns),
         unmapped_tickers=unmapped,
@@ -182,6 +183,29 @@ def _asset_metric(
         kind=what.kind,
         is_diversified=what.is_diversified,
     )
+
+
+def _replayed_as_world(
+    classes: dict[str, classification.Classification],
+    tickers: list[str],
+) -> list[str]:
+    """Lines whose class is replayed as world equities though it is not one.
+
+    A Nasdaq or a defence tracker falls harder than the world index; the study
+    has no series per region and per episode, so the stress tests understate
+    them. The screen says which lines, rather than letting the total look
+    complete.
+    """
+    scenarios = stress.config()
+    seen: list[str] = []
+    for ticker in tickers:
+        what = classes[ticker]
+        replayed = scenarios.class_map.get(what.asset_class, scenarios.default_asset_class)
+        if replayed == "equity_world" and what.asset_class != "equity_world":
+            label = what.index_label or "classe non reconnue"
+            if label not in seen:
+                seen.append(label)
+    return seen
 
 
 def _worst_year_of_dominant_class(

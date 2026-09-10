@@ -2,10 +2,17 @@
 
 ## [1.3.0](https://github.com/TheNarciss/tangent/compare/v1.2.0...v1.3.0) (2026-09-09)
 
+> Trois entrées ont été ajoutées à la main : le tag a été posé alors que
+> release-please n'avait pas pu régénérer sa note (l'API GraphQL de GitHub
+> échouait, cf. #130). Le code était bien dans la version, seul le texte
+> manquait.
+
 
 ### Features
 
 * **data:** ajoute Damodaran et Shiller pour les crises anciennes ([ce5256d](https://github.com/TheNarciss/tangent/commit/ce5256df760d075b440c69bc1de20b382e74e9db))
+* **classes:** les hypothèses suivent la classe d'actifs, plus le ticker ([aeb769d](https://github.com/TheNarciss/tangent/commit/aeb769d6e71709f1854b84ac3dde2c4659a011ea))
+* **macro:** le taux sans risque et l'inflation deviennent des valeurs observées ([396761e](https://github.com/TheNarciss/tangent/commit/396761eb1d33e99d46a75ed77433b5b122bddd47))
 * **data:** ajoute les fixings LBMA pour l'or et l'argent ([72a47ef](https://github.com/TheNarciss/tangent/commit/72a47effd07a2ffe02d758b7d052e98f38374679))
 * **data:** un service pour les sources de vérité externes ([b6d7030](https://github.com/TheNarciss/tangent/commit/b6d70306228cfc3b89edc8fe4d589b6e0c28cd32))
 * **data:** un service pour les sources de vérité externes ([aabc241](https://github.com/TheNarciss/tangent/commit/aabc2414eb64b73868082bb741b14095001021ab))
@@ -31,6 +38,7 @@
 
 ### Bug Fixes
 
+* **frais:** ne plus facturer les frais d'une banque au hasard ([e325ff8](https://github.com/TheNarciss/tangent/commit/e325ff8f77c7a946e73afa053e67f12e47b82fd7))
 * **diagnostic:** des règles qui tiennent pour un autre portefeuille que le mien ([5c736fa](https://github.com/TheNarciss/tangent/commit/5c736fad911fa6266dc523e092b25768b59edfd3))
 * **diagnostic:** des règles qui tiennent pour un autre portefeuille que le mien ([4dc3172](https://github.com/TheNarciss/tangent/commit/4dc31724265e15b7bc74394fdff001683b86dc40))
 * **retraite:** one sustainable withdrawal rate, 3.5 % from config instead of a 4 % copied twice ([d016b32](https://github.com/TheNarciss/tangent/commit/d016b32217102bbf6ced91ecc34a2c0c236bd4b3))

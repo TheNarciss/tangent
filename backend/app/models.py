@@ -44,6 +44,11 @@ class PortfolioMetrics(BaseModel):
     # and its label. None when no long history covers that class.
     worst_year_class: float | None = None
     worst_year_label: str | None = None
+    # Lines the stress tests replay with the amplitude of world equities
+    # although they are not world equities: a sector or regional fund falls
+    # harder, and no per-episode series exists for it. Named rather than
+    # silently folded in (ADR-027).
+    replayed_as_world: list[str] = Field(default_factory=list)
     assets: list[AssetMetrics]
     correlation: dict[str, dict[str, float]]
     # Tickers without a forward-looking μ (not in cma.yaml): their expected
