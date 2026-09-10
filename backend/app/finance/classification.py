@@ -20,7 +20,7 @@ figures for any portfolio but the first user's.
 
 import logging
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from pathlib import Path
 
@@ -36,6 +36,28 @@ _PATH = Path(__file__).resolve().parent.parent.parent / "config" / "asset_classe
 FUND = "fund"
 STOCK = "stock"
 UNKNOWN_KIND = "unknown"
+
+# OpenFIGI names the venue, Yahoo names the same line with a suffix. The table
+# is mechanical — no financial judgement — and it exists so that nobody has to
+# maintain a list of tickers by hand.
+#
+# Order is preference: a French holder's line is quoted in Paris more often
+# than anywhere else, and the home venue carries the longest history. London
+# is deliberately absent: it quotes in pence for some lines and in pounds for
+# others, and a hundredfold error is worse than no measurement.
+_VENUES: tuple[tuple[str, str, str], ...] = (
+    ("FP", ".PA", "EUR"),  # Euronext Paris
+    ("NA", ".AS", "EUR"),  # Euronext Amsterdam
+    ("GR", ".DE", "EUR"),  # Xetra
+    ("IM", ".MI", "EUR"),  # Borsa Italiana
+    ("SM", ".MC", "EUR"),  # BME Madrid
+    ("BB", ".BR", "EUR"),  # Euronext Brussels
+    ("PL", ".LS", "EUR"),  # Euronext Lisbon
+    ("UN", "", "USD"),  # NYSE
+    ("UQ", "", "USD"),  # Nasdaq
+    ("UW", "", "USD"),  # Nasdaq
+    ("US", "", "USD"),  # US composite
+)
 
 
 class Rule(BaseModel):
@@ -55,6 +77,14 @@ class AssetClassesConfig(BaseModel):
 
 
 @dataclass(frozen=True)
+class Quote:
+    """Where this exact line is quoted, so its own history can be fetched."""
+
+    ticker: str
+    currency: str
+
+
+@dataclass(frozen=True)
 class Classification:
     """What we know about one instrument, and where it came from."""
 
@@ -64,6 +94,7 @@ class Classification:
     source: str  # 'openfigi' | 'label' | 'none'
     official_name: str | None = None
     broad: bool = False
+    quote: Quote | None = None
 
     @property
     def is_known(self) -> bool:
@@ -116,9 +147,11 @@ def classify_many(instruments: list[tuple[str | None, str | None]]) -> list[Clas
     records = _reference_data([isin for _, isin in instruments if isin])
     out: list[Classification] = []
     for label, isin in instruments:
-        record = records.get((isin or "").strip().upper())
+        entries = records.get((isin or "").strip().upper(), [])
+        record = entries[0] if entries else None
         official = _official_name(record)
         kind = _kind(record)
+        quote = _quote(entries)
 
         # Try both names and keep whichever one we recognise. The official name
         # is usually the better one, but not always: Amundi's Nasdaq tracker is
@@ -128,7 +161,7 @@ def classify_many(instruments: list[tuple[str | None, str | None]]) -> list[Clas
                 continue
             found = _from_name(name, kind, source)
             if found.is_known:
-                out.append(found)
+                out.append(replace(found, quote=quote))
                 break
         else:
             fallback = official or label
@@ -141,6 +174,7 @@ def classify_many(instruments: list[tuple[str | None, str | None]]) -> list[Clas
                         kind,
                         "openfigi" if official else "label",
                         fallback,
+                        quote=quote,
                     )
                 )
             else:
@@ -161,8 +195,8 @@ def _from_name(name: str | None, kind: str, source: str) -> Classification:
     return Classification(cfg.unknown_class, None, kind, source, name)
 
 
-def _reference_data(isins: list[str]) -> dict[str, dict]:
-    """ISIN → best OpenFIGI record. Degrades to {} rather than breaking a page."""
+def _reference_data(isins: list[str]) -> dict[str, list[dict]]:
+    """ISIN → its OpenFIGI listings, best first. Degrades to {} rather than breaking a page."""
     if not isins:
         return {}
     try:
@@ -170,7 +204,23 @@ def _reference_data(isins: list[str]) -> dict[str, dict]:
     except DataSourceError:
         logger.warning("OpenFIGI indisponible, repli sur les libellés de la banque")
         return {}
-    return {isin: records[0] for isin, records in mapped.items() if records}
+    return {isin: records for isin, records in mapped.items() if records}
+
+
+def _quote(entries: list[dict]) -> Quote | None:
+    """The line's own Yahoo symbol, picked from the venues we can read.
+
+    None when the instrument only trades where we cannot state the currency
+    without guessing. The caller then measures the asset class instead.
+    """
+    for code, suffix, currency in _VENUES:
+        for entry in entries:
+            if entry.get("exchCode") != code:
+                continue
+            ticker = str(entry.get("ticker") or "").strip()
+            if ticker:
+                return Quote(f"{ticker}{suffix}", currency)
+    return None
 
 
 def _official_name(record: dict | None) -> str | None:

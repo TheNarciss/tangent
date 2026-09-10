@@ -198,11 +198,15 @@ def _replayed_as_world(
     complete.
     """
     scenarios = stress.config()
+    measured = set(stress.measured_classes())
     seen: list[str] = []
     for ticker in tickers:
         what = classes[ticker]
         replayed = scenarios.class_map.get(what.asset_class, scenarios.default_asset_class)
-        if replayed == "equity_world" and what.asset_class != "equity_world":
+        if replayed in measured or stress.measures_its_own_price(what.quote):
+            continue
+        borrowed = scenarios.fallback_class.get(replayed, replayed)
+        if borrowed == "equity_world" and what.asset_class != "equity_world":
             label = what.index_label or "classe non reconnue"
             if label not in seen:
                 seen.append(label)
@@ -218,7 +222,7 @@ def _measured_on_index(
     seen: list[str] = []
     for ticker in tickers:
         what = classes[ticker]
-        if what.asset_class in measured:
+        if what.asset_class in measured or stress.measures_its_own_price(what.quote):
             label = what.index_label or what.asset_class
             if label not in seen:
                 seen.append(label)
