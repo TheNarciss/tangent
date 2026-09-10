@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, XCircle } from "lucide-react";
 
 import {
   ApiError,
@@ -196,6 +196,9 @@ function RiskBlock({
     levels?.find((l) => metrics.volatility <= l.max_annual_volatility) ?? levels?.at(-1);
   const chosen = levels?.find((l) => l.level === profileLevel);
 
+  // The list arrives worst-first: the heaviest crisis stays visible, the rest folds.
+  const [worst, ...others] = stress;
+
   return (
     <Block title="Est-ce que je prends trop de risque ?">
       {behaves && (
@@ -220,39 +223,19 @@ function RiskBlock({
         </p>
       )}
 
+      {/* Les deux repères restent visibles ; les dix crises se déplient. */}
       <ul className="mt-3 space-y-2 text-sm">
-        {stress.map((s) => {
-          const loss = s.loss_eur;
-          const fx = s.currency_effect_eur;
-          return (
-            <li key={s.id} className="rounded-md border px-3 py-2">
-              <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-                <span>{s.label}</span>
-                <span
-                  className={cn(
-                    "font-mono tabular",
-                    loss < 0 ? "text-[hsl(var(--loss))]" : "text-[hsl(var(--gain))]",
-                  )}
-                >
-                  {fmt.eur0(Math.abs(loss))}{" "}
-                  <span className="text-xs text-muted-foreground">
-                    ({fmt.signedPct(s.pnl_pct)})
-                  </span>
-                </span>
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {s.start} → {s.end} · {s.description}
-              </div>
-              {fx !== null && Math.abs(fx) >= 1 && (
-                <div className="text-xs text-muted-foreground">
-                  Dont le dollar : {fx > 0 ? "il t'a fait gagner" : "il t'a coûté"}{" "}
-                  {fmt.eur0(Math.abs(fx))}, soit {fmt.signedPct(s.currency_effect_pct ?? 0)} sur tes
-                  fonds monde.
-                </div>
-              )}
-            </li>
-          );
-        })}
+        {worst && (
+          <li className="rounded-md border px-3 py-2">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+              <span>Pire crise rejouée : {worst.label}</span>
+              <Loss eur={worst.loss_eur} pct={worst.pnl_pct} />
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {worst.start} → {worst.end}
+            </div>
+          </li>
+        )}
         {metrics.worst_year_class !== null && (
           <li className="rounded-md border px-3 py-2">
             <div className="flex flex-wrap items-baseline justify-between gap-x-3">
@@ -282,15 +265,69 @@ function RiskBlock({
           </div>
         </li>
       </ul>
-      <p className="mt-2 text-xs text-muted-foreground">
-        Les crises sont rejouées sur les classes d'actifs, pas sur les cours de tes lignes : aucun
-        ETF français n'a d'historique avant 2009. Chaque perte est en euros, change compris, et le
-        pourcentage porte sur <strong>tout ton patrimoine</strong>, pas seulement sur tes placements
-        — d'où un pourcentage plus petit que si on le rapportait aux seules lignes ci-dessus. Tes
-        livrets ne bougent pas et ton fonds euros ne perd pas sa valeur, seul son taux futur baisse.
-        Un fonds sectoriel est rejoué avec l'amplitude des actions monde, ce qui le sous-estime.
-      </p>
+
+      {others.length > 0 && (
+        <details className="group mt-2 rounded-md border">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-sm">
+            <span>
+              Les {stress.length} crises rejouées, une par une
+              <span className="ml-2 text-xs text-muted-foreground">
+                de {fmt.eur0(Math.abs(worst?.loss_eur ?? 0))} à{" "}
+                {fmt.eur0(Math.abs(others[others.length - 1].loss_eur))}
+              </span>
+            </span>
+            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+          </summary>
+
+          <ul className="space-y-2 border-t p-3 text-sm">
+            {stress.map((crisis) => {
+              const fx = crisis.currency_effect_eur;
+              return (
+                <li key={crisis.id} className="rounded-md border px-3 py-2">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                    <span>{crisis.label}</span>
+                    <Loss eur={crisis.loss_eur} pct={crisis.pnl_pct} />
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {crisis.start} → {crisis.end} · {crisis.description}
+                  </div>
+                  {fx !== null && Math.abs(fx) >= 1 && (
+                    <div className="text-xs text-muted-foreground">
+                      Dont le dollar : {fx > 0 ? "il t'a fait gagner" : "il t'a coûté"}{" "}
+                      {fmt.eur0(Math.abs(fx))}, soit{" "}
+                      {fmt.signedPct(crisis.currency_effect_pct ?? 0)} sur tes fonds monde.
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+
+          <p className="border-t px-3 py-2 text-xs text-muted-foreground">
+            Les crises sont rejouées sur les classes d'actifs, pas sur les cours de tes lignes :
+            aucun ETF français n'a d'historique avant 2009. Chaque perte est en euros, change
+            compris, et le pourcentage porte sur <strong>tout ton patrimoine</strong>, pas seulement
+            sur tes placements. Tes livrets ne bougent pas et ton fonds euros ne perd pas sa valeur,
+            seul son taux futur baisse. Un fonds sectoriel est rejoué avec l'amplitude des actions
+            monde, ce qui le sous-estime.
+          </p>
+        </details>
+      )}
     </Block>
+  );
+}
+
+function Loss({ eur, pct }: { eur: number; pct: number }) {
+  return (
+    <span
+      className={cn(
+        "font-mono tabular",
+        eur < 0 ? "text-[hsl(var(--loss))]" : "text-[hsl(var(--gain))]",
+      )}
+    >
+      {fmt.eur0(Math.abs(eur))}{" "}
+      <span className="text-xs text-muted-foreground">({fmt.signedPct(pct)})</span>
+    </span>
   );
 }
 
