@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.4.0](https://github.com/TheNarciss/tangent/compare/v1.3.0...v1.4.0) (2026-09-10)
+
+
+### Features
+
+* **placements:** replier les crises rejouées derrière un déroulant ([3fb0d71](https://github.com/TheNarciss/tangent/commit/3fb0d71b30f6244125dbefd8a0e9fc8f5c0520d0))
+* **probe:** sonder les séries d'indices quotidiennes de Yahoo ([c6bc1e7](https://github.com/TheNarciss/tangent/commit/c6bc1e722659f17b3ebf43bbdfa2ed5733434318))
+* **probe:** sonder les séries d'indices quotidiennes de Yahoo ([785e86e](https://github.com/TheNarciss/tangent/commit/785e86edbb1d0389ba5fc6f6ac7ccb0f8efb875f))
+* **references:** donner un métier aux sources qui n'en avaient pas ([57efb28](https://github.com/TheNarciss/tangent/commit/57efb28176c95d507d9ffe048304ce5fc13a331e))
+* **references:** donner un métier aux sources qui n'en avaient pas ([5b5431d](https://github.com/TheNarciss/tangent/commit/5b5431d626ac9f32f61b9eb54a8bd997c55269b2))
+* **stress:** mesurer les crises sur un indice au lieu de recopier des chiffres ([#135](https://github.com/TheNarciss/tangent/issues/135)) ([7a0af3b](https://github.com/TheNarciss/tangent/commit/7a0af3be7f089270042ed076c039621adf969a30))
+
+
+### Bug Fixes
+
+* **classes:** reconnaître les fonds tels que les banques les nomment ([8ea8587](https://github.com/TheNarciss/tangent/commit/8ea8587461ce3aef169174a211e730d03124705a))
+* **classes:** reconnaître les fonds tels que les banques les nomment ([cb2a6c6](https://github.com/TheNarciss/tangent/commit/cb2a6c68be43512c6812e984b99574dc25275936))
+
 ## [1.3.0](https://github.com/TheNarciss/tangent/compare/v1.2.0...v1.3.0) (2026-09-09)
 
 > Trois entrées ont été ajoutées à la main : le tag a été posé alors que
