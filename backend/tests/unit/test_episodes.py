@@ -13,25 +13,36 @@ LEVELS = pd.Series(
 )
 
 
-def test_the_fall_is_measured_peak_to_trough_inside_the_window(monkeypatch):
-    """Not first-to-last: a crisis is judged on its deepest point."""
+def test_the_move_is_measured_from_one_end_of_the_window_to_the_other(monkeypatch):
+    """Not each class's own worst day: they do not bottom together (ADR-029)."""
     monkeypatch.setattr(fred, "series", lambda *a, **k: LEVELS)
     monkeypatch.setattr(ecb, "named", lambda *a, **k: pd.Series([1.0] * 5, index=LEVELS.index))
 
-    fall = episodes.measure("X", "fred", "USD", ("2000-08-01", "2003-03-31"))
+    move = episodes.measure("X", "fred", "USD", ("2000-08-01", "2003-03-31"))
 
-    assert fall == pytest.approx(-0.50)  # 100 → 50, and not 90 → 80
+    assert move == pytest.approx(80.0 / 90.0 - 1.0)  # 90 → 80, and not the 100 → 50 dip
 
 
-def test_the_currency_move_is_applied_at_the_two_days_it_picked(monkeypatch):
-    """A euro that buys more dollars at the trough softens the fall."""
+def test_a_class_that_dips_and_recovers_is_not_reported_as_a_loss(monkeypatch):
+    """Gold fell 18 % inside the 2008 window and still ended it up 32 %."""
+    gold = pd.Series(
+        [100.0, 82.0, 132.0],
+        index=pd.to_datetime(["2007-10-01", "2008-10-01", "2009-03-31"]),
+    )
+    monkeypatch.setattr(fred, "series", lambda *a, **k: gold)
+
+    assert episodes.measure("X", "fred", "EUR", ("2007-10-01", "2009-03-31")) == pytest.approx(0.32)
+
+
+def test_the_currency_move_is_applied_at_the_two_ends_of_the_window(monkeypatch):
+    """A euro that buys more dollars at the end softens a fall."""
     monkeypatch.setattr(fred, "series", lambda *a, **k: LEVELS)
-    rates = pd.Series([1.0, 1.0, 1.0, 1.25, 1.25], index=LEVELS.index)
+    rates = pd.Series([1.0, 1.0, 1.0, 1.0, 1.25], index=LEVELS.index)
     monkeypatch.setattr(ecb, "named", lambda *a, **k: rates)
 
-    fall = episodes.measure("X", "fred", "USD", ("2000-08-01", "2003-03-31"))
+    move = episodes.measure("X", "fred", "USD", ("2000-08-01", "2003-03-31"))
 
-    assert fall == pytest.approx(0.5 * (1.0 / 1.25) - 1.0)
+    assert move == pytest.approx((80.0 / 90.0) * (1.0 / 1.25) - 1.0)
 
 
 def test_a_series_that_does_not_reach_the_episode_measures_nothing(monkeypatch):
@@ -49,6 +60,15 @@ def test_an_episode_before_the_euro_stays_in_its_own_currency(monkeypatch):
 
 def test_an_unknown_provider_measures_nothing():
     assert episodes.measure("X", "bloomberg", "USD", ("2000-01-01", "2000-12-31")) is None
+
+
+def test_every_measured_class_also_has_a_declared_fallback():
+    """A source that does not answer must never blank out a class in an episode."""
+    cfg = stress.config()
+
+    for scenario in cfg.scenarios:
+        for asset_class in cfg.class_series:
+            assert asset_class in scenario.returns, f"{scenario.id} n'a pas de repli {asset_class}"
 
 
 # ── La boucle ─────────────────────────────────────────────────────────────

@@ -30,11 +30,18 @@ Une boucle remplace la recopie.
 machine pour chaque épisode, et un registre `class_series` qui dit où trouver
 un indice quotidien pour une classe.
 
-Pour chaque classe déclarée et chaque épisode, `finance/episodes.py` mesure la
-**baisse pic-à-creux à l'intérieur de la fenêtre**, puis la convertit en euros
-au cours BCE **des deux jours qu'il a retenus**. C'est exactement la méthode
-derrière les chiffres de l'étude, donc les deux se comparent dans le même
-tableau.
+Pour chaque classe déclarée et chaque épisode, `finance/episodes.py` mesure le
+mouvement **d'un bout à l'autre de la fenêtre**, puis le convertit en euros au
+cours BCE de ces deux jours-là.
+
+Pourquoi d'un bout à l'autre et non au pire moment de chaque classe : un stress
+test demande ce qu'un patrimoine a fait sur une période. Les classes ne touchent
+pas le fond le même jour — l'or a eu son pire moment en octobre 2008, les
+actions en mars 2009 — et additionner les pires moments décrirait une journée
+qui n'a jamais existé. La première version de ce module mesurait pic-à-creux :
+l'or en ressortait à −18 % sur 2008, alors qu'un détenteur d'or a terminé
+l'épisode à +32 %. C'est le passage de l'or dans la boucle qui a révélé
+l'erreur.
 
 Tout le reste retombe sur la valeur déclarée : une série qui ne remonte pas à
 l'épisode, un fournisseur qui ne répond pas, une classe que personne n'a
@@ -71,13 +78,19 @@ nettement** :
 
 | Épisode | Avant (amplitude monde) | Après (NASDAQ 100 réel) |
 |---|---|---|
-| Bulle internet 2000-03 | −52,5 % | **−82,2 %** |
-| Inflation 2022 | −14,2 % | **−24,3 %** |
-| Q4 2018 | −12,7 % | **−21,5 %** |
-| COVID 2020 | −20,4 % | **−27,4 %** |
-| Crise 2008 | −48,2 % | −46,7 % |
+| Bulle internet 2000-03 | −52,5 % | **−75,1 %** |
+| COVID 2020 | −20,4 % | **−27,8 %** |
+| Inflation 2022 | −14,2 % | **−20,8 %** |
+| Q4 2018 | −12,7 % | −16,1 % |
+| Crise 2008 | −48,2 % | −37,5 % |
+| Dette euro 2011 | −15,3 % | −4,4 % |
 
-Ce ne sont pas des hypothèses revues : ce sont les chiffres qui manquaient.
+Ce ne sont pas des hypothèses revues : ce sont les chiffres qui manquaient. Ils
+ne vont pas tous dans le même sens — sur 2008 et 2011, le Nasdaq a mieux résisté
+que les actions monde vues d'un investisseur en euros.
+
+L'or ne bouge pas : ses chiffres étaient déjà mesurés d'un bout à l'autre, et la
+boucle les reproduit à la décimale. C'est le contrôle qui valide le module.
 
 ## Alternatives considérées
 
@@ -93,5 +106,8 @@ C'est ce qu'on faisait, et c'est ce qui a produit l'écart de trente points.
 
 ## Notes
 
-- Source : `NASDAQ100` sur FRED, quotidien depuis 1986-01-02.
+- Sources : `NASDAQ100` sur FRED (quotidien depuis 1986-01-02), fixings LBMA
+  pour l'or (quotidien, en euros depuis 1999).
+- Limite assumée : une classe peut avoir eu, à l'intérieur de la fenêtre, un
+  moment bien pire que ce que dit son chiffre de bout en bout.
 - Voir ADR-024 (sources), ADR-027 (les hypothèses suivent la classe).
