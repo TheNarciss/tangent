@@ -112,6 +112,31 @@ def _yahoo() -> str:
     return f"CW8.PA {len(prices)} séances, dernier {prices.iloc[-1, 0]:.2f}"
 
 
+# Daily index series would let the stress tests replay a Nasdaq or a Europe
+# fund on the exact dates of each episode, instead of lending it the amplitude
+# of world equities. What matters is how far back each one goes: an index that
+# starts in 2012 cannot replay 2000-03.
+YAHOO_INDICES = {
+    "^NDX": "Nasdaq-100",
+    "^GSPC": "S&P 500",
+    "^STOXX": "STOXX Europe 600",
+    "^N225": "Nikkei 225",
+    "EEM": "Émergents (ETF)",
+    "URTH": "Monde (ETF)",
+}
+
+
+def _yahoo_index(ticker: str) -> Callable[[], str]:
+    def run() -> str:
+        from ..finance import market
+
+        prices = market.fetch_prices([ticker], period="max").iloc[:, 0].dropna()
+        first, last = prices.index[0].date(), prices.index[-1].date()
+        return f"{first} → {last} ({len(prices)} séances), dernier {prices.iloc[-1]:.0f}"
+
+    return run
+
+
 PROBES: tuple[Probe, ...] = (
     Probe("fred", "OAT 10 ans France", _fred("oat_10y", " %")),
     Probe("fred", "EUR/USD", _fred("eur_usd", "")),
@@ -125,6 +150,7 @@ PROBES: tuple[Probe, ...] = (
     *(Probe("lbma", metal, _metal(metal)) for metal in lbma.metals()),
     Probe("openfigi", "ISIN → ticker", _openfigi),
     Probe("yahoo", "Cours quotidiens", _yahoo),
+    *(Probe("yahoo", label, _yahoo_index(t)) for t, label in YAHOO_INDICES.items()),
 )
 
 
