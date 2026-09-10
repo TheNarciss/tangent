@@ -3,10 +3,21 @@ name: Release Please
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
   pull-requests: write
+
+# GitHub ne déclenche aucun workflow sur une branche poussée avec le jeton
+# automatique : c'est sa protection contre les boucles infinies. La PR de
+# release naissait donc sans la moindre vérification, et la protection de
+# branche attendait des checks qui ne viendraient jamais — il fallait la
+# merger à la main, en contournant la règle.
+#
+# Un jeton nominatif (secret RELEASE_PLEASE_TOKEN) lève ce blocage : la PR de
+# release passe la CI comme les autres. Tant que le secret n'existe pas, on
+# retombe sur le jeton automatique et rien ne change.
 
 # Une exécution à la fois : plusieurs merges rapprochés lançaient des runs qui
 # écrivaient tous sur la même branche de release. On les met à la queue leu leu
@@ -32,6 +43,7 @@ jobs:
         continue-on-error: true
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
           release-type: simple
           target-branch: main
           config-file: .release-please-config.json
@@ -45,6 +57,7 @@ jobs:
         continue-on-error: true
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
           release-type: simple
           target-branch: main
           config-file: .release-please-config.json
@@ -57,6 +70,7 @@ jobs:
         if: steps.attempt1.outcome == 'failure' && steps.attempt2.outcome == 'failure'
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
           release-type: simple
           target-branch: main
           config-file: .release-please-config.json
