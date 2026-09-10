@@ -11,9 +11,20 @@
 # vu d'un investisseur en dollars ; l'écart entre les deux est ce que la devise
 # a coûté ou rapporté.
 #
-# L'or vient des fixings LBMA (ADR-024), composés sur la fenêtre de chaque
-# épisode, en euros à partir de 1999 et en dollars avant — la monnaie n'existait
-# pas. C'est la seule classe dont le chiffre est calculé et non recopié.
+# Deux classes ont leurs chiffres CALCULÉS et non recopiés de l'étude :
+#
+#   `gold`           — fixings LBMA (ADR-024), composés sur la fenêtre.
+#   `equity_us_tech` — indice NASDAQ 100 quotidien, servi par FRED depuis 1986,
+#                      mesuré pic-à-creux À L'INTÉRIEUR de la fenêtre, donc
+#                      exactement comme les chiffres de l'étude, puis converti
+#                      en euros au cours BCE des deux jours retenus.
+#
+# Les deux sont en euros à partir de 1999 et en dollars avant : la monnaie
+# n'existait pas.
+#
+# Pourquoi le Nasdaq et pas l'Europe ni le Japon : FRED ne sert ces régions
+# qu'en mensuel (séries OECD), et une fenêtre en fin de mois ne se compare pas
+# à un pic-à-creux. Un indice quotidien, ou rien.
 #
 # Source : docs/ETUDE_METHODE_FINANCIERE_2026-09.md §7.6 (MSCI World EUR et USD,
 # Bloomberg Euro Aggregate, Fama-French développés raccordés en euro synthétique
@@ -35,7 +46,7 @@
 class_map:
   equity_world: equity_world
   equity_us: equity_world
-  equity_us_tech: equity_world
+  equity_us_tech: equity_us_tech   # rejoué sur le vrai NASDAQ 100, pas sur le monde
   equity_europe: equity_world
   equity_japan: equity_world
   equity_emerging: equity_world
@@ -77,75 +88,104 @@ account_classes:
   cto: equity_world
   pea: equity_world
 
+# Séries d'indices par classe. La boucle regarde, pour chaque classe présente
+# dans le portefeuille et pour chaque épisode, si une série quotidienne couvre
+# la fenêtre. Si oui, le rendement est CALCULÉ pic-à-creux et converti en euros
+# au cours BCE des deux jours retenus — exactement la méthode des chiffres de
+# l'étude. Sinon on retombe sur la valeur déclarée dans `returns`, et l'app le
+# dit.
+#
+# Ajouter une classe ici suffit : rien à coder, rien à recalculer à la main.
+#
+# `fred` sert des séries quotidiennes sans clé et sans bridage pour les indices
+# américains. L'Europe et le Japon n'y existent qu'en mensuel (séries OECD), et
+# une fenêtre en fin de mois ne se compare pas à un pic-à-creux : tant qu'on n'a
+# pas de série quotidienne pour eux, ces classes restent déclarées.
+class_series:
+  equity_us_tech:
+    provider: fred
+    id: NASDAQ100        # NASDAQ 100, quotidien depuis 1986
+    currency: USD
+
 scenarios:
   - id: gulf_1990
     label: "Guerre du Golfe et krach japonais (1990)"
+    window: { from: "1990-07-01", to: "1990-09-30" }
     start: "juillet 1990"
     end: "septembre 1990"
     description: "Le Japon perd la moitié de sa valeur sur 1990-92"
-    returns: { equity_world: -0.235, equity_world_usd: -0.203, bonds_euro: 0.0, fonds_euros: 0.0, cash: 0.0, gold: 0.143 }   # or : en dollars : l'euro n'existait pas encore
+    returns: { equity_world: -0.235, equity_world_usd: -0.203, bonds_euro: 0.0, fonds_euros: 0.0, cash: 0.0, gold: 0.143, equity_us_tech: -0.292 }   # or : en dollars : l'euro n'existait pas encore
 
   - id: ltcm_1998
     label: "Faillite de LTCM (1998)"
+    window: { from: "1998-07-01", to: "1998-09-30" }
     start: "juillet 1998"
     end: "septembre 1998"
     description: "Chute rapide, remontée tout aussi rapide"
-    returns: { equity_world: -0.181, equity_world_usd: -0.144, bonds_euro: 0.0, fonds_euros: 0.0, cash: 0.0, gold: -0.010 }   # or : en dollars : l'euro n'existait pas encore
+    returns: { equity_world: -0.181, equity_world_usd: -0.144, bonds_euro: 0.0, fonds_euros: 0.0, cash: 0.0, gold: -0.010, equity_us_tech: -0.222 }   # or : en dollars : l'euro n'existait pas encore
 
   - id: dotcom_2000
     label: "Éclatement de la bulle internet (2000-2003)"
+    window: { from: "2000-08-01", to: "2003-03-31" }
     start: "août 2000"
     end: "mars 2003"
     description: "Trente et un mois de glissade, la pire baisse des quarante dernières années pour un Européen"
-    returns: { equity_world: -0.525, equity_world_usd: -0.446, bonds_euro: 0.16, fonds_euros: 0.12, cash: 0.08, gold: 0.027 }
+    returns: { equity_world: -0.525, equity_world_usd: -0.446, bonds_euro: 0.16, fonds_euros: 0.12, cash: 0.08, gold: 0.027, equity_us_tech: -0.822 }
 
   - id: gfc_2008
     label: "Crise financière (2007-2009)"
+    window: { from: "2007-10-01", to: "2009-03-31" }
     start: "octobre 2007"
     end: "mars 2009"
     description: "Les obligations et le dollar ont amorti le choc"
-    returns: { equity_world: -0.482, equity_world_usd: -0.536, bonds_euro: 0.06, fonds_euros: 0.06, cash: 0.05, gold: 0.321 }
+    returns: { equity_world: -0.482, equity_world_usd: -0.536, bonds_euro: 0.06, fonds_euros: 0.06, cash: 0.05, gold: 0.321, equity_us_tech: -0.467 }
 
   - id: euro_2011
     label: "Crise de la dette en zone euro (2011)"
+    window: { from: "2011-04-01", to: "2011-09-30" }
     start: "avril 2011"
     end: "septembre 2011"
     description: "Risque souverain domestique : l'Italie et l'Espagne perdent 10 à 15 %"
-    returns: { equity_world: -0.153, equity_world_usd: -0.204, bonds_euro: 0.03, fonds_euros: 0.02, cash: 0.01, gold: 0.197 }
+    returns: { equity_world: -0.153, equity_world_usd: -0.204, bonds_euro: 0.03, fonds_euros: 0.02, cash: 0.01, gold: 0.197, equity_us_tech: -0.161 }
 
   - id: china_2015
     label: "Chine et pétrole (2015-2016)"
+    window: { from: "2015-04-01", to: "2016-02-29" }
     start: "avril 2015"
     end: "février 2016"
     description: "Deux corrections de 10 % en six mois"
-    returns: { equity_world: -0.121, equity_world_usd: -0.125, bonds_euro: 0.0, fonds_euros: 0.01, cash: 0.0, gold: 0.019 }
+    returns: { equity_world: -0.121, equity_world_usd: -0.125, bonds_euro: 0.0, fonds_euros: 0.01, cash: 0.0, gold: 0.019, equity_us_tech: -0.183 }
 
   - id: q4_2018
     label: "Quatrième trimestre 2018"
+    window: { from: "2018-09-01", to: "2018-12-31" }
     start: "septembre 2018"
     end: "décembre 2018"
     description: "Resserrement monétaire et guerre commerciale"
-    returns: { equity_world: -0.127, equity_world_usd: -0.141, bonds_euro: 0.004, fonds_euros: 0.005, cash: 0.0, gold: 0.080 }
+    returns: { equity_world: -0.127, equity_world_usd: -0.141, bonds_euro: 0.004, fonds_euros: 0.005, cash: 0.0, gold: 0.080, equity_us_tech: -0.215 }
 
   - id: covid_2020
     label: "Krach du COVID (février-mars 2020)"
+    window: { from: "2020-02-19", to: "2020-03-23" }
     start: "19 février 2020"
     end: "23 mars 2020"
     # Le chiffre USD publié est quotidien (−34 %), l'euro est en fin de mois :
     # les deux ne sont pas comparables, donc pas d'effet devise affiché ici.
     description: "La baisse de 30 % la plus rapide de l'histoire"
-    returns: { equity_world: -0.204, bonds_euro: -0.05, fonds_euros: 0.0, cash: 0.0, gold: -0.051 }
+    returns: { equity_world: -0.204, bonds_euro: -0.05, fonds_euros: 0.0, cash: 0.0, gold: -0.051, equity_us_tech: -0.274 }
 
   - id: inflation_2022
     label: "Inflation et remontée des taux (2022)"
+    window: { from: "2022-01-01", to: "2022-10-31" }
     start: "janvier 2022"
     end: "octobre 2022"
     description: "Les deux jambes du 60/40 tombent ensemble, le seul régime d'inflation de la série"
-    returns: { equity_world: -0.142, equity_world_usd: -0.255, bonds_euro: -0.17, fonds_euros: 0.0, cash: 0.0, gold: 0.032 }
+    returns: { equity_world: -0.142, equity_world_usd: -0.255, bonds_euro: -0.17, fonds_euros: 0.0, cash: 0.0, gold: 0.032, equity_us_tech: -0.243 }
 
   - id: tariffs_2025
     label: "Droits de douane (2025)"
+    window: { from: "2025-02-01", to: "2025-04-30" }
     start: "février 2025"
     end: "avril 2025"
     description: "C'est la devise, pas les actions, qui a fait la perte en euros"
-    returns: { equity_world: -0.118, equity_world_usd: -0.05, bonds_euro: 0.0, fonds_euros: 0.0, cash: 0.0, gold: 0.054 }
+    returns: { equity_world: -0.118, equity_world_usd: -0.05, bonds_euro: 0.0, fonds_euros: 0.0, cash: 0.0, gold: 0.054, equity_us_tech: -0.266 }
