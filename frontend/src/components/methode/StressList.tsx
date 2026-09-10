@@ -160,8 +160,19 @@ function RiskDetail({
             aucun ETF français n'a d'historique avant 2009. Chaque perte est en euros, change
             compris, et le pourcentage porte sur <strong>tout ton patrimoine</strong>, pas seulement
             sur tes placements. Tes livrets ne bougent pas et ton fonds euros ne perd pas sa valeur,
-            seul son taux futur baisse. Un fonds sectoriel est rejoué avec l'amplitude des actions
-            monde, ce qui le sous-estime.
+            seul son taux futur baisse.
+            {metrics.replayed_as_world.length > 0 && (
+              <>
+                {" "}
+                {metrics.replayed_as_world.length === 1
+                  ? "Une de tes classes est rejouée"
+                  : `${metrics.replayed_as_world.length} de tes classes sont rejouées`}{" "}
+                avec l'amplitude des actions monde, faute de série par épisode —{" "}
+                <strong>{metrics.replayed_as_world.join(", ")}</strong>. Un fonds sectoriel ou
+                régional tombe plus fort que l'indice mondial : ces lignes sont donc sous-estimées
+                ici.
+              </>
+            )}
           </p>
         </details>
       )}

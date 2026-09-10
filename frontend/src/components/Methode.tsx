@@ -232,6 +232,15 @@ function DrawdownDetails({ details: d }: { details: DrawdownVerdictDetails }) {
           sub="depuis que Tangent suit ton compte"
         />
       </div>
+      {d.worst_year_ever && (
+        <p className="text-xs text-muted-foreground">
+          Pour situer : sur {d.worst_year_ever.to_year - d.worst_year_ever.from_year} ans d'actions
+          américaines ({d.worst_year_ever.from_year}-{d.worst_year_ever.to_year}), la pire année a
+          coûté{" "}
+          <strong className="text-foreground">{fmt.pct(Math.abs(d.worst_year_ever.return))}</strong>{" "}
+          en pouvoir d'achat. C'est le pire connu, pas une prévision.
+        </p>
+      )}
       <div>
         <div className="relative h-3 overflow-hidden rounded-full bg-muted">
           <div
@@ -477,6 +486,19 @@ function NextEuroDetails({ details: d }: { details: NextEuroVerdictDetails }) {
 
 /* ── Part d'actions ────────────────────────────────────────────────────── */
 
+function LongRun({ d }: { d: RiskShareVerdictDetails }) {
+  if (!d.long_run) return null;
+  return (
+    <p className="text-xs text-muted-foreground">
+      Pourquoi accepter ces variations : de {d.long_run.from_year} à {d.long_run.to_year}, les
+      actions ont rapporté{" "}
+      <strong className="text-foreground">{fmt.pct(d.long_run.equities)} par an</strong> contre{" "}
+      {fmt.pct(d.long_run.bonds)} pour les obligations d'État. C'est ce qui s'est passé, pas ce qui
+      se passera.
+    </p>
+  );
+}
+
 function RiskShareDetails({ details: d }: { details: RiskShareVerdictDetails }) {
   if (d.pocket_eur === undefined || d.actual_share === undefined) return null;
   const actual = d.actual_share;
@@ -543,6 +565,7 @@ function RiskShareDetails({ details: d }: { details: RiskShareVerdictDetails }) 
         actions ; fonds euros, PER ou assurance vie sans détail et PEL comptent comme produits de
         taux.
       </p>
+      <LongRun d={d} />
     </div>
   );
 }

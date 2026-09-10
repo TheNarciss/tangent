@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from ..db.models import Profile
 from ..errors import ConfigurationError, UnknownBrokerError
 from ..models import Verdict, VerdictsResponse, Wealth
-from . import classification, envelopes, fees, macro, performance, risk_profile
+from . import classification, envelopes, fees, macro, performance, references, risk_profile
 
 logger = logging.getLogger(__name__)
 
@@ -773,6 +773,10 @@ def risk_share_verdict(
         "equity_premium": cfg.equity_premium,
         "equity_sigma": cfg.equity_sigma,
     }
+    # A century of realized returns, so « pourquoi prendre ce risque » has an answer.
+    long_run = references.long_run_returns()
+    if long_run:
+        details["long_run"] = long_run
     base = (
         f"Tu as {_pct(actual, 0)} d'actions sur {_eur(pocket)} de placements long terme ; "
         f"ton profil « {rl.label} » vise {_pct(target, 0)}"
@@ -1225,6 +1229,14 @@ def drawdown_verdict(
         "steps_crossed": steps,
         "last_value_eur": perf.last_value,
     }
+    # 150 years of context, so « −12 % » can be placed on a scale.
+    worst = references.worst_year_since_1871()
+    if worst:
+        details["worst_year_ever"] = {
+            "return": worst[0],
+            "from_year": worst[1],
+            "to_year": worst[2],
+        }
     if steps == 0:
         return Verdict(
             id="drawdown",

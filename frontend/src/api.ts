@@ -45,6 +45,8 @@ export interface PortfolioMetrics {
   /** Worst twelve months ever seen on the dominant asset class, and its label. */
   worst_year_class: number | null;
   worst_year_label: string | null;
+  /** Lines the stress tests replay with world-equity amplitude, though they are not. */
+  replayed_as_world: string[];
   assets: AssetMetrics[];
   correlation: Record<string, Record<string, number>>;
   /** Tickers with no long-term return assumption: their μ is historical only. */
@@ -1142,6 +1144,8 @@ export interface NextEuroVerdictDetails {
 
 /** `details` of the « part d'actions » verdict (id "risk_share"). */
 export interface RiskShareVerdictDetails {
+  /** A century of realized returns, so « pourquoi ce risque » has an answer. */
+  long_run?: { equities: number; bonds: number; from_year: number; to_year: number };
   actual_share?: number;
   target_share?: number;
   merton_share?: number;
@@ -1235,6 +1239,8 @@ export interface PerformanceVerdictDetails {
 
 /** `details` of the « baisse depuis le plus haut » verdict. */
 export interface DrawdownVerdictDetails {
+  /** 150 years of context: the worst twelve months US equities ever had, in real terms. */
+  worst_year_ever?: { return: number; from_year: number; to_year: number };
   drawdown?: number;
   max_drawdown?: number;
   peak_day?: string | null;
