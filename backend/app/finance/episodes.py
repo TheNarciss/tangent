@@ -23,12 +23,12 @@ Anything else falls back to the declared value: a series that does not reach
 """
 
 import logging
-from datetime import date
+from datetime import date, datetime, timedelta
 
 import pandas as pd
 
 from ..data import ecb, fred, lbma
-from ..errors import DataSourceError
+from ..errors import AppError, DataSourceError
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ def measure(series_id: str, provider: str, currency: str, window: tuple[str, str
     move = float(inside.iloc[-1] / inside.iloc[0] - 1.0)
     if currency == "EUR":
         return move
-    return _in_euros(move, first_day, last_day)
+    return _in_euros(move, first_day, last_day, currency)
 
 
 def _levels(provider: str, series_id: str, currency: str) -> pd.Series | None:
@@ -64,24 +64,60 @@ def _levels(provider: str, series_id: str, currency: str) -> pd.Series | None:
         return fred.series(series_id)
     if provider == "lbma":
         return lbma.price(series_id, currency)
+    if provider == "yahoo":
+        return _quoted(series_id)
     logger.warning("fournisseur de série inconnu: %s", provider)
     return None
 
 
-def _in_euros(move: float, first_day: pd.Timestamp, last_day: pd.Timestamp) -> float | None:
-    """Convert a dollar return to what a euro investor saw, at the ECB rate of those days.
+# Ten episodes ask the same line for its history ten times. Successful fetches
+# are already cached by `market`, but a silence is not — and a portfolio of
+# twenty lines Yahoo cannot serve would spend two hundred failed calls before
+# drawing the screen. So the answer is remembered either way.
+_QUOTED: dict[str, tuple[datetime, pd.Series | None]] = {}
+_QUOTED_TTL = timedelta(hours=1)
+
+
+def _quoted(ticker: str) -> pd.Series | None:
+    """One line's own price history. None when Yahoo does not know it.
+
+    Yahoo has no service contract, so every failure is a fallback rather than
+    an error: the caller measures the asset class instead, and the screen still
+    answers.
+    """
+    from . import market
+
+    cached = _QUOTED.get(ticker)
+    if cached and datetime.now() - cached[0] < _QUOTED_TTL:
+        return cached[1]
+
+    levels: pd.Series | None
+    try:
+        levels = market.fetch_prices([ticker], period="max").iloc[:, 0].dropna()
+    except AppError:
+        logger.info("pas d'historique Yahoo pour %s", ticker)
+        levels = None
+    _QUOTED[ticker] = (datetime.now(), levels)
+    return levels
+
+
+def _in_euros(
+    move: float, first_day: pd.Timestamp, last_day: pd.Timestamp, currency: str
+) -> float | None:
+    """Convert a foreign return to what a euro investor saw, at the ECB rate of those days.
 
     A euro that buys more dollars at the end than at the start softens a fall;
-    the reverse deepens it. Before 1999 there is no rate to apply, and the
-    caller keeps the declared figure in its own currency.
+    the reverse deepens it. Before 1999 there is no rate to apply, and a
+    currency the ECB does not publish gets no rate either — in both cases the
+    caller keeps the declared figure rather than pretending the move was free.
     """
     if first_day.date() < _EURO_FROM:
         return None
     try:
-        rates = ecb.named("eur_usd")
+        rates = ecb.named(f"eur_{currency.lower()}")
         at_first = rates.loc[:first_day].iloc[-1]
         at_last = rates.loc[:last_day].iloc[-1]
-    except (DataSourceError, IndexError):
-        logger.warning("cours EUR/USD indisponible, rendement laissé en devise")
+    except (DataSourceError, KeyError, IndexError):
+        logger.warning("cours EUR/%s indisponible, épisode non mesuré", currency)
         return None
     return (1.0 + move) * float(at_first / at_last) - 1.0

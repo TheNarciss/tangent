@@ -42,17 +42,17 @@
 # premier utilisateur. Ici on dit seulement comment une classe reconnue se
 # rejoue dans les scénarios ci-dessous.
 #
-# Toutes les actions se rejouent en actions monde : l'étude ne fournit pas de
-# série par région et par épisode. Un fonds Nasdaq ou Europe est donc rejoué
-# avec l'amplitude du monde, ce qui sous-estime les fonds sectoriels — c'est
-# écrit sous le tableau dans l'app.
+# Chaque région se rejoue sur son propre indice quand une série le permet, et
+# emprunte l'amplitude du monde sinon (voir `fallback_class`). Un fonds
+# sectoriel n'a pas d'indice à lui et reste rejoué en actions monde, ce qui
+# sous-estime son amplitude — c'est écrit sous le tableau dans l'app.
 class_map:
   equity_world: equity_world
-  equity_us: equity_world
-  equity_us_tech: equity_us_tech   # rejoué sur le vrai NASDAQ 100, pas sur le monde
-  equity_europe: equity_world
-  equity_japan: equity_world
-  equity_emerging: equity_world
+  equity_us: equity_us
+  equity_us_tech: equity_us_tech
+  equity_europe: equity_europe
+  equity_japan: equity_japan
+  equity_emerging: equity_emerging
   equity_sector: equity_world     # un pari sectoriel bouge plus que le monde : sous-estimé ici
   bonds: bonds_euro
   money_market: cash
@@ -100,19 +100,38 @@ account_classes:
 #
 # Ajouter une classe ici suffit : rien à coder, rien à recalculer à la main.
 #
-# `fred` sert des séries quotidiennes sans clé et sans bridage pour les indices
-# américains. L'Europe et le Japon n'y existent qu'en mensuel (séries OECD), et
-# une fenêtre en fin de mois ne se compare pas à un pic-à-creux : tant qu'on n'a
-# pas de série quotidienne pour eux, ces classes restent déclarées.
+# Chaque classe liste des CANDIDATS, essayés dans l'ordre : le premier dont la
+# série couvre la fenêtre gagne. Personne n'a à vérifier à la main jusqu'où
+# remonte un indice — la boucle s'en charge, épisode par épisode. Un candidat
+# qui ne répond pas, ou qui commence trop tard, est simplement sauté.
+#
+# `fred` sert des séries quotidiennes sans clé et sans bridage, mais seulement
+# pour les indices américains ; `yahoo` couvre le reste du monde sans contrat de
+# service, donc jamais seul quand une source stable existe.
 class_series:
   equity_us_tech:
-    provider: fred
-    id: NASDAQ100        # NASDAQ 100, quotidien depuis 1986
-    currency: USD
+    - { provider: fred,  id: NASDAQ100, currency: USD }   # quotidien depuis 1986
+    - { provider: yahoo, id: "^NDX",    currency: USD }
+  equity_us:
+    - { provider: yahoo, id: "^GSPC",   currency: USD }
+  equity_europe:
+    - { provider: yahoo, id: "^STOXX",  currency: EUR }   # STOXX Europe 600
+  equity_japan:
+    - { provider: yahoo, id: "^N225",   currency: JPY }
+  equity_emerging:
+    - { provider: yahoo, id: "EEM",     currency: USD }   # faute d'indice, l'ETF de référence
   gold:
-    provider: lbma
-    id: gold             # fixing LBMA de l'après-midi, en euros depuis 1999
-    currency: EUR
+    - { provider: lbma,  id: gold,      currency: EUR }   # fixing de l'après-midi
+
+# De qui une classe emprunte son chiffre quand ni sa ligne ni son indice n'ont
+# pu être mesurés sur cet épisode. Sans cette table, une classe rejouée sans
+# `returns` compterait pour ZÉRO perte : la poche passerait pour immunisée en
+# pleine crise, ce qui est le pire mensonge que puisse produire un stress test.
+fallback_class:
+  equity_us: equity_world
+  equity_europe: equity_world
+  equity_japan: equity_world
+  equity_emerging: equity_world
 
 scenarios:
   - id: gulf_1990

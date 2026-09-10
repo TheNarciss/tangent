@@ -62,13 +62,27 @@ def test_an_unknown_provider_measures_nothing():
     assert episodes.measure("X", "bloomberg", "USD", ("2000-01-01", "2000-12-31")) is None
 
 
-def test_every_measured_class_also_has_a_declared_fallback():
-    """A source that does not answer must never blank out a class in an episode."""
+def test_no_replayable_class_can_ever_count_as_zero_loss():
+    """The guard against the worst possible answer: a pocket untouched by a crash.
+
+    Every class a line can land in must end up with a figure in every episode,
+    whether it declares one or borrows it. Adding a class to `class_map` and
+    forgetting its `returns` used to silently price it at zero.
+    """
     cfg = stress.config()
+    replayable = (
+        set(cfg.class_map.values())
+        | set(cfg.envelope_classes.values())
+        | set(cfg.account_classes.values())
+        | set(cfg.class_series)
+        | {cfg.default_asset_class, stress.FALLBACK_CLASS}
+    )
 
     for scenario in cfg.scenarios:
-        for asset_class in cfg.class_series:
-            assert asset_class in scenario.returns, f"{scenario.id} n'a pas de repli {asset_class}"
+        for asset_class in replayable:
+            declared = asset_class in scenario.returns
+            borrowed = cfg.fallback_class.get(asset_class) in scenario.returns
+            assert declared or borrowed, f"{scenario.id} chiffrerait {asset_class} à zéro"
 
 
 # ── La boucle ─────────────────────────────────────────────────────────────
@@ -98,10 +112,20 @@ def test_the_loop_falls_back_on_the_declared_figure(monkeypatch):
 def test_adding_a_class_needs_no_code(monkeypatch):
     """The loop reads the registry: a new entry is measured without touching Python."""
     cfg = stress.config().model_copy(deep=True)
-    cfg.class_series["equity_japan"] = stress.IndexSeries(
-        provider="fred", id="INVENTED", currency="USD"
-    )
+    cfg.class_series["equity_japan"] = [
+        stress.IndexSeries(provider="fred", id="INVENTED", currency="USD")
+    ]
     monkeypatch.setattr(episodes, "measure", lambda *a, **k: -0.4)
     scenario = next(s for s in cfg.scenarios if s.id == "gfc_2008")
 
     assert stress.measured_returns(scenario, cfg)["equity_japan"] == pytest.approx(-0.4)
+
+
+def test_a_currency_the_ecb_does_not_publish_is_not_measured(monkeypatch):
+    """Better no figure than a foreign move counted as if it were free."""
+    days = pd.date_range("2020-01-01", periods=40, freq="D")
+    monkeypatch.setattr(
+        episodes, "_levels", lambda *a, **k: pd.Series(range(100, 140), index=days, dtype=float)
+    )
+
+    assert episodes.measure("X", "yahoo", "KRW", ("2020-01-01", "2020-02-09")) is None

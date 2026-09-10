@@ -186,3 +186,43 @@ def test_a_broad_index_is_diversified_even_without_openfigi():
     assert result.source == "label"  # no ISIN, so no instrument kind
     assert result.kind == classification.UNKNOWN_KIND
     assert result.is_diversified is True
+
+
+# ── Où la ligne est cotée, pour pouvoir lire son propre cours ──────────────
+
+
+def test_the_home_venue_is_preferred_over_the_others():
+    """Same fund, several listings: Paris first, where a French holder's line lives."""
+    quote = classification._quote(
+        [
+            {"exchCode": "GR", "ticker": "AMEW"},
+            {"exchCode": "FP", "ticker": "CW8"},
+            {"exchCode": "IM", "ticker": "CW8"},
+        ]
+    )
+
+    assert quote == classification.Quote("CW8.PA", "EUR")
+
+
+def test_a_us_listing_needs_no_suffix():
+    assert classification._quote([{"exchCode": "UW", "ticker": "AAPL"}]) == classification.Quote(
+        "AAPL", "USD"
+    )
+
+
+def test_london_is_left_out_because_it_quotes_in_pence():
+    """Some London lines quote in pence, others in pounds: a hundredfold error."""
+    assert classification._quote([{"exchCode": "LN", "ticker": "SWDA"}]) is None
+
+
+def test_a_venue_with_no_ticker_is_skipped():
+    quote = classification._quote(
+        [{"exchCode": "FP", "ticker": ""}, {"exchCode": "NA", "ticker": "IWDA"}]
+    )
+
+    assert quote == classification.Quote("IWDA.AS", "EUR")
+
+
+def test_an_instrument_without_an_isin_has_no_quote():
+    """No ISIN means no OpenFIGI listing, so the line is replayed as its class."""
+    assert classification.classify("Amundi MSCI World").quote is None

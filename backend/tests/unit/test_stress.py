@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from app.finance import stress
+from app.finance import classification, stress
 from app.models import CashAccount, InvestmentAccount, Wealth, WealthEnvelope, WealthPosition
 
 
@@ -220,3 +220,72 @@ def test_the_class_of_a_line_no_longer_depends_on_a_table_of_known_tickers():
     someone_else = _wealth(equity=1_000.0, ticker="SWDA.L", label="iShares Core MSCI World")
 
     assert stress.exposure(mine) == stress.exposure(someone_else)
+
+
+# ── La cascade : la ligne, puis sa classe, puis le chiffre déclaré ─────────
+
+
+def _scenario(episode: str = "covid_2020") -> stress.Scenario:
+    return next(s for s in stress.config().scenarios if s.id == episode)
+
+
+def test_a_line_is_measured_on_its_own_price_when_yahoo_reaches_that_far(monkeypatch):
+    """The finest answer available: not the class's amplitude, but this line's."""
+    monkeypatch.setattr(
+        stress.episodes,
+        "measure",
+        lambda _id, provider, *a, **k: -0.31 if provider == "yahoo" else None,
+    )
+    pocket = stress.Pocket("equity_world", 1_000.0, classification.Quote("CW8.PA", "EUR"))
+
+    assert stress.pocket_return(pocket, _scenario()) == pytest.approx(-0.31)
+
+
+def test_a_line_too_young_for_the_episode_falls_back_on_its_class(monkeypatch):
+    """An ETF created in 2019 cannot replay 2008 — and must not blank the episode."""
+    monkeypatch.setattr(stress.episodes, "measure", lambda *a, **k: None)
+    scenario = _scenario("gfc_2008")
+    pocket = stress.Pocket("equity_world", 1_000.0, classification.Quote("CW8.PA", "EUR"))
+
+    assert stress.pocket_return(pocket, scenario) == scenario.returns["equity_world"]
+
+
+def test_a_line_with_no_readable_venue_is_replayed_as_its_class(monkeypatch):
+    monkeypatch.setattr(stress.episodes, "measure", lambda *a, **k: -0.99)
+    scenario = _scenario()
+    pocket = stress.Pocket("cash", 1_000.0, quote=None)
+
+    assert stress.pocket_return(pocket, scenario) == scenario.returns["cash"]
+
+
+def test_a_class_with_no_figure_borrows_one_rather_than_counting_zero():
+    scenario = _scenario()
+
+    assert scenario.ret("equity_japan", {}, {}) == 0.0
+    assert scenario.ret("equity_japan", {}, {"equity_japan": "equity_world"}) == pytest.approx(
+        scenario.returns["equity_world"]
+    )
+
+
+def test_the_first_candidate_that_covers_the_window_wins(monkeypatch):
+    """Nobody checks by hand how far back an index goes: the loop tries and moves on."""
+    tried: list[str] = []
+
+    def measure(series_id: str, *a: object, **k: object) -> float | None:
+        tried.append(series_id)
+        return -0.2 if series_id == "SECOND" else None
+
+    cfg = stress.config().model_copy(deep=True)
+    cfg.class_series = {
+        "equity_japan": [
+            stress.IndexSeries(provider="yahoo", id="FIRST", currency="EUR"),
+            stress.IndexSeries(provider="yahoo", id="SECOND", currency="EUR"),
+            stress.IndexSeries(provider="yahoo", id="THIRD", currency="EUR"),
+        ]
+    }
+    monkeypatch.setattr(stress.episodes, "measure", measure)
+
+    measured = stress.measured_returns(_scenario(), cfg)
+
+    assert measured["equity_japan"] == pytest.approx(-0.2)
+    assert tried == ["FIRST", "SECOND"]  # on s'arrête au premier qui répond

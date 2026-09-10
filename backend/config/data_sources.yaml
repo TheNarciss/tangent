@@ -31,6 +31,9 @@ ecb:
   series:
     policy_rate: "FM/D.U2.EUR.4F.KR.MRR_FR.LEV"   # taux directeur BCE (MRO), en %
     eur_usd: "EXR/D.USD.EUR.SP00.A"               # cours de référence USD/EUR, depuis 1999
+    eur_jpy: "EXR/D.JPY.EUR.SP00.A"               # idem pour le yen, pour rejouer un indice japonais
+    eur_gbp: "EXR/D.GBP.EUR.SP00.A"               # idem pour la livre
+    eur_chf: "EXR/D.CHF.EUR.SP00.A"               # idem pour le franc suisse
 
 eurostat:
   # Contre-expertise de l'IPC. Attention : l'API de diffusion Eurostat sert un
