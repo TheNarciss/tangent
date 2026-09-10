@@ -572,14 +572,105 @@ def test_drawdown_turns_red_past_twenty_percent():
     assert v.details["steps_crossed"] == 2
 
 
-def test_compute_all_puts_the_drawdown_first_and_performance_last():
+def test_compute_all_returns_every_verdict():
     resp = verdicts.compute_all(_wealth2(accounts=[_acc("pea", 1000.0)]), _profile(), 1000.0)
-    assert [v.id for v in resp.verdicts] == [
+
+    assert {v.id for v in resp.verdicts} == {
         "drawdown",
         "savings_rate",
         "goal",
         "next_euro",
         "risk_share",
+        "diversification",
         "fees",
         "performance",
-    ]
+    }
+
+
+def test_what_needs_attention_comes_first_and_green_last():
+    """The order is the advice: the Méthode screen is read top-down."""
+    ordered = verdicts._by_priority(
+        [
+            verdicts.Verdict(id="calme", title="", status="green", headline=""),
+            verdicts.Verdict(id="inconnu", title="", status="unknown", headline=""),
+            verdicts.Verdict(
+                id="petit", title="", status="amber", headline="", impact_eur_per_year=10.0
+            ),
+            verdicts.Verdict(
+                id="gros", title="", status="amber", headline="", impact_eur_per_year=900.0
+            ),
+            verdicts.Verdict(id="urgent", title="", status="red", headline=""),
+        ]
+    )
+
+    assert [v.id for v in ordered] == ["urgent", "gros", "petit", "inconnu", "calme"]
+
+
+# ── « Répartition » : ce qui était le diagnostic ──────────────────────────
+
+DIV = verdicts.DiversificationThresholds(single_line_max=0.40)
+
+
+def _line(label: str, value: float) -> WealthPosition:
+    return WealthPosition(
+        ticker=label, label=label, quantity=1.0, avg_cost=value, current_value=value
+    )
+
+
+def test_three_trackers_of_one_index_are_one_problem_not_three():
+    w = _wealth(
+        _line("Amundi MSCI World", 300.0),
+        _line("iShares Core MSCI World", 300.0),
+        _line("Lyxor MSCI World", 400.0),
+    )
+
+    v = verdicts.diversification_verdict(w, DIV)
+
+    assert v.status == "amber"
+    assert len(v.details["duplicates"]) == 1
+    assert "Amundi MSCI World, iShares Core MSCI World et Lyxor MSCI World" in v.headline
+
+
+def test_one_broad_world_fund_at_a_hundred_percent_is_green():
+    """Holding a single MSCI World tracker is the textbook advice, not a risk."""
+    w = _wealth(_line("Amundi MSCI World", 1_000.0))
+
+    v = verdicts.diversification_verdict(w, DIV)
+
+    assert v.status == "green"
+    assert v.details["concentrated"] == []
+
+
+def test_a_sector_fund_above_the_limit_is_flagged_with_its_segment():
+    w = _wealth(_line("Amundi Nasdaq-100", 700.0), _line("Amundi MSCI World", 300.0))
+
+    v = verdicts.diversification_verdict(w, DIV)
+
+    assert v.status == "amber"
+    assert v.details["concentrated"][0]["label"] == "Amundi Nasdaq-100"
+    assert "Nasdaq-100" in v.headline
+
+
+def test_an_unrecognised_line_is_listed_so_the_screen_can_say_so():
+    w = _wealth(_line("Fonds maison Truc 2035", 1_000.0))
+
+    v = verdicts.diversification_verdict(w, DIV)
+
+    assert v.details["unrecognised"] == ["Fonds maison Truc 2035"]
+    assert "on ne sait pas ce qu'il y a dedans" in v.headline
+
+
+def test_the_action_never_tells_you_to_sell():
+    """Selling costs brokerage and tax; redirecting contributions costs nothing."""
+    w = _wealth(_line("Amundi Nasdaq-100", 1_000.0))
+
+    v = verdicts.diversification_verdict(w, DIV)
+
+    assert v.action is not None
+    assert "versements" in v.action and "vendre" in v.action
+
+
+def test_no_lines_is_unknown_rather_than_green():
+    v = verdicts.diversification_verdict(_wealth(balance_only=5_000.0), DIV)
+
+    assert v.status == "unknown"

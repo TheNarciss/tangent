@@ -177,3 +177,12 @@ def test_a_real_portfolio_is_fully_recognised(monkeypatch):
         "equity_europe",
         "equity_sector",
     ]
+
+
+def test_a_broad_index_is_diversified_even_without_openfigi():
+    """Nothing called « MSCI World » is one company: the index answers on its own."""
+    result = classification.classify("Amundi MSCI World")
+
+    assert result.source == "label"  # no ISIN, so no instrument kind
+    assert result.kind == classification.UNKNOWN_KIND
+    assert result.is_diversified is True

@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from ..db.models import Profile
 from ..errors import ConfigurationError, UnknownBrokerError
 from ..models import Verdict, VerdictsResponse, Wealth
-from . import envelopes, fees, macro, performance, risk_profile
+from . import classification, envelopes, fees, macro, performance, risk_profile
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +100,12 @@ class DrawdownThresholds(BaseModel):
     red_at: float = Field(gt=0, lt=1)
 
 
+class DiversificationThresholds(BaseModel):
+    single_line_max: float = Field(gt=0, le=1)
+
+
 class VerdictsConfig(BaseModel):
+    diversification: DiversificationThresholds
     performance: PerformanceThresholds
     drawdown: DrawdownThresholds
     projection: ProjectionThresholds
@@ -139,6 +144,27 @@ def config() -> VerdictsConfig:
 def _eur(value: float) -> str:
     """1234.5 → « 1 235 € » (narrow no-break space as thousands separator)."""
     return f"{value:,.0f} €".replace(",", " ")
+
+
+def _join(names: list[str]) -> str:
+    """'A, B et C' — so one sentence works with two funds or with five."""
+    if len(names) == 1:
+        return names[0]
+    return f"{', '.join(names[:-1])} et {names[-1]}"
+
+
+def _by_priority(verdicts: list[Verdict]) -> list[Verdict]:
+    """What needs attention first, then what it is worth per year.
+
+    The Méthode screen is read top-down, so the order *is* the advice: what is
+    red or amber comes first, biggest euro impact leading; what is green sits
+    at the bottom, where it reassures without competing.
+    """
+    rank = {"red": 0, "amber": 1, "unknown": 2, "green": 3}
+    return sorted(
+        verdicts,
+        key=lambda v: (rank.get(v.status, 9), -(v.impact_eur_per_year or 0.0)),
+    )
 
 
 def _pct(fraction: float, digits: int = 2) -> str:
@@ -1229,6 +1255,121 @@ def drawdown_verdict(
     )
 
 
+def diversification_verdict(
+    wealth: Wealth,
+    thresholds: DiversificationThresholds | None = None,
+) -> Verdict:
+    """« Répartition » : several lines on one index, and lines that are a bet on one thing.
+
+    Both questions used to be answered by statistics on the Placements screen —
+    a correlation above 0.85 for duplicates, a weight above 40 % for
+    concentration. Two trackers of the same index are not correlated, they are
+    identical; and a single broad world fund at 100 % is the textbook advice,
+    not a risk. Both are now read off what each line *is* (ADR-025).
+    """
+    cfg = thresholds or config().diversification
+    title = "Répartition"
+
+    lines = [p for acc in wealth.investment_accounts for p in acc.positions if p.current_value > 0]
+    total = sum(p.current_value for p in lines)
+    if total <= 0:
+        return Verdict(
+            id="diversification",
+            title=title,
+            status="unknown",
+            headline=(
+                "Aucune ligne de placement connue : impossible de dire si ta répartition "
+                "tient debout."
+            ),
+        )
+
+    classes = classification.classify_many([(p.label, p.isin) for p in lines])
+    problems: list[str] = []
+    details: dict[str, Any] = {
+        "positions_total_eur": total,
+        "single_line_max": cfg.single_line_max,
+        "lines": [
+            {
+                "label": p.label,
+                "value_eur": p.current_value,
+                "weight": p.current_value / total,
+                "index_label": what.index_label,
+                "asset_class": what.asset_class,
+                "diversified": what.is_diversified,
+            }
+            for p, what in zip(lines, classes, strict=True)
+        ],
+    }
+
+    # Several lines tracking one index: one group, not one card per pair.
+    groups: dict[str, list[int]] = {}
+    for i, what in enumerate(classes):
+        if what.index_label:
+            groups.setdefault(what.index_label, []).append(i)
+    duplicates: list[dict[str, Any]] = []
+    for index_label, members in groups.items():
+        if len(members) < 2:
+            continue
+        names = [lines[i].label for i in members]
+        weight = sum(lines[i].current_value for i in members) / total
+        duplicates.append({"index_label": index_label, "labels": names, "weight": weight})
+        problems.append(
+            f"{_join(names)} suivent tous « {index_label} » : en garder plusieurs "
+            f"ne te protège pas plus qu'un seul."
+        )
+    details["duplicates"] = duplicates
+
+    # A heavy line only matters when it is not itself diversified.
+    concentrated: list[dict[str, Any]] = []
+    for position, what in zip(lines, classes, strict=True):
+        weight = position.current_value / total
+        if weight <= cfg.single_line_max or what.is_diversified:
+            continue
+        if what.kind == classification.STOCK:
+            why = "c'est une seule société"
+        elif what.index_label:
+            why = f"« {what.index_label} » ne couvre qu'un segment du marché"
+        else:
+            why = "on ne sait pas ce qu'il y a dedans"
+        concentrated.append(
+            {
+                "label": position.label,
+                "weight": weight,
+                "index_label": what.index_label,
+                "kind": what.kind,
+            }
+        )
+        problems.append(f"{position.label} pèse {_pct(weight, digits=0)} et {why}.")
+    details["concentrated"] = concentrated
+
+    unknown = [lines[i].label for i, what in enumerate(classes) if not what.is_known]
+    details["unrecognised"] = unknown
+
+    if not problems:
+        return Verdict(
+            id="diversification",
+            title=title,
+            status="green",
+            headline=(
+                "Tes lignes ne font pas doublon et aucune ne concentre le risque : "
+                "rien à changer de ce côté."
+            ),
+            details=details,
+        )
+
+    return Verdict(
+        id="diversification",
+        title=title,
+        status="amber",
+        headline=problems[0],
+        action=(
+            "Oriente tes prochains versements plutôt que de vendre : "
+            "vendre coûte des frais et de l'impôt sur la plus-value."
+        ),
+        details=details,
+    )
+
+
 def compute_all(
     wealth: Wealth,
     profile: Profile,
@@ -1248,14 +1389,17 @@ def compute_all(
         logger.warning("verdicts: unknown broker %r, using default", profile.default_broker)
         _, broker_fees = fees.get(None)
     monthly = float(profile.monthly_dca or 0.0)
-    verdicts = [
-        drawdown_verdict(perf),
-        savings_rate_verdict(profile, monthly_saved),
-        goal_verdict(wealth, profile, monthly_saved),
-        next_euro_verdict(wealth, profile, monthly_spending),
-        risk_share_verdict(wealth, profile),
-        fees_verdict(wealth, broker_fees, monthly),
-        performance_verdict(perf),
-    ]
+    verdicts = _by_priority(
+        [
+            drawdown_verdict(perf),
+            savings_rate_verdict(profile, monthly_saved),
+            goal_verdict(wealth, profile, monthly_saved),
+            next_euro_verdict(wealth, profile, monthly_spending),
+            risk_share_verdict(wealth, profile),
+            diversification_verdict(wealth),
+            fees_verdict(wealth, broker_fees, monthly),
+            performance_verdict(perf),
+        ]
+    )
     logger.info("verdicts computed: %s", {v.id: v.status for v in verdicts})
     return VerdictsResponse(computed_at=datetime.now(tz=UTC), verdicts=verdicts)

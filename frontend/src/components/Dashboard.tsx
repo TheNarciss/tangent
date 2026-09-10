@@ -1,6 +1,6 @@
 import { useWealthSummary } from "@/api";
 import { NAV_PATHS } from "@/components/Sidebar";
-import { VerdictLine } from "@/components/ui/verdict-card";
+import { VerdictAlerts } from "@/components/ui/verdict-card";
 
 import { AiBriefTile } from "./dashboard/AiBriefTile";
 import { ChartTile } from "./dashboard/ChartTile";
@@ -43,8 +43,7 @@ export function Dashboard({ onNavigateToAccounts }: DashboardProps = {}) {
   return (
     <div className="space-y-3 md:space-y-4">
       <KpiStrip wealth={wealth} />
-      <VerdictLine id="drawdown" to={NAV_PATHS.method} hideWhenGreen />
-      <VerdictLine id="next_euro" to={NAV_PATHS.method} />
+      <VerdictAlerts to={NAV_PATHS.method} />
       <div className="grid gap-3 md:grid-cols-3 md:gap-4">
         <ChartTile className="md:col-span-2" />
         <AiBriefTile />

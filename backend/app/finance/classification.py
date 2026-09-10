@@ -71,8 +71,14 @@ class Classification:
 
     @property
     def is_diversified(self) -> bool:
-        """Spreads the risk widely: a fund, and on a broad index rather than one segment."""
-        return self.kind == FUND and self.broad
+        """Spreads the risk widely: a broad index, and not a single share.
+
+        The index carries the answer on its own — nothing called « MSCI World »
+        is one company — so a line stays diversified even when we could not
+        reach OpenFIGI to confirm it is a fund. Requiring the instrument kind
+        made every ISIN-less line look concentrated.
+        """
+        return self.broad and self.kind != STOCK
 
 
 @lru_cache(maxsize=1)
