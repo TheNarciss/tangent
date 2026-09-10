@@ -7,10 +7,9 @@ Organisation :
 - envelopes : règles & éligibilité des livrets/PEL/AV
 - withdrawal: taux de retrait soutenable (config/verdicts.yaml)
 - fees      : tarification brokers (frais ordres, garde, etc.)
-- dashboard : orchestration (calcule metrics + diagnostic + stress tests)
+- dashboard : orchestration (calcule metrics + stress tests)
 - optimizer : SLSQP optimal portfolios (Max Sharpe, Min Var, target vol, from_strategy)
 - timeseries: historique des valorisations
 - projection: projection Monte Carlo + reverse projection Bengen
 - stress    : stress tests historiques (COVID 2020, Inflation 2022, Banques 2023)
-- diagnostic: génération d'insights textuels sur le portfolio
 """

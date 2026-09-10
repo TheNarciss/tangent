@@ -5,6 +5,12 @@
 # Dernière revue : 2026-09 — sources : étude méthode §1.3 et §8.2 (frais < 0,5 %/an
 # pour un PEA + ETF indiciel ; AV bancaire en UC : 2 à 3 %/an).
 
+# Répartition : plusieurs lignes sur un même indice, et lignes qui parient sur
+# une seule chose. Le seuil ne vise qu'une ligne NON diversifiée — un fonds
+# indiciel large n'est jamais signalé, quel que soit son poids.
+diversification:
+  single_line_max: 0.40
+
 fees:
   green_max: 0.005     # jusqu'à 0,5 %/an : rien à changer
   amber_max: 0.010     # jusqu'à 1 %/an : à surveiller ; au-delà, rouge

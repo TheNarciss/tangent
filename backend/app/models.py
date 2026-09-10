@@ -51,16 +51,9 @@ class PortfolioMetrics(BaseModel):
     unmapped_tickers: list[str] = Field(default_factory=list)
 
 
-class Insight(BaseModel):
-    severity: str  # "good" | "warning" | "critical"
-    title: str
-    detail: str
-
-
 class DashboardResponse(BaseModel):
     as_of: date
     metrics: PortfolioMetrics
-    insights: list[Insight]
     stress_tests: list["StressTestResult"] = Field(default_factory=list)
 
 

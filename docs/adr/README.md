@@ -55,3 +55,4 @@ Template : [`TEMPLATE.md`](./TEMPLATE.md).
 - [ADR-025](025-instrument-classification.md) — Ce qu'est un instrument, décidé sur son nom officiel
 - [ADR-026](026-macro-observed.md) — Taux sans risque et inflation deviennent des valeurs observées
 - [ADR-027](027-assumptions-follow-the-class.md) — Les hypothèses suivent la classe d'actifs, plus le ticker
+- [ADR-028](028-one-voice-per-question.md) — Une seule voix par question, un seul sujet par écran

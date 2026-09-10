@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 
 import {
   useVerdicts,
+  type DiversificationVerdictDetails,
   type DrawdownVerdictDetails,
   type FeesVerdictDetails,
   type GoalVerdictDetails,
@@ -15,6 +16,8 @@ import { fmt } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { NAV_PATHS } from "@/components/Sidebar";
 import { VerdictCard, VerdictDot } from "@/components/ui/verdict-card";
+import { Proposal } from "@/components/methode/Proposal";
+import { StressList } from "@/components/methode/StressList";
 
 /**
  * « Méthode » : every verdict of the method as a folded card (ADR-023).
@@ -49,6 +52,7 @@ export function Methode() {
     <div className="mx-auto max-w-3xl space-y-4">
       <p className="text-sm text-muted-foreground">
         Chaque carte est un verdict : un feu, une phrase, un montant par an, une chose à faire.
+        Elles sont rangées par urgence, puis par euros en jeu — ce qui est en haut compte le plus.
         Ouvre une carte pour voir le calcul.
       </p>
       {q.data.verdicts.map((v) => (
@@ -58,7 +62,10 @@ export function Methode() {
           ) : v.id === "next_euro" ? (
             <NextEuroDetails details={v.details as NextEuroVerdictDetails} />
           ) : v.id === "risk_share" ? (
-            <RiskShareDetails details={v.details as RiskShareVerdictDetails} />
+            <div className="space-y-4">
+              <RiskShareDetails details={v.details as RiskShareVerdictDetails} />
+              {v.status !== "green" && <Proposal />}
+            </div>
           ) : v.id === "savings_rate" ? (
             <SavingsRateDetails details={v.details as SavingsRateVerdictDetails} />
           ) : v.id === "goal" ? (
@@ -66,12 +73,74 @@ export function Methode() {
           ) : v.id === "performance" ? (
             <PerformanceDetails details={v.details as PerformanceVerdictDetails} />
           ) : v.id === "drawdown" ? (
-            <DrawdownDetails details={v.details as DrawdownVerdictDetails} />
+            <div className="space-y-4">
+              <DrawdownDetails details={v.details as DrawdownVerdictDetails} />
+              <StressList />
+            </div>
+          ) : v.id === "diversification" ? (
+            <DiversificationDetails details={v.details as DiversificationVerdictDetails} />
           ) : (
             <GenericDetails verdict={v} />
           )}
         </VerdictCard>
       ))}
+    </div>
+  );
+}
+
+/* ── Répartition ───────────────────────────────────────────────────────── */
+
+function DiversificationDetails({ details: d }: { details: DiversificationVerdictDetails }) {
+  const lines = d.lines ?? [];
+  const duplicates = d.duplicates ?? [];
+  const concentrated = d.concentrated ?? [];
+  const unrecognised = d.unrecognised ?? [];
+
+  return (
+    <div className="space-y-4">
+      <ul className="divide-y rounded-md border text-sm">
+        {lines.map((l) => (
+          <li key={l.label} className="flex items-center gap-3 px-3 py-2">
+            <div className="min-w-0 flex-1">
+              <div className="truncate">{l.label}</div>
+              <div className="truncate text-xs text-muted-foreground">
+                {l.index_label ?? "classe non reconnue"}
+                {!l.diversified && l.index_label ? " · un seul segment" : ""}
+              </div>
+            </div>
+            <span className="shrink-0 font-mono tabular">{fmt.pct(l.weight)}</span>
+          </li>
+        ))}
+      </ul>
+
+      {duplicates.map((g) => (
+        <p key={g.index_label} className="text-xs text-muted-foreground">
+          <strong className="text-foreground">{g.labels.join(", ")}</strong> suivent le même indice
+          « {g.index_label} » et pèsent ensemble {fmt.pct(g.weight)}. En garder plusieurs ne protège
+          pas plus qu'un seul, et multiplie les frais fixes par ligne.
+        </p>
+      ))}
+
+      {concentrated.map((c) => (
+        <p key={c.label} className="text-xs text-muted-foreground">
+          <strong className="text-foreground">{c.label}</strong> pèse {fmt.pct(c.weight)} et n'est
+          pas diversifié :{" "}
+          {c.kind === "stock" ? "c'est une seule société" : "il ne couvre qu'un segment du marché"}.
+        </p>
+      ))}
+
+      {unrecognised.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          Non reconnu, donc non jugé : {unrecognised.join(", ")}. Tangent lit le nom officiel de
+          chaque ligne pour savoir ce qu'elle suit ; celles-ci ne correspondent à rien de connu.
+        </p>
+      )}
+
+      <p className="text-xs text-muted-foreground">
+        Un fonds indiciel large n'est jamais signalé, quel que soit son poids : détenir un seul ETF
+        monde est la recommandation la plus répandue. Le seuil de{" "}
+        {fmt.pct(d.single_line_max ?? 0.4)} ne vise que les lignes qui parient sur une seule chose.
+      </p>
     </div>
   );
 }

@@ -113,3 +113,41 @@ export function VerdictLine({
     </Link>
   );
 }
+
+/**
+ * What needs attention, in the order the method ranks it (ADR-028).
+ *
+ * The engine already sorts: red and amber first, biggest euro impact leading.
+ * The overview shows the top of that list and nothing else — a screen that
+ * repeats every verdict is a screen nobody reads.
+ */
+export function VerdictAlerts({ to, max = 3 }: { to: string; max?: number }) {
+  const q = useVerdicts();
+  const pending = (q.data?.verdicts ?? []).filter(
+    (v) => v.status === "red" || v.status === "amber",
+  );
+  if (pending.length === 0) return null;
+
+  const shown = pending.slice(0, max);
+  const rest = pending.length - shown.length;
+  return (
+    <div className="space-y-2">
+      {shown.map((v) => (
+        <Link
+          key={v.id}
+          to={to}
+          className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3 text-sm transition-colors hover:bg-accent/30 md:px-6"
+        >
+          <VerdictDot status={v.status} />
+          <span className="min-w-0 flex-1 leading-snug">{v.headline}</span>
+          <span className="shrink-0 text-xs text-muted-foreground">Détail</span>
+        </Link>
+      ))}
+      {rest > 0 && (
+        <Link to={to} className="block px-4 text-xs text-muted-foreground underline md:px-6">
+          {rest === 1 ? "Un autre point à regarder" : `${rest} autres points à regarder`}
+        </Link>
+      )}
+    </div>
+  );
+}

@@ -51,14 +51,6 @@ export interface PortfolioMetrics {
   unmapped_tickers: string[];
 }
 
-export type Severity = "good" | "warning" | "critical";
-
-export interface Insight {
-  severity: Severity;
-  title: string;
-  detail: string;
-}
-
 export interface StressTestResult {
   id: string;
   label: string;
@@ -78,7 +70,6 @@ export interface StressTestResult {
 export interface DashboardResponse {
   as_of: string;
   metrics: PortfolioMetrics;
-  insights: Insight[];
   stress_tests: StressTestResult[];
 }
 
@@ -1074,6 +1065,23 @@ export interface FeesVerdictLine {
   /** Document the TER was read from (KID, factsheet). */
   ter_source_url: string | null;
   fund_fee_eur: number | null;
+}
+
+/** `details` of the « répartition » verdict (id "diversification"). */
+export interface DiversificationVerdictDetails {
+  positions_total_eur?: number;
+  single_line_max?: number;
+  lines?: {
+    label: string;
+    value_eur: number;
+    weight: number;
+    index_label: string | null;
+    asset_class: string;
+    diversified: boolean;
+  }[];
+  duplicates?: { index_label: string; labels: string[]; weight: number }[];
+  concentrated?: { label: string; weight: number; index_label: string | null; kind: string }[];
+  unrecognised?: string[];
 }
 
 /** `details` of the « frais réels » verdict (id "fees"). */

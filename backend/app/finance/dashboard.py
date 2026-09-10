@@ -1,4 +1,7 @@
-"""Dashboard service: composes portfolio + market + analytics + diagnostic."""
+"""Dashboard service: composes portfolio + market + analytics + stress tests.
+
+It describes what the user holds and what it is worth. What to *do* about it
+is the verdicts' job, and theirs alone (ADR-028)."""
 
 import logging
 from datetime import date
@@ -13,7 +16,7 @@ from ..models import (
     PortfolioMetrics,
     Wealth,
 )
-from . import analytics, classification, cma, diagnostic, macro, market, stress
+from . import analytics, classification, cma, macro, market, stress
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +65,7 @@ def build(
         raise InsufficientHistoryError(f"Calcul des rendements impossible: {exc}") from exc
 
     # What each line is (fund or share, which index): drives the CMA, the
-    # diagnostic and what the Positions table shows.
+    # verdicts and what the Positions table shows.
     classes = dict(
         zip(
             tickers,
@@ -113,7 +116,7 @@ def build(
         for t, w, v in zip(tickers, weights.tolist(), values.tolist(), strict=True)
     ]
 
-    context = _diagnostic_context(classes, weights, tickers)
+    worst_year, worst_year_label = _worst_year_of_dominant_class(classes, weights, tickers)
 
     metrics = PortfolioMetrics(
         total_value=total_value,
@@ -126,8 +129,8 @@ def build(
         drawdown_estimate=-2.0 * pf_stats["volatility"],
         max_drawdown_observed=pf_max_dd,
         history_days=len(equity_curve.dropna()),
-        worst_year_class=context.worst_year,
-        worst_year_label=context.worst_year_label,
+        worst_year_class=worst_year,
+        worst_year_label=worst_year_label,
         assets=assets,
         correlation=analytics.correlation_matrix(returns),
         unmapped_tickers=unmapped,
@@ -143,7 +146,6 @@ def build(
     return DashboardResponse(
         as_of=date.today(),
         metrics=metrics,
-        insights=diagnostic.generate(metrics, context),
         stress_tests=stress_results,
     )
 
@@ -182,37 +184,35 @@ def _asset_metric(
     )
 
 
-def _diagnostic_context(
+def _worst_year_of_dominant_class(
     classes: dict[str, classification.Classification],
     weights,
     tickers: list[str],
-) -> diagnostic.Context:
+) -> tuple[float | None, str | None]:
     """Worst twelve months ever observed for the portfolio's dominant asset class.
 
-    Degrades to an empty context — the diagnostic then falls back on a modelled
-    figure and says so — when the class has no long history or the source is
-    unreachable.
+    (None, None) when the class has no long history or the source is
+    unreachable: the screen then says what it could measure, and no more.
     """
     by_class: dict[str, float] = {}
     for ticker, weight in zip(tickers, weights.tolist(), strict=True):
         asset_class = classes[ticker].asset_class
         by_class[asset_class] = by_class.get(asset_class, 0.0) + weight
     if not by_class:
-        return diagnostic.Context()
+        return None, None
 
     dominant = max(by_class, key=lambda c: by_class[c])
     region = classification.history_region(dominant)
     if not region:
-        return diagnostic.Context()
+        return None, None
 
     try:
         worst = analytics.worst_rolling_year(ken_french.monthly_returns(region))
     except (DataSourceError, ValueError):
-        logger.warning("pas d'historique long pour %s, repli sur la volatilité", region)
-        return diagnostic.Context()
+        logger.warning("pas d'historique long pour %s", region)
+        return None, None
 
-    label = classes_label(classes, dominant)
-    return diagnostic.Context(worst_year=worst, worst_year_label=label)
+    return worst, classes_label(classes, dominant)
 
 
 def classes_label(classes: dict[str, classification.Classification], asset_class: str) -> str:
