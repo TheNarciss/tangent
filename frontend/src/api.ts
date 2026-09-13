@@ -894,6 +894,13 @@ export async function changePassword(
   });
 }
 
+/** Everything the account holds and computes, as one JSON file (for debugging). */
+export async function exportEverything(): Promise<Blob> {
+  const res = await fetch(`${API_URL}/export`, { credentials: "include" });
+  if (!res.ok) throw new ApiError(res.status, "HttpError", `${res.status} ${res.statusText}`);
+  return res.blob();
+}
+
 export async function deleteMyAccount(payload: {
   confirmation: string;
   current_password: string | null;

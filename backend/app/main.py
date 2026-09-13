@@ -31,6 +31,7 @@ from .routers import (
     analysis,
     dashboard,
     envelopes,
+    export,
     oauth_accounts,
     password_reset,
     planning,
@@ -270,6 +271,7 @@ app.include_router(profile.router, prefix="/api")
 app.include_router(account.router, prefix="/api")
 app.include_router(terms.router, prefix="/api")
 app.include_router(oauth_accounts.router, prefix="/api")
+app.include_router(export.router, prefix="/api")
 app.include_router(reviews.router, prefix="/api")
 app.include_router(verdicts.router, prefix="/api")
 
