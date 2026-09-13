@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   ChevronRight,
   Compass,
+  Receipt,
   FileText,
   Link2,
   LogOut,
@@ -96,6 +97,7 @@ export function MoreSheet({ open, onOpenChange }: MoreSheetProps) {
             ) : (
               <MoreItem icon={Link2} label="Lier mon compte Google" onClick={handleLinkGoogle} />
             )}
+            <MoreItem icon={Receipt} label="Dépenses" onClick={() => handleNavigate("spending")} />
             <MoreItem icon={Compass} label="Méthode" onClick={() => handleNavigate("method")} />
             <MoreItem
               icon={UserIcon}

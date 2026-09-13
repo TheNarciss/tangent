@@ -33,7 +33,6 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { AccountDetailSheet } from "@/components/AccountDetailSheet";
 import { BanksCard } from "@/components/BanksCard";
-import { SpendingSection } from "@/components/spending/SpendingSection";
 
 const GROUP_ICON: Record<AccountGroup, typeof Wallet> = {
   cash: Wallet,
@@ -187,9 +186,6 @@ export function Accounts() {
           </p>
         )}
       </section>
-
-      {/* ── Dépenses ───────────────────────────────────────────────────── */}
-      {hasAccounts && <SpendingSection />}
 
       {accounts.isLoading && (
         <div className="grid gap-3 md:grid-cols-2">

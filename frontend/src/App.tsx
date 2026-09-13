@@ -19,6 +19,7 @@ import { Placements } from "@/components/Placements";
 import { PowensCallbackHandler } from "@/components/PowensCallback";
 import { ProfilePage } from "@/components/Profile";
 import { Projection } from "@/components/Projection";
+import { Spending } from "@/components/Spending";
 import { TermsGate } from "@/components/TermsGate";
 
 export default function App() {
@@ -77,6 +78,7 @@ function Shell() {
             element={<Dashboard onNavigateToAccounts={() => navigate(NAV_PATHS.accounts)} />}
           />
           <Route path={NAV_PATHS.accounts} element={<Accounts />} />
+          <Route path={NAV_PATHS.spending} element={<Spending />} />
           <Route path={NAV_PATHS.investments} element={<Placements />} />
           <Route path={NAV_PATHS.projection} element={<Projection />} />
           <Route path={NAV_PATHS.method} element={<Methode />} />

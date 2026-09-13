@@ -32,5 +32,8 @@ async def test_spending_has_one_entry_per_month_even_when_empty(client):
     assert len(body["months"]) == 3
     assert all(m["total"] == 0 for m in body["months"])
     assert body["categories"] == []
+    assert body["merchants"] == []
     assert body["monthly_average"] is None
+    assert body["monthly_income_average"] is None
+    assert all(m["income"] == 0 for m in body["months"])
     assert body["unlabelled_share"] == 0
