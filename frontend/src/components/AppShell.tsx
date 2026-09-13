@@ -1,8 +1,10 @@
 import { useState, type ReactNode } from "react";
+import { useLocation } from "react-router-dom";
 
-import { Sidebar } from "./Sidebar";
+import { Sidebar, groupOf, type NavGroup } from "./Sidebar";
 import { BottomNav } from "./BottomNav";
 import { MoreSheet } from "./MoreSheet";
+import { SubNavSheet, SubNavStrip } from "./SubNav";
 
 interface AppShellProps {
   pageTitle: string;
@@ -15,11 +17,13 @@ interface AppShellProps {
 /**
  * Application shell — Claude Console inspired.
  *
- * Desktop (≥ md): left sidebar 240px fixed in flex layout, full-width main.
- * Mobile (< md): bottom navigation bar + a "Plus" bottom sheet.
+ * Desktop (≥ md): left sidebar 240px fixed in flex layout, full-width main;
+ * the active group unfolds its sub-views in the sidebar.
+ * Mobile (< md): bottom navigation bar, a strip of sub-views under the
+ * header, a sheet lifted by re-tapping the active tab, and a "Plus" sheet.
  *
- * Navigation is URL-driven (react-router): the sidebar and bottom nav are
- * links, the active item follows the current location.
+ * Navigation is URL-driven (react-router): every control is a link, the
+ * active item follows the current location.
  */
 export function AppShell({
   pageTitle,
@@ -28,11 +32,14 @@ export function AppShell({
   sidebarFooter,
   children,
 }: AppShellProps) {
+  const { pathname } = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [subNav, setSubNav] = useState<NavGroup | null>(null);
+  const group = groupOf(pathname);
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
-      <Sidebar footer={sidebarFooter} />
+      <Sidebar footer={sidebarFooter} pathname={pathname} />
 
       <div className="flex flex-1 flex-col overflow-hidden">
         <header className="flex items-center gap-3 border-b border-border bg-background px-4 py-3 md:gap-4 md:px-8 md:py-4">
@@ -54,13 +61,25 @@ export function AppShell({
           )}
         </header>
 
+        {group && <SubNavStrip group={group} pathname={pathname} />}
+
         <main className="flex-1 overflow-y-auto p-4 pb-[calc(5rem+env(safe-area-inset-bottom))] md:p-6 md:pb-6 lg:p-8 lg:pb-8">
           {children}
         </main>
       </div>
 
-      <BottomNav onOpenMore={() => setMoreOpen(true)} isMoreOpen={moreOpen} />
+      <BottomNav
+        pathname={pathname}
+        onOpenMore={() => setMoreOpen(true)}
+        onOpenSubNav={setSubNav}
+        isMoreOpen={moreOpen}
+      />
 
+      <SubNavSheet
+        group={subNav}
+        pathname={pathname}
+        onOpenChange={(open) => !open && setSubNav(null)}
+      />
       <MoreSheet open={moreOpen} onOpenChange={setMoreOpen} />
     </div>
   );

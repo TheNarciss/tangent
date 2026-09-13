@@ -119,6 +119,11 @@ function getViewConfig(pathname: string, inputs: ViewConfigInputs): ViewConfig {
         subtitle: "Tous tes comptes, mis à jour automatiquement",
         headerActions,
       };
+    case NAV_PATHS.spending:
+      return {
+        title: "Dépenses",
+        subtitle: "Ce qui entre et sort de tes comptes courants, mois par mois",
+      };
     case NAV_PATHS.projection:
       return {
         title: "Projection",

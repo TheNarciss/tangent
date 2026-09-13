@@ -1,4 +1,12 @@
-import { Compass, LayoutDashboard, PieChart, Receipt, TrendingUp, Wallet } from "lucide-react";
+import {
+  Compass,
+  LayoutDashboard,
+  PieChart,
+  Receipt,
+  TrendingUp,
+  Wallet,
+  type LucideIcon,
+} from "lucide-react";
 import { NavLink } from "react-router-dom";
 
 import { cn } from "@/lib/utils";
@@ -28,35 +36,80 @@ export const NAV_PATHS: Record<NavView, string> = {
 export interface NavItem {
   view: NavView;
   label: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: LucideIcon;
 }
 
-/** Main navigation — same list and order in the sidebar and the bottom nav. */
-export const NAV_ITEMS: NavItem[] = [
-  { view: "overview", label: "Aperçu", icon: LayoutDashboard },
-  { view: "accounts", label: "Comptes", icon: Wallet },
-  { view: "investments", label: "Placements", icon: PieChart },
-  { view: "projection", label: "Projection", icon: TrendingUp },
+/** A main tab and the views it opens onto. `children[0]` is the tab's own page. */
+export interface NavGroup extends NavItem {
+  children: NavItem[];
+}
+
+/**
+ * Main navigation — four groups, the same everywhere.
+ *
+ * Desktop: the sidebar lists the groups and unfolds the active one's
+ * sub-views beneath it. Phone: the bottom bar keeps the four groups (it
+ * stays tappable at 390 px); the sub-views of the active group sit in a
+ * strip under the header, and tapping the active tab again lifts them in a
+ * sheet.
+ */
+export const NAV_GROUPS: NavGroup[] = [
+  {
+    view: "overview",
+    label: "Aperçu",
+    icon: LayoutDashboard,
+    children: [
+      { view: "overview", label: "Aperçu", icon: LayoutDashboard },
+      { view: "method", label: "Méthode", icon: Compass },
+    ],
+  },
+  {
+    view: "accounts",
+    label: "Comptes",
+    icon: Wallet,
+    children: [
+      { view: "accounts", label: "Comptes", icon: Wallet },
+      { view: "spending", label: "Dépenses", icon: Receipt },
+    ],
+  },
+  {
+    view: "investments",
+    label: "Placements",
+    icon: PieChart,
+    children: [{ view: "investments", label: "Placements", icon: PieChart }],
+  },
+  {
+    view: "projection",
+    label: "Projection",
+    icon: TrendingUp,
+    children: [{ view: "projection", label: "Projection", icon: TrendingUp }],
+  },
 ];
 
-/** Secondary navigation — in the sidebar on desktop, in the « Plus » sheet on
- *  a phone (the bottom bar keeps four items so it stays tappable at 390 px). */
-export const SECONDARY_NAV_ITEMS: NavItem[] = [
-  { view: "spending", label: "Dépenses", icon: Receipt },
-  { view: "method", label: "Méthode", icon: Compass },
-];
+/** Exact match for the root, prefix match elsewhere — `/placements/liste` lights up Placements. */
+export function isActivePath(pathname: string, view: NavView): boolean {
+  const path = NAV_PATHS[view];
+  return path === "/" ? pathname === "/" : pathname === path || pathname.startsWith(`${path}/`);
+}
+
+/** The group the current URL belongs to, if it is one of the four. */
+export function groupOf(pathname: string): NavGroup | null {
+  return NAV_GROUPS.find((g) => g.children.some((c) => isActivePath(pathname, c.view))) ?? null;
+}
 
 interface SidebarProps {
   /** Renders below the nav (typically a UserMenu). */
   footer?: React.ReactNode;
+  pathname: string;
 }
 
 /**
  * Desktop-only left sidebar (hidden md:flex).
  *
- * Mobile navigation is handled by BottomNav + MoreSheet — see AppShell.
+ * Mobile navigation is handled by BottomNav + SubNavSheet + MoreSheet — see AppShell.
  */
-export function Sidebar({ footer }: SidebarProps) {
+export function Sidebar({ footer, pathname }: SidebarProps) {
+  const active = groupOf(pathname);
   return (
     <aside className="hidden w-60 flex-col border-r border-border bg-card md:flex">
       {/* Logo */}
@@ -66,13 +119,25 @@ export function Sidebar({ footer }: SidebarProps) {
 
       {/* Nav */}
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        {NAV_ITEMS.map((item) => (
-          <SidebarLink key={item.view} item={item} />
-        ))}
-        <div className="my-2 border-t border-border" />
-        {SECONDARY_NAV_ITEMS.map((item) => (
-          <SidebarLink key={item.view} item={item} />
-        ))}
+        {NAV_GROUPS.map((group) => {
+          const unfolded = active?.view === group.view && group.children.length > 1;
+          return (
+            <div key={group.view}>
+              <SidebarLink item={group} active={active?.view === group.view} />
+              {unfolded && (
+                <div className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
+                  {group.children.map((child) => (
+                    <SidebarSubLink
+                      key={child.view}
+                      item={child}
+                      active={isActivePath(pathname, child.view)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </nav>
 
       {/* Footer (user menu, etc.) */}
@@ -81,22 +146,33 @@ export function Sidebar({ footer }: SidebarProps) {
   );
 }
 
-function SidebarLink({ item }: { item: NavItem }) {
+function SidebarLink({ item, active }: { item: NavItem; active: boolean }) {
   const Icon = item.icon;
   return (
     <NavLink
       to={NAV_PATHS[item.view]}
-      end={item.view === "overview"}
-      className={({ isActive }) =>
-        cn(
-          "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
-          isActive
-            ? "bg-accent font-medium text-accent-foreground"
-            : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-        )
-      }
+      className={cn(
+        "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+        active
+          ? "bg-accent font-medium text-accent-foreground"
+          : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+      )}
     >
       <Icon className="h-4 w-4" />
+      {item.label}
+    </NavLink>
+  );
+}
+
+function SidebarSubLink({ item, active }: { item: NavItem; active: boolean }) {
+  return (
+    <NavLink
+      to={NAV_PATHS[item.view]}
+      className={cn(
+        "flex w-full items-center rounded-md px-3 py-1.5 text-sm transition-colors",
+        active ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
+      )}
+    >
       {item.label}
     </NavLink>
   );
