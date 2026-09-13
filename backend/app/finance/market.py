@@ -90,7 +90,7 @@ def fetch_prices(
 
 
 def _file(key: tuple[str, str]) -> Path:
-    return _DIR / f"{hashlib.sha1(f'{key[0]}|{key[1]}'.encode()).hexdigest()}.csv"
+    return _DIR / f"{hashlib.sha256(f'{key[0]}|{key[1]}'.encode()).hexdigest()}.csv"
 
 
 def _read_disk(key: tuple[str, str]) -> tuple[datetime, pd.DataFrame] | None:
