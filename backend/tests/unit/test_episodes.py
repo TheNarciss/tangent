@@ -9,7 +9,7 @@ from app.finance import episodes, stress
 # A fall from 100 to 50 and back to 80, inside the window.
 LEVELS = pd.Series(
     [90.0, 100.0, 70.0, 50.0, 80.0],
-    index=pd.to_datetime(["2000-08-01", "2000-09-01", "2001-06-01", "2002-10-01", "2003-03-01"]),
+    index=pd.to_datetime(["2000-08-01", "2000-09-01", "2001-06-01", "2002-10-01", "2003-03-28"]),
 )
 
 
@@ -62,13 +62,26 @@ def test_an_unknown_provider_measures_nothing():
     assert episodes.measure("X", "bloomberg", "USD", ("2000-01-01", "2000-12-31")) is None
 
 
-def test_every_measured_class_also_has_a_declared_fallback():
-    """A source that does not answer must never blank out a class in an episode."""
+def test_no_replayable_class_can_ever_count_as_zero_loss():
+    """The guard against the worst possible answer: a pocket untouched by a crash.
+
+    Every class a line can land in must end up with a figure in every episode,
+    whether it declares one or borrows it. Adding a class to `class_map` and
+    forgetting its `returns` used to silently price it at zero.
+    """
     cfg = stress.config()
+    replayable = (
+        set(cfg.class_map.values())
+        | set(cfg.envelope_classes.values())
+        | set(cfg.account_classes.values())
+        | {cfg.default_asset_class, stress.FALLBACK_CLASS}
+    )
 
     for scenario in cfg.scenarios:
-        for asset_class in cfg.class_series:
-            assert asset_class in scenario.returns, f"{scenario.id} n'a pas de repli {asset_class}"
+        for asset_class in replayable:
+            declared = asset_class in scenario.returns
+            borrowed = cfg.fallback_class.get(asset_class) in scenario.returns
+            assert declared or borrowed, f"{scenario.id} chiffrerait {asset_class} à zéro"
 
 
 # ── La boucle ─────────────────────────────────────────────────────────────
@@ -98,10 +111,99 @@ def test_the_loop_falls_back_on_the_declared_figure(monkeypatch):
 def test_adding_a_class_needs_no_code(monkeypatch):
     """The loop reads the registry: a new entry is measured without touching Python."""
     cfg = stress.config().model_copy(deep=True)
-    cfg.class_series["equity_japan"] = stress.IndexSeries(
-        provider="fred", id="INVENTED", currency="USD"
-    )
+    cfg.class_series["equity_japan"] = [
+        stress.IndexSeries(provider="fred", id="INVENTED", currency="USD")
+    ]
     monkeypatch.setattr(episodes, "measure", lambda *a, **k: -0.4)
     scenario = next(s for s in cfg.scenarios if s.id == "gfc_2008")
 
     assert stress.measured_returns(scenario, cfg)["equity_japan"] == pytest.approx(-0.4)
+
+
+def test_a_currency_the_ecb_does_not_publish_is_not_measured(monkeypatch):
+    """Better no figure than a foreign move counted as if it were free."""
+    days = pd.date_range("2020-01-01", periods=40, freq="D")
+    monkeypatch.setattr(
+        episodes, "_levels", lambda *a, **k: pd.Series(range(100, 140), index=days, dtype=float)
+    )
+
+    assert episodes.measure("X", "yahoo", "KRW", ("2020-01-01", "2020-02-09")) is None
+
+
+def test_a_series_born_during_the_episode_measures_nothing(monkeypatch):
+    """A fund launched at the trough must not report the crisis as a 2 % dip."""
+    days = pd.date_range("2020-03-20", periods=200, freq="B")
+    monkeypatch.setattr(
+        episodes, "_levels", lambda *a, **k: pd.Series([100.0, 98.0] + [110.0] * 198, index=days)
+    )
+
+    assert episodes.measure("NEW.PA", "yahoo", "EUR", ("2020-02-19", "2020-03-23")) is None
+
+
+def test_a_series_that_ends_during_the_episode_measures_nothing(monkeypatch):
+    days = pd.date_range("2019-01-01", "2020-03-01", freq="B")
+    monkeypatch.setattr(episodes, "_levels", lambda *a, **k: pd.Series(100.0, index=days))
+
+    assert episodes.measure("DEAD.PA", "yahoo", "EUR", ("2020-02-19", "2020-03-23")) is None
+
+
+def test_a_series_starting_on_the_first_session_after_the_window_opens_is_fine(monkeypatch):
+    days = pd.date_range("2020-02-21", "2021-01-01", freq="B")  # window opens the 19th
+    levels = pd.Series(100.0, index=days)
+    levels.loc["2020-03-23":] = 70.0
+    monkeypatch.setattr(episodes, "_levels", lambda *a, **k: levels)
+
+    assert episodes.measure("X", "yahoo", "EUR", ("2020-02-19", "2020-03-23")) == pytest.approx(
+        -0.3
+    )
+
+
+# ── Les dates de la crise viennent de la série, pas d'une borne de mois ──────
+
+
+def test_the_window_is_the_deepest_fall_inside_the_span(monkeypatch):
+    days = pd.date_range("2008-01-01", "2009-12-31", freq="B")
+    levels = pd.Series(100.0, index=days)
+    levels.loc["2008-05-19":] = 110.0  # the peak
+    levels.loc["2008-06-01":] = 90.0
+    levels.loc["2009-03-09":] = 50.0  # the trough
+    levels.loc["2009-03-10":] = 70.0  # the rally that a month-end window would count
+    monkeypatch.setattr(episodes, "_levels", lambda *a, **k: levels)
+
+    assert episodes.peak_to_trough("X", "fred", "EUR", ("2008-01-01", "2009-06-30")) == (
+        "2008-05-19",
+        "2009-03-09",
+    )
+
+
+def test_a_series_that_never_falls_dates_nothing(monkeypatch):
+    days = pd.date_range("2020-01-01", periods=100, freq="B")
+    monkeypatch.setattr(
+        episodes, "_levels", lambda *a, **k: pd.Series(range(100), index=days, dtype=float)
+    )
+
+    assert episodes.peak_to_trough("X", "fred", "EUR", ("2020-01-01", "2020-05-01")) is None
+
+
+def test_the_dates_are_those_of_a_euro_investor(monkeypatch):
+    """A flat dollar index with a rising euro is a fall for us — dated accordingly."""
+    days = pd.date_range("2020-01-01", periods=60, freq="B")
+    monkeypatch.setattr(episodes, "_levels", lambda *a, **k: pd.Series(100.0, index=days))
+    rates = pd.Series([1.0] * 30 + [1.25] * 30, index=days)  # dollars per euro
+    monkeypatch.setattr(ecb, "named", lambda *a, **k: rates)
+
+    dated = episodes.peak_to_trough("X", "fred", "USD", ("2020-01-01", "2020-04-01"))
+
+    assert dated is not None
+    assert dated[1] == str(days[30].date())
+
+
+def test_a_local_currency_move_is_left_untouched(monkeypatch):
+    monkeypatch.setattr(fred, "series", lambda *a, **k: LEVELS)
+    monkeypatch.setattr(
+        ecb, "named", lambda *a, **k: pd.Series([1.0] * 4 + [1.25], index=LEVELS.index)
+    )
+
+    local = episodes.measure("X", "fred", "USD", ("2000-08-01", "2003-03-31"), in_euros=False)
+
+    assert local == pytest.approx(80.0 / 90.0 - 1.0)

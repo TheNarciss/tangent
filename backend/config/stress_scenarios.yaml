@@ -6,32 +6,29 @@
 # post-2020. On mappe chaque ligne vers une classe et on rejoue la classe,
 # comme le fait un gérant (« rejeu historique », vocabulaire EBA 2018).
 #
-# Tous les rendements sont pic-à-creux, **du point de vue d'un investisseur en
-# euros** : le change est déjà dedans. `equity_world_usd` est le même épisode
+# Une seule convention pour tout le tableau : d'un pic à un creux QUOTIDIENS,
+# **du point de vue d'un investisseur en euros** — le change est déjà dedans.
+# Les dates de chaque crise viennent de la série des actions monde
+# (`reference_class`) : `window` est seulement l'intervalle où les chercher.
+#
+# Les rendements écrits ci-dessous sont les REPLIS, utilisés quand une source
+# ne répond pas. Ils sont alignés sur ce que la boucle mesure en ligne, pour
+# qu'un même portefeuille donne le même chiffre connecté ou non. Seuls 1990 et
+# 1998 gardent les chiffres de l'étude (fin de mois) : l'euro n'existait pas,
+# il n'y a pas de série en euros à mesurer. `equity_world_usd` est le même épisode
 # vu d'un investisseur en dollars ; l'écart entre les deux est ce que la devise
 # a coûté ou rapporté.
 #
-# Deux classes ont leurs chiffres CALCULÉS et non recopiés de l'étude :
+# Les classes listées dans `class_series` ont leurs chiffres MESURÉS et non
+# recopiés : d'un bout à l'autre de la fenêtre, convertis en euros au cours BCE
+# de ces deux jours-là. Pas au pire moment de chaque classe : elles ne touchent
+# pas le fond le même jour — l'or a eu son pire moment en octobre 2008, les
+# actions en mars 2009 — et additionner les pires moments décrirait une journée
+# qui n'a jamais existé. En euros à partir de 1999, non mesurées avant : la
+# monnaie n'existait pas.
 #
-#   `gold`           — fixings LBMA (ADR-024), composés sur la fenêtre.
-#   `equity_us_tech` — indice NASDAQ 100 quotidien, servi par FRED depuis 1986.
-#
-# Les deux sont mesurés d'un bout à l'autre de la fenêtre, et convertis en euros
-# au cours BCE de ces deux jours-là. Pas au pire moment de chaque classe : elles
-# ne touchent pas le fond le même jour — l'or a eu son pire moment en octobre
-# 2008, les actions en mars 2009 — et additionner les pires moments décrirait
-# une journée qui n'a jamais existé.
-#
-# Les deux sont en euros à partir de 1999 et en dollars avant : la monnaie
-# n'existait pas.
-#
-# Pourquoi le Nasdaq et pas l'Europe ni le Japon : FRED ne sert ces régions
-# qu'en mensuel (séries OECD), et une fenêtre en fin de mois ne se compare pas
-# à un pic-à-creux. Un indice quotidien, ou rien.
-#
-# Source : docs/ETUDE_METHODE_FINANCIERE_2026-09.md §7.6 (MSCI World EUR et USD,
-# Bloomberg Euro Aggregate, Fama-French développés raccordés en euro synthétique
-# avant 1999). Dernière revue : 2026-09.
+# Source des replis non mesurés (obligations, fonds euros, 1990, 1998) :
+# docs/ETUDE_METHODE_FINANCIERE_2026-09.md §7.6. Dernière revue : 2026-09.
 #
 # Non rejoués faute de chiffre ferme : 1973-74 (stagflation, ~−45 à −50 % en DEM)
 # et 1987 (~−28 à −30 %). L'étude ne donne qu'une fourchette ; on préfère une
@@ -42,17 +39,17 @@
 # premier utilisateur. Ici on dit seulement comment une classe reconnue se
 # rejoue dans les scénarios ci-dessous.
 #
-# Toutes les actions se rejouent en actions monde : l'étude ne fournit pas de
-# série par région et par épisode. Un fonds Nasdaq ou Europe est donc rejoué
-# avec l'amplitude du monde, ce qui sous-estime les fonds sectoriels — c'est
-# écrit sous le tableau dans l'app.
+# Chaque région se rejoue sur son propre indice quand une série le permet, et
+# emprunte l'amplitude du monde sinon (voir `fallback_class`). Un fonds
+# sectoriel n'a pas d'indice à lui et reste rejoué en actions monde, ce qui
+# sous-estime son amplitude — c'est écrit sous le tableau dans l'app.
 class_map:
   equity_world: equity_world
-  equity_us: equity_world
-  equity_us_tech: equity_us_tech   # rejoué sur le vrai NASDAQ 100, pas sur le monde
-  equity_europe: equity_world
-  equity_japan: equity_world
-  equity_emerging: equity_world
+  equity_us: equity_us
+  equity_us_tech: equity_us_tech
+  equity_europe: equity_europe
+  equity_japan: equity_japan
+  equity_emerging: equity_emerging
   equity_sector: equity_world     # un pari sectoriel bouge plus que le monde : sous-estimé ici
   bonds: bonds_euro
   money_market: cash
@@ -100,19 +97,42 @@ account_classes:
 #
 # Ajouter une classe ici suffit : rien à coder, rien à recalculer à la main.
 #
-# `fred` sert des séries quotidiennes sans clé et sans bridage pour les indices
-# américains. L'Europe et le Japon n'y existent qu'en mensuel (séries OECD), et
-# une fenêtre en fin de mois ne se compare pas à un pic-à-creux : tant qu'on n'a
-# pas de série quotidienne pour eux, ces classes restent déclarées.
+# Chaque classe liste des CANDIDATS, essayés dans l'ordre : le premier dont la
+# série couvre la fenêtre gagne. Personne n'a à vérifier à la main jusqu'où
+# remonte un indice — la boucle s'en charge, épisode par épisode. Un candidat
+# qui ne répond pas, ou qui commence trop tard, est simplement sauté.
+#
+# `fred` sert des séries quotidiennes sans clé et sans bridage, mais seulement
+# pour les indices américains ; `yahoo` couvre le reste du monde sans contrat de
+# service, donc jamais seul quand une source stable existe.
 class_series:
+  equity_world:
+    - { provider: ken_french, id: equity_world, currency: USD }   # marchés développés, quotidien depuis 1990-07
+  equity_world_usd:
+    - { provider: ken_french, id: equity_world, currency: USD, in_euros: false }
   equity_us_tech:
-    provider: fred
-    id: NASDAQ100        # NASDAQ 100, quotidien depuis 1986
-    currency: USD
+    - { provider: fred,  id: NASDAQ100, currency: USD }   # quotidien depuis 1986
+    - { provider: yahoo, id: "^NDX",    currency: USD }
+  equity_us:
+    - { provider: yahoo, id: "^GSPC",   currency: USD }
+  equity_europe:
+    - { provider: yahoo, id: "^STOXX",  currency: EUR }   # STOXX Europe 600
+  equity_japan:
+    - { provider: yahoo, id: "^N225",   currency: JPY }
+  equity_emerging:
+    - { provider: yahoo, id: "EEM",     currency: USD }   # faute d'indice, l'ETF de référence
   gold:
-    provider: lbma
-    id: gold             # fixing LBMA de l'après-midi, en euros depuis 1999
-    currency: EUR
+    - { provider: lbma,  id: gold,      currency: EUR }   # fixing de l'après-midi
+
+# De qui une classe emprunte son chiffre quand ni sa ligne ni son indice n'ont
+# pu être mesurés sur cet épisode. Sans cette table, une classe rejouée sans
+# `returns` compterait pour ZÉRO perte : la poche passerait pour immunisée en
+# pleine crise, ce qui est le pire mensonge que puisse produire un stress test.
+fallback_class:
+  equity_us: equity_world
+  equity_europe: equity_world
+  equity_japan: equity_world
+  equity_emerging: equity_world
 
 scenarios:
   - id: gulf_1990
@@ -137,7 +157,7 @@ scenarios:
     start: "août 2000"
     end: "mars 2003"
     description: "Trente et un mois de glissade, la pire baisse des quarante dernières années pour un Européen"
-    returns: { equity_world: -0.525, equity_world_usd: -0.446, bonds_euro: 0.16, fonds_euros: 0.12, cash: 0.08, gold: 0.027, equity_us_tech: -0.751 }
+    returns: { equity_world: -0.560, equity_world_usd: -0.440, bonds_euro: 0.16, fonds_euros: 0.12, cash: 0.08, gold: 0.002, equity_us_tech: -0.807 }
 
   - id: gfc_2008
     label: "Crise financière (2007-2009)"
@@ -145,7 +165,7 @@ scenarios:
     start: "octobre 2007"
     end: "mars 2009"
     description: "Les obligations et le dollar ont amorti le choc"
-    returns: { equity_world: -0.482, equity_world_usd: -0.536, bonds_euro: 0.06, fonds_euros: 0.06, cash: 0.05, gold: 0.321, equity_us_tech: -0.375 }
+    returns: { equity_world: -0.513, equity_world_usd: -0.564, bonds_euro: 0.06, fonds_euros: 0.06, cash: 0.05, gold: 0.396, equity_us_tech: -0.463 }
 
   - id: euro_2011
     label: "Crise de la dette en zone euro (2011)"
@@ -153,7 +173,7 @@ scenarios:
     start: "avril 2011"
     end: "septembre 2011"
     description: "Risque souverain domestique : l'Italie et l'Espagne perdent 10 à 15 %"
-    returns: { equity_world: -0.153, equity_world_usd: -0.204, bonds_euro: 0.03, fonds_euros: 0.02, cash: 0.01, gold: 0.197, equity_us_tech: -0.044 }
+    returns: { equity_world: -0.177, equity_world_usd: -0.162, bonds_euro: 0.03, fonds_euros: 0.02, cash: 0.01, gold: 0.240, equity_us_tech: -0.166 }
 
   - id: china_2015
     label: "Chine et pétrole (2015-2016)"
@@ -161,7 +181,7 @@ scenarios:
     start: "avril 2015"
     end: "février 2016"
     description: "Deux corrections de 10 % en six mois"
-    returns: { equity_world: -0.121, equity_world_usd: -0.125, bonds_euro: 0.0, fonds_euros: 0.01, cash: 0.0, gold: 0.019, equity_us_tech: -0.037 }
+    returns: { equity_world: -0.226, equity_world_usd: -0.170, bonds_euro: 0.0, fonds_euros: 0.01, cash: 0.0, gold: -0.022, equity_us_tech: -0.165 }
 
   - id: q4_2018
     label: "Quatrième trimestre 2018"
@@ -169,7 +189,7 @@ scenarios:
     start: "septembre 2018"
     end: "décembre 2018"
     description: "Resserrement monétaire et guerre commerciale"
-    returns: { equity_world: -0.127, equity_world_usd: -0.141, bonds_euro: 0.004, fonds_euros: 0.005, cash: 0.0, gold: 0.080, equity_us_tech: -0.161 }
+    returns: { equity_world: -0.168, equity_world_usd: -0.178, bonds_euro: 0.004, fonds_euros: 0.005, cash: 0.0, gold: 0.057, equity_us_tech: -0.217 }
 
   - id: covid_2020
     label: "Krach du COVID (février-mars 2020)"
@@ -179,7 +199,7 @@ scenarios:
     # Le chiffre USD publié est quotidien (−34 %), l'euro est en fin de mois :
     # les deux ne sont pas comparables, donc pas d'effet devise affiché ici.
     description: "La baisse de 30 % la plus rapide de l'histoire"
-    returns: { equity_world: -0.204, bonds_euro: -0.05, fonds_euros: 0.0, cash: 0.0, gold: -0.051, equity_us_tech: -0.278 }
+    returns: { equity_world: -0.336, equity_world_usd: -0.337, bonds_euro: -0.05, fonds_euros: 0.0, cash: 0.0, gold: -0.051, equity_us_tech: -0.278 }
 
   - id: inflation_2022
     label: "Inflation et remontée des taux (2022)"
@@ -187,7 +207,7 @@ scenarios:
     start: "janvier 2022"
     end: "octobre 2022"
     description: "Les deux jambes du 60/40 tombent ensemble, le seul régime d'inflation de la série"
-    returns: { equity_world: -0.142, equity_world_usd: -0.255, bonds_euro: -0.17, fonds_euros: 0.0, cash: 0.0, gold: 0.032, equity_us_tech: -0.208 }
+    returns: { equity_world: -0.170, equity_world_usd: -0.226, bonds_euro: -0.17, fonds_euros: 0.0, cash: 0.0, gold: 0.088, equity_us_tech: -0.256 }
 
   - id: tariffs_2025
     label: "Droits de douane (2025)"
@@ -195,4 +215,4 @@ scenarios:
     start: "février 2025"
     end: "avril 2025"
     description: "C'est la devise, pas les actions, qui a fait la perte en euros"
-    returns: { equity_world: -0.118, equity_world_usd: -0.05, bonds_euro: 0.0, fonds_euros: 0.0, cash: 0.0, gold: 0.054, equity_us_tech: -0.170 }
+    returns: { equity_world: -0.200, equity_world_usd: -0.156, bonds_euro: 0.0, fonds_euros: 0.0, cash: 0.0, gold: -0.017, equity_us_tech: -0.250 }

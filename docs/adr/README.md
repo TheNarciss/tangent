@@ -57,3 +57,4 @@ Template : [`TEMPLATE.md`](./TEMPLATE.md).
 - [ADR-027](027-assumptions-follow-the-class.md) — Les hypothèses suivent la classe d'actifs, plus le ticker
 - [ADR-028](028-one-voice-per-question.md) — Une seule voix par question, un seul sujet par écran
 - [ADR-029](029-measure-the-episodes.md) — Mesurer les crises sur un indice, plutôt que recopier des chiffres
+- [ADR-030](030-the-finest-series-that-exists.md) — Chercher la série la plus fine qui existe, sans table tenue à la main

@@ -7,16 +7,20 @@ impossible — which is why this screen used to hold three windows, all after
 line to a class and replaying the class is what a manager does («  rejeu
 historique », EBA 2018 vocabulary), and it works from the first day.
 
-Every figure in `config/stress_scenarios.yaml` is peak-to-trough **for a euro
-investor**, so the currency move is already inside it. The same episode seen
-from a dollar investor is stored next to it, and the gap between the two is
-what the dollar cost or paid — in 2008 it cushioned five points, in 2000-03
-it deepened the fall by eight, and in 2025 it *was* the loss.
+Every figure is peak-to-trough on daily data **for a euro investor**, so the
+currency move is already inside it. The dates of each crisis come from the
+world-equity series itself; every class — and every line whose own history
+reaches back that far — is then measured between the same two days
+(`episodes`). The figures written in `config/stress_scenarios.yaml` are the
+fallbacks, aligned on what the loop measures. The same episode seen from a
+dollar investor sits next to the euro one, and the gap is what the dollar cost
+or paid — in 2008 it cushioned five points, in 2000-03 it deepened the fall.
 """
 
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
@@ -50,6 +54,7 @@ class IndexSeries(BaseModel):
     provider: str
     id: str
     currency: str = "USD"
+    in_euros: bool = True  # False keeps the local-currency move, for the currency effect
 
 
 class Scenario(BaseModel):
@@ -61,26 +66,45 @@ class Scenario(BaseModel):
     description: str
     returns: dict[str, float]
 
-    def ret(self, asset_class: str, measured: dict[str, float] | None = None) -> float:
-        """What the class did: measured on its own index when we could, declared otherwise."""
+    def ret(
+        self,
+        asset_class: str,
+        measured: dict[str, float] | None = None,
+        borrows_from: dict[str, str] | None = None,
+    ) -> float:
+        """What the class did: measured on its own index when we could, declared otherwise.
+
+        A class with no declared figure borrows one, rather than defaulting to
+        zero: a pocket reported as untouched by a crash is a worse answer than
+        a pocket reported with its neighbour's amplitude.
+        """
         if measured and asset_class in measured:
             return measured[asset_class]
-        return self.returns.get(asset_class, 0.0)
+        if asset_class in self.returns:
+            return self.returns[asset_class]
+        lends = (borrows_from or {}).get(asset_class)
+        if lends is not None:
+            return self.returns.get(lends, 0.0)
+        return 0.0
 
-    @property
-    def currency_effect(self) -> float | None:
+    def currency_effect(self, measured: dict[str, float] | None = None) -> float | None:
         """Points the euro/dollar move added to (or took from) world equities.
 
-        None when the episode has no comparable dollar figure: comparing a
-        month-end loss with a daily one would invent a number.
+        Both legs come from the same source — measured together, or declared
+        together. None when the episode has no comparable dollar figure.
         """
+        m = measured or {}
+        if "equity_world" in m and "equity_world_usd" in m:
+            return m["equity_world"] - m["equity_world_usd"]
         if "equity_world_usd" not in self.returns:
             return None
         return self.returns["equity_world"] - self.returns["equity_world_usd"]
 
 
 class ScenariosConfig(BaseModel):
-    class_series: dict[str, IndexSeries] = Field(default_factory=dict)
+    class_series: dict[str, list[IndexSeries]] = Field(default_factory=dict)
+    fallback_class: dict[str, str] = Field(default_factory=dict)
+    reference_class: str = "equity_world"  # whose series dates the crises
     class_map: dict[str, str]
     default_asset_class: str
     envelope_classes: dict[str, str]
@@ -112,20 +136,34 @@ def config() -> ScenariosConfig:
     return _CONFIG
 
 
-def exposure(wealth: Wealth, cfg: ScenariosConfig | None = None) -> dict[str, float]:
-    """€ held in each asset class, across the whole patrimony.
+@dataclass(frozen=True)
+class Pocket:
+    """One slice of the patrimony, and the finest history we could reach for it.
+
+    `quote` is the line's own Yahoo symbol when OpenFIGI named a venue we can
+    read. A pocket that has one is measured on its actual price; the rest fall
+    back to their asset class.
+    """
+
+    asset_class: str
+    amount: float
+    quote: classification.Quote | None = None
+
+
+def pockets(wealth: Wealth, cfg: ScenariosConfig | None = None) -> list[Pocket]:
+    """Every euro of the patrimony, split into what a scenario can price.
 
     A listed line takes the class of what it actually is (ADR-025), a wrapper
-    valued in bulk the class of its type, an envelope the class of its type. Everything is
-    counted, so the euro amount a scenario produces is about the patrimony
-    the user actually has, not about one pocket of it.
+    valued in bulk the class of its type, an envelope the class of its type.
+    Everything is counted, so the euro amount a scenario produces is about the
+    patrimony the user actually has, not about one pocket of it.
     """
     c = cfg or config()
-    by_class: dict[str, float] = {}
+    out: list[Pocket] = []
 
-    def add(asset_class: str, amount: float) -> None:
+    def add(asset_class: str, amount: float, quote: classification.Quote | None = None) -> None:
         if amount:
-            by_class[asset_class] = by_class.get(asset_class, 0.0) + amount
+            out.append(Pocket(asset_class, amount, quote))
 
     # Classified in one batch: a Pydantic position is not hashable, so the
     # answers are consumed in the same order the questions were asked.
@@ -135,9 +173,11 @@ def exposure(wealth: Wealth, cfg: ScenariosConfig | None = None) -> dict[str, fl
     for account in wealth.investment_accounts:
         if account.positions:
             for position in account.positions:
+                known = next(what)
                 add(
-                    c.class_map.get(next(what).asset_class, c.default_asset_class),
+                    c.class_map.get(known.asset_class, c.default_asset_class),
                     position.current_value,
+                    known.quote,
                 )
         else:
             add(c.account_classes.get(account.account_type, c.default_asset_class), account.balance)
@@ -145,7 +185,19 @@ def exposure(wealth: Wealth, cfg: ScenariosConfig | None = None) -> dict[str, fl
         add(FALLBACK_CLASS, cash.balance)
     for envelope in wealth.envelopes:
         add(c.envelope_classes.get(envelope.envelope_type, FALLBACK_CLASS), envelope.balance)
-    return by_class
+    return out
+
+
+def exposure(wealth: Wealth, cfg: ScenariosConfig | None = None) -> dict[str, float]:
+    """€ held in each asset class, across the whole patrimony."""
+    return _by_class(pockets(wealth, cfg))
+
+
+def _by_class(held: list[Pocket]) -> dict[str, float]:
+    totals: dict[str, float] = {}
+    for pocket in held:
+        totals[pocket.asset_class] = totals.get(pocket.asset_class, 0.0) + pocket.amount
+    return totals
 
 
 def measured_returns(scenario: Scenario, cfg: ScenariosConfig | None = None) -> dict[str, float]:
@@ -159,17 +211,60 @@ def measured_returns(scenario: Scenario, cfg: ScenariosConfig | None = None) -> 
     if scenario.window is None:
         return {}
 
+    window = window_of(scenario, c)
     out: dict[str, float] = {}
-    for asset_class, series in c.class_series.items():
-        fall = episodes.measure(
-            series.id,
-            series.provider,
-            series.currency,
-            (scenario.window.since, scenario.window.until),
-        )
-        if fall is not None:
-            out[asset_class] = fall
+    for asset_class, candidates in c.class_series.items():
+        for series in candidates:
+            fall = episodes.measure(
+                series.id, series.provider, series.currency, window, in_euros=series.in_euros
+            )
+            if fall is not None:
+                out[asset_class] = fall
+                break
     return out
+
+
+# The dates of each crisis, derived once per process from the reference series.
+_WINDOWS: dict[str, tuple[str, str]] = {}
+
+
+def window_of(scenario: Scenario, cfg: ScenariosConfig | None = None) -> tuple[str, str]:
+    """The two days every class is measured between.
+
+    The declared window is a search span; the crisis's own peak and trough
+    inside it come from the reference series (world equities in euros). When
+    that series is out of reach the span itself is used, as before.
+    """
+    c = cfg or config()
+    if scenario.window is None:
+        raise ConfigurationError(f"Scénario {scenario.id} sans fenêtre.")
+    span = (scenario.window.since, scenario.window.until)
+    if scenario.id in _WINDOWS:
+        return _WINDOWS[scenario.id]
+    for series in c.class_series.get(c.reference_class, []):
+        dated = episodes.peak_to_trough(series.id, series.provider, series.currency, span)
+        if dated is not None:
+            _WINDOWS[scenario.id] = dated
+            return dated
+    return span
+
+
+def measures_its_own_price(
+    quote: classification.Quote | None, cfg: ScenariosConfig | None = None
+) -> bool:
+    """True when this exact line has a price history reaching at least one episode.
+
+    What the screen needs to say « mesurée » honestly: a line quoted on a venue
+    we can read, whose history is old enough to have lived through a crisis.
+    """
+    if quote is None:
+        return False
+    c = cfg or config()
+    return any(
+        s.window is not None
+        and episodes.measure(quote.ticker, "yahoo", quote.currency, window_of(s, c)) is not None
+        for s in c.scenarios
+    )
 
 
 def measured_classes(cfg: ScenariosConfig | None = None) -> list[str]:
@@ -183,20 +278,39 @@ def measured_classes(cfg: ScenariosConfig | None = None) -> list[str]:
     return seen
 
 
+def pocket_return(
+    pocket: Pocket, scenario: Scenario, measured: dict[str, float] | None = None
+) -> float:
+    """What this slice did, measured as finely as the sources allow.
+
+    Three levels, tried in order and none of them curated by hand: the line's
+    own price when Yahoo has it back that far, the class's index when a
+    registered series covers the window, the study's declared figure otherwise.
+    """
+    if pocket.quote is not None and scenario.window is not None:
+        own = episodes.measure(
+            pocket.quote.ticker, "yahoo", pocket.quote.currency, window_of(scenario)
+        )
+        if own is not None:
+            return own
+    return scenario.ret(pocket.asset_class, measured, config().fallback_class)
+
+
 def compute(wealth: Wealth) -> list[StressTestResult]:
     """Every scenario, worst loss first, in € and in % of the patrimony."""
     cfg = config()
-    by_class = exposure(wealth, cfg)
-    total = sum(by_class.values())
+    held = pockets(wealth, cfg)
+    total = sum(p.amount for p in held)
     if total <= 0:
         return []
+    episodes.prime([p.quote.ticker for p in held if p.quote is not None])
 
     results: list[StressTestResult] = []
     for scenario in cfg.scenarios:
         measured = measured_returns(scenario, cfg)
-        loss_eur = sum(amount * scenario.ret(cls, measured) for cls, amount in by_class.items())
-        equity_eur = by_class.get("equity_world", 0.0)
-        effect = scenario.currency_effect
+        loss_eur = sum(p.amount * pocket_return(p, scenario, measured) for p in held)
+        equity_eur = sum(p.amount for p in held if p.asset_class.startswith("equity_"))
+        effect = scenario.currency_effect(measured)
         results.append(
             StressTestResult(
                 id=scenario.id,
@@ -215,6 +329,6 @@ def compute(wealth: Wealth) -> list[StressTestResult]:
         "stress: %d scenarios on %.0f € (%s)",
         len(results),
         total,
-        ", ".join(f"{k} {v:.0f}" for k, v in sorted(by_class.items())),
+        ", ".join(f"{k} {v:.0f}" for k, v in sorted(_by_class(held).items())),
     )
     return results
