@@ -39,6 +39,29 @@ jobs:
       # On réessaie donc, en laissant à GitHub le temps de souffler entre deux
       # tentatives. L'action est idempotente : une tentative qui a créé le tag
       # avant d'échouer ne recrée rien à la suivante.
+      # The retry loop below hides the root cause of a deterministic failure.
+      # This step says, in two HTTP status codes and nothing else, whether
+      # the token can see the repository (200 / 401 bad value / 404 not in
+      # its repository access) and whether it can write to it (201 / 403 no
+      # Contents: write). The write probe creates an orphan blob nobody can
+      # reach; GitHub garbage-collects it.
+      - name: Vérifier le jeton
+        continue-on-error: true
+        env:
+          TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          KIND: ${{ secrets.RELEASE_PLEASE_TOKEN && 'RELEASE_PLEASE_TOKEN' || 'GITHUB_TOKEN' }}
+        run: |
+          echo "jeton utilisé : $KIND"
+          read=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}")
+          echo "lecture du dépôt : HTTP $read (200 attendu ; 401 = valeur invalide ; 404 = dépôt hors du jeton)"
+          write=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" \
+            -d '{"content":"sonde","encoding":"utf-8"}' \
+            "https://api.github.com/repos/${{ github.repository }}/git/blobs")
+          echo "écriture dans le dépôt : HTTP $write (201 attendu ; 403 = pas de Contents: write)"
+
       - id: attempt1
         continue-on-error: true
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
