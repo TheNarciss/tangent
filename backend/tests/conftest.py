@@ -75,12 +75,21 @@ def _no_outbound_http(monkeypatch):
     patches its own provider (`ecb.named`, `fred.named`, …).
     """
     from app.data import http as data_http
-    from app.errors import DataSourceError
+    from app.errors import DataSourceError, MarketDataError
+    from app.finance import episodes, market
 
     def _blocked(*args, **kwargs):
         raise DataSourceError("réseau coupé dans les tests")
 
+    def _no_market(*args, **kwargs):
+        raise MarketDataError("Yahoo coupé dans les tests")
+
+    # yfinance does not go through `app.data.http`: it is cut on its own, and
+    # the stress replay then keeps every declared figure.
     monkeypatch.setattr(data_http, "_request", _blocked)
+    monkeypatch.setattr(market, "fetch_prices", _no_market)
     data_http.clear_cache()
+    episodes._QUOTED.clear()
     yield
     data_http.clear_cache()
+    episodes._QUOTED.clear()

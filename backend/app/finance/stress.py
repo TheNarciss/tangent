@@ -275,6 +275,7 @@ def compute(wealth: Wealth) -> list[StressTestResult]:
     total = sum(p.amount for p in held)
     if total <= 0:
         return []
+    episodes.prime([p.quote.ticker for p in held if p.quote is not None])
 
     results: list[StressTestResult] = []
     for scenario in cfg.scenarios:

@@ -9,7 +9,7 @@ from app.finance import episodes, stress
 # A fall from 100 to 50 and back to 80, inside the window.
 LEVELS = pd.Series(
     [90.0, 100.0, 70.0, 50.0, 80.0],
-    index=pd.to_datetime(["2000-08-01", "2000-09-01", "2001-06-01", "2002-10-01", "2003-03-01"]),
+    index=pd.to_datetime(["2000-08-01", "2000-09-01", "2001-06-01", "2002-10-01", "2003-03-28"]),
 )
 
 
@@ -129,3 +129,31 @@ def test_a_currency_the_ecb_does_not_publish_is_not_measured(monkeypatch):
     )
 
     assert episodes.measure("X", "yahoo", "KRW", ("2020-01-01", "2020-02-09")) is None
+
+
+def test_a_series_born_during_the_episode_measures_nothing(monkeypatch):
+    """A fund launched at the trough must not report the crisis as a 2 % dip."""
+    days = pd.date_range("2020-03-20", periods=200, freq="B")
+    monkeypatch.setattr(
+        episodes, "_levels", lambda *a, **k: pd.Series([100.0, 98.0] + [110.0] * 198, index=days)
+    )
+
+    assert episodes.measure("NEW.PA", "yahoo", "EUR", ("2020-02-19", "2020-03-23")) is None
+
+
+def test_a_series_that_ends_during_the_episode_measures_nothing(monkeypatch):
+    days = pd.date_range("2019-01-01", "2020-03-01", freq="B")
+    monkeypatch.setattr(episodes, "_levels", lambda *a, **k: pd.Series(100.0, index=days))
+
+    assert episodes.measure("DEAD.PA", "yahoo", "EUR", ("2020-02-19", "2020-03-23")) is None
+
+
+def test_a_series_starting_on_the_first_session_after_the_window_opens_is_fine(monkeypatch):
+    days = pd.date_range("2020-02-21", "2021-01-01", freq="B")  # window opens the 19th
+    levels = pd.Series(100.0, index=days)
+    levels.loc["2020-03-23":] = 70.0
+    monkeypatch.setattr(episodes, "_levels", lambda *a, **k: levels)
+
+    assert episodes.measure("X", "yahoo", "EUR", ("2020-02-19", "2020-03-23")) == pytest.approx(
+        -0.3
+    )

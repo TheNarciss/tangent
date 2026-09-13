@@ -14,6 +14,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
+import pandas as pd
 import pytest
 
 from app.errors import MarketDataError
@@ -81,3 +82,21 @@ def test_the_declared_figures_are_unchanged_when_no_source_answers(monkeypatch):
     pocket = stress.Pocket("equity_world", 1_000.0)
 
     assert stress.pocket_return(pocket, scenario) == pytest.approx(scenario.returns["equity_world"])
+
+
+def test_the_lines_of_a_portfolio_are_fetched_in_one_call(monkeypatch):
+    calls: list[list[str]] = []
+
+    def batch(tickers: list[str], **kwargs: object) -> pd.DataFrame:
+        calls.append(list(tickers))
+        days = pd.date_range("2000-01-01", "2026-01-01", freq="B")
+        return pd.DataFrame({t: 100.0 for t in tickers}, index=days)
+
+    episodes._QUOTED.clear()
+    monkeypatch.setattr(market, "fetch_prices", batch)
+
+    episodes.prime(["A.PA", "B.PA", "A.PA"])
+    episodes.measure("A.PA", "yahoo", "EUR", ("2020-02-19", "2020-03-23"))
+    episodes.measure("B.PA", "yahoo", "EUR", ("2008-06-01", "2009-03-09"))
+
+    assert calls == [["A.PA", "B.PA"]]

@@ -6,28 +6,21 @@
 # post-2020. On mappe chaque ligne vers une classe et on rejoue la classe,
 # comme le fait un gérant (« rejeu historique », vocabulaire EBA 2018).
 #
-# Tous les rendements sont pic-à-creux, **du point de vue d'un investisseur en
-# euros** : le change est déjà dedans. `equity_world_usd` est le même épisode
+# Les rendements DÉCLARÉS ci-dessous sont ceux de l'étude : pic-à-creux sur
+# données de fin de mois, **du point de vue d'un investisseur en euros** — le
+# change est déjà dedans. Les rendements MESURÉS (voir `class_series`) sont
+# pris d'un bout à l'autre de la fenêtre sur données quotidiennes : les deux
+# conventions ne coïncident pas exactement, et l'ADR-030 le dit. `equity_world_usd` est le même épisode
 # vu d'un investisseur en dollars ; l'écart entre les deux est ce que la devise
 # a coûté ou rapporté.
 #
-# Deux classes ont leurs chiffres CALCULÉS et non recopiés de l'étude :
-#
-#   `gold`           — fixings LBMA (ADR-024), composés sur la fenêtre.
-#   `equity_us_tech` — indice NASDAQ 100 quotidien, servi par FRED depuis 1986.
-#
-# Les deux sont mesurés d'un bout à l'autre de la fenêtre, et convertis en euros
-# au cours BCE de ces deux jours-là. Pas au pire moment de chaque classe : elles
-# ne touchent pas le fond le même jour — l'or a eu son pire moment en octobre
-# 2008, les actions en mars 2009 — et additionner les pires moments décrirait
-# une journée qui n'a jamais existé.
-#
-# Les deux sont en euros à partir de 1999 et en dollars avant : la monnaie
-# n'existait pas.
-#
-# Pourquoi le Nasdaq et pas l'Europe ni le Japon : FRED ne sert ces régions
-# qu'en mensuel (séries OECD), et une fenêtre en fin de mois ne se compare pas
-# à un pic-à-creux. Un indice quotidien, ou rien.
+# Les classes listées dans `class_series` ont leurs chiffres MESURÉS et non
+# recopiés : d'un bout à l'autre de la fenêtre, convertis en euros au cours BCE
+# de ces deux jours-là. Pas au pire moment de chaque classe : elles ne touchent
+# pas le fond le même jour — l'or a eu son pire moment en octobre 2008, les
+# actions en mars 2009 — et additionner les pires moments décrirait une journée
+# qui n'a jamais existé. En euros à partir de 1999, non mesurées avant : la
+# monnaie n'existait pas.
 #
 # Source : docs/ETUDE_METHODE_FINANCIERE_2026-09.md §7.6 (MSCI World EUR et USD,
 # Bloomberg Euro Aggregate, Fama-French développés raccordés en euro synthétique

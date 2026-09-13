@@ -37,19 +37,29 @@ logger = logging.getLogger(__name__)
 _EURO_FROM = date(1999, 1, 4)
 
 
+# A series may start a few days after the window opens (a holiday, a weekend)
+# and still cover the episode. Any later and it is a series born *during* the
+# crisis, which would report only the part it saw.
+_GRACE = pd.Timedelta(days=7)
+
+
 def measure(series_id: str, provider: str, currency: str, window: tuple[str, str]) -> float | None:
-    """Peak-to-trough return inside the window, in euros. None when unmeasurable."""
+    """Return from one end of the window to the other, in euros. None when unmeasurable."""
     try:
         levels = _levels(provider, series_id, currency)
     except DataSourceError:
         logger.warning("série %s indisponible", series_id)
         return None
-    if levels is None:
+    if levels is None or len(levels) < 2:
         return None
 
-    inside = levels.loc[window[0] : window[1]]
+    since, until = pd.Timestamp(window[0]), pd.Timestamp(window[1])
+    if levels.index[0] > since + _GRACE or levels.index[-1] < until - _GRACE:
+        return None  # the series does not cover the whole episode
+
+    inside = levels.loc[since:until]
     if len(inside) < 2:
-        return None  # the series does not reach this episode
+        return None
 
     first_day, last_day = inside.index[0], inside.index[-1]
     move = float(inside.iloc[-1] / inside.iloc[0] - 1.0)
@@ -78,6 +88,34 @@ _QUOTED: dict[str, tuple[datetime, pd.Series | None]] = {}
 _QUOTED_TTL = timedelta(hours=1)
 
 
+def prime(tickers: list[str]) -> None:
+    """Fetch several lines in one round trip, so a page costs one call, not one per line.
+
+    Best effort: a batch Yahoo rejects (one delisted symbol fails the whole
+    download) is simply not primed, and each line is then asked for on its own.
+    """
+    from . import market
+
+    wanted = [t for t in dict.fromkeys(tickers) if _fresh(t) is None]
+    if not wanted:
+        return
+    try:
+        prices = market.fetch_prices(wanted, period="max")
+    except AppError:
+        return
+    now = datetime.now()
+    for ticker in wanted:
+        if ticker in prices.columns:
+            _QUOTED[ticker] = (now, prices[ticker].dropna())
+
+
+def _fresh(ticker: str) -> tuple[datetime, pd.Series | None] | None:
+    cached = _QUOTED.get(ticker)
+    if cached and datetime.now() - cached[0] < _QUOTED_TTL:
+        return cached
+    return None
+
+
 def _quoted(ticker: str) -> pd.Series | None:
     """One line's own price history. None when Yahoo does not know it.
 
@@ -87,8 +125,8 @@ def _quoted(ticker: str) -> pd.Series | None:
     """
     from . import market
 
-    cached = _QUOTED.get(ticker)
-    if cached and datetime.now() - cached[0] < _QUOTED_TTL:
+    cached = _fresh(ticker)
+    if cached:
         return cached[1]
 
     levels: pd.Series | None
