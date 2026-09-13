@@ -25,17 +25,14 @@ export function Spending() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Dépenses</h1>
-          <p className="text-sm text-muted-foreground">
-            Ce qui entre et sort de tes comptes courants. Un virement vers un autre de tes comptes
-            connectés, ton épargne ou un remboursement de prêt n'est pas une dépense. Un virement
-            vers un compte que Tangent ne connaît pas en est une : l'argent est parti.
-          </p>
-        </div>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="max-w-prose text-sm text-muted-foreground">
+          Un virement vers un autre de tes comptes connectés, ton épargne ou un remboursement de
+          prêt n'est pas une dépense. Un virement vers un compte que Tangent ne connaît pas en est
+          une : l'argent est parti.
+        </p>
         {/* One filter row above everything it scopes. */}
-        <div className="flex items-center gap-1 rounded-md border p-0.5 text-xs">
+        <div className="flex shrink-0 items-center gap-1 rounded-md border p-0.5 text-xs">
           {([3, 6, 12] as const).map((n) => (
             <button
               key={n}
@@ -50,7 +47,7 @@ export function Spending() {
             </button>
           ))}
         </div>
-      </header>
+      </div>
 
       {isLoading || !data ? (
         <div className="space-y-4">

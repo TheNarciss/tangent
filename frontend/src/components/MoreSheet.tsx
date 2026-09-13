@@ -1,15 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import {
-  ChevronRight,
-  Compass,
-  Receipt,
-  FileText,
-  Link2,
-  LogOut,
-  Shield,
-  User as UserIcon,
-} from "lucide-react";
+import { ChevronRight, FileText, Link2, LogOut, Shield, User as UserIcon } from "lucide-react";
 
 import { listOAuthAccounts, startGoogleAssociate, useCurrentUser, useLogout } from "@/api";
 import { cn } from "@/lib/utils";
@@ -97,8 +88,6 @@ export function MoreSheet({ open, onOpenChange }: MoreSheetProps) {
             ) : (
               <MoreItem icon={Link2} label="Lier mon compte Google" onClick={handleLinkGoogle} />
             )}
-            <MoreItem icon={Receipt} label="Dépenses" onClick={() => handleNavigate("spending")} />
-            <MoreItem icon={Compass} label="Méthode" onClick={() => handleNavigate("method")} />
             <MoreItem
               icon={UserIcon}
               label="Mon profil"
