@@ -19,7 +19,7 @@ from datetime import date
 
 import pandas as pd
 
-from . import damodaran, ecb, eurostat, fred, ken_french, lbma, openfigi, shiller
+from . import damodaran, ecb, eurostat, fred, ken_french, lbma, openfigi, shiller, wikipedia
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +105,14 @@ def _openfigi() -> str:
     return f"{len(records)} cotations, Paris → {paris}"
 
 
+def _constituents(index: str) -> Callable[[], str]:
+    def run() -> str:
+        tickers = wikipedia.constituents(index)
+        return f"{len(tickers)} titres, ex. {', '.join(tickers[:3])}"
+
+    return run
+
+
 def _yahoo() -> str:
     from ..finance import market
 
@@ -149,6 +157,7 @@ PROBES: tuple[Probe, ...] = (
     Probe("shiller", "S&P total return réel", _shiller),
     *(Probe("lbma", metal, _metal(metal)) for metal in lbma.metals()),
     Probe("openfigi", "ISIN → ticker", _openfigi),
+    *(Probe("wikipedia", index, _constituents(index)) for index in wikipedia.indices()),
     Probe("yahoo", "Cours quotidiens", _yahoo),
     *(Probe("yahoo", label, _yahoo_index(t)) for t, label in YAHOO_INDICES.items()),
 )

@@ -19,8 +19,15 @@ _CACHE: dict[tuple[str, str], tuple[datetime, pd.DataFrame]] = {}
 _TTL = timedelta(hours=1)
 
 
-def fetch_prices(tickers: list[str], period: str = "5y") -> pd.DataFrame:
+def fetch_prices(
+    tickers: list[str], period: str = "5y", *, drop_missing: bool = False
+) -> pd.DataFrame:
     """Adjusted close prices; index=date, columns=tickers.
+
+    `drop_missing=True` keeps the batch alive when Yahoo does not know one of
+    a hundred tickers: the unknown ones are logged and left out instead of
+    failing the whole download. The strict default is what the portfolio
+    screens want — a missing line there is an error to show.
 
     Raises:
         TickerNotFoundError: if every ticker is missing or empty.
@@ -52,6 +59,10 @@ def fetch_prices(tickers: list[str], period: str = "5y") -> pd.DataFrame:
 
     # Per-ticker check: drop entirely-NaN columns and flag them
     missing = [t for t in tickers if t not in prices.columns or prices[t].dropna().empty]
+    if missing and drop_missing and len(missing) < len(tickers):
+        logger.warning("tickers sans historique Yahoo, ignorés: %s", missing)
+        prices = prices.drop(columns=[t for t in missing if t in prices.columns])
+        missing = []
     if missing:
         raise TickerNotFoundError(
             f"Tickers introuvables ou sans historique exploitable: {missing}. "
