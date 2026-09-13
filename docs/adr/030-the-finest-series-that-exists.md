@@ -39,15 +39,39 @@ Trois niveaux, essayés dans l'ordre, **aucun tenu à la main**.
 Une classe sans chiffre déclaré **emprunte** celui d'une autre
 (`fallback_class`) au lieu de valoir zéro.
 
+**Les actions monde sont mesurées comme les autres.** L'étude donnait des
+pic-à-creux de fin de mois ; la boucle mesure en quotidien. Deux conventions
+dans un même tableau, c'est dix points d'écart sur le COVID entre une ligne
+monde mesurée et une ligne monde déclarée. Ken French sert les rendements
+quotidiens des marchés développés depuis 1990 ; convertis au cours BCE, ils
+donnent les actions monde en euros au jour le jour, et le tableau passe sur
+une seule convention.
+
+**Les dates de chaque crise viennent de cette série.** Une borne de mois tapée
+à la main ratait le creux : mars 2009 finit quinze points au-dessus de son 9.
+La fenêtre déclarée n'est plus qu'un intervalle de recherche ; le pic et le
+creux réels des actions monde en euros à l'intérieur en sortent, et toutes les
+classes sont mesurées entre ces deux jours-là. Hors ligne, l'intervalle sert
+tel quel.
+
+**Les replis sont alignés sur la mesure**, comme pour le Nasdaq avant : un
+même portefeuille donne le même chiffre connecté ou non. 1990 et 1998 gardent
+les chiffres de l'étude, faute d'euro.
+
 ## Conséquences
 
 Ce qui devient vrai : ajouter une classe ou une région ne demande plus aucune
 vérification humaine, et les crises récentes sont mesurées sur les vraies lignes
 du portefeuille plutôt que sur une moyenne de classe.
 
-Ce qui change dans les chiffres : les actions américaines, européennes,
-japonaises et émergentes cessent d'emprunter l'amplitude des actions monde dès
-qu'une série les couvre. Les écarts peuvent être importants dans les deux sens.
+Ce qui change dans les chiffres : toutes les amplitudes bougent, parce que la
+convention change — quotidien au lieu de fin de mois, vrai creux au lieu de fin
+de mois. Les actions monde passent de −52,5 % à −56,0 % sur 2000-03, de −20,4 %
+à −33,6 % sur le COVID. Les actions américaines, européennes, japonaises et
+émergentes cessent d'emprunter l'amplitude du monde dès qu'une série les
+couvre. Et un fait de l'étude ne tient plus en quotidien : 2025 n'est plus « la
+devise, pas le marché » — le marché lui-même a perdu 15,6 % en dollars entre le
+13 février et le 7 avril, la devise a ajouté quatre points.
 
 Ce qui reste faux, et qu'aucun code ne corrigera : un ETF européen n'a pas
 d'historique avant 2009. La bulle internet et 2008 resteront mesurées sur un

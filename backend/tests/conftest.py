@@ -76,7 +76,7 @@ def _no_outbound_http(monkeypatch):
     """
     from app.data import http as data_http
     from app.errors import DataSourceError, MarketDataError
-    from app.finance import episodes, market
+    from app.finance import episodes, market, stress
 
     def _blocked(*args, **kwargs):
         raise DataSourceError("réseau coupé dans les tests")
@@ -90,6 +90,8 @@ def _no_outbound_http(monkeypatch):
     monkeypatch.setattr(market, "fetch_prices", _no_market)
     data_http.clear_cache()
     episodes._QUOTED.clear()
+    stress._WINDOWS.clear()
     yield
     data_http.clear_cache()
     episodes._QUOTED.clear()
+    stress._WINDOWS.clear()

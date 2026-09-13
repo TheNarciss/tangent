@@ -27,7 +27,7 @@ from datetime import date, datetime, timedelta
 
 import pandas as pd
 
-from ..data import ecb, fred, lbma
+from ..data import ecb, fred, ken_french, lbma
 from ..errors import AppError, DataSourceError
 
 logger = logging.getLogger(__name__)
@@ -43,8 +43,20 @@ _EURO_FROM = date(1999, 1, 4)
 _GRACE = pd.Timedelta(days=7)
 
 
-def measure(series_id: str, provider: str, currency: str, window: tuple[str, str]) -> float | None:
-    """Return from one end of the window to the other, in euros. None when unmeasurable."""
+def measure(
+    series_id: str,
+    provider: str,
+    currency: str,
+    window: tuple[str, str],
+    *,
+    in_euros: bool = True,
+) -> float | None:
+    """Return from one end of the window to the other, in euros. None when unmeasurable.
+
+    `in_euros=False` keeps the move in the series' own currency: what a local
+    investor saw, which the screen sets against the euro figure to show what
+    the exchange rate cost or paid.
+    """
     try:
         levels = _levels(provider, series_id, currency)
     except DataSourceError:
@@ -63,9 +75,54 @@ def measure(series_id: str, provider: str, currency: str, window: tuple[str, str
 
     first_day, last_day = inside.index[0], inside.index[-1]
     move = float(inside.iloc[-1] / inside.iloc[0] - 1.0)
-    if currency == "EUR":
+    if currency == "EUR" or not in_euros:
         return move
     return _in_euros(move, first_day, last_day, currency)
+
+
+def peak_to_trough(
+    series_id: str, provider: str, currency: str, span: tuple[str, str]
+) -> tuple[str, str] | None:
+    """The crisis's own dates: the deepest fall of the series inside the span, in euros.
+
+    Hand-typed month boundaries missed the trough by weeks — March 2009 ended
+    fifteen points above its 9th. The dates come from the series instead, and
+    every class is then measured between the same two days.
+    """
+    try:
+        levels = _levels(provider, series_id, currency)
+    except DataSourceError:
+        return None
+    if levels is None or len(levels) < 2:
+        return None
+    if currency != "EUR":
+        levels = _euro_levels(levels, currency)
+        if levels is None:
+            return None
+
+    inside = levels.loc[pd.Timestamp(span[0]) : pd.Timestamp(span[1])]
+    if len(inside) < 2:
+        return None
+    drawdown = inside / inside.cummax() - 1.0
+    trough = drawdown.idxmin()
+    if drawdown[trough] >= 0:
+        return None  # the series never fell inside the span
+    peak = inside.loc[:trough].idxmax()
+    return str(peak.date()), str(trough.date())
+
+
+def _euro_levels(levels: pd.Series, currency: str) -> pd.Series | None:
+    """The same levels seen by a euro investor, day by day. None before the euro."""
+    if levels.index[0].date() < _EURO_FROM:
+        levels = levels.loc[pd.Timestamp(_EURO_FROM) :]
+    if len(levels) < 2:
+        return None
+    try:
+        rates = ecb.named(f"eur_{currency.lower()}")
+    except DataSourceError:
+        return None
+    aligned = rates.reindex(levels.index, method="ffill").dropna()
+    return (levels.loc[aligned.index] / aligned).astype(float)
 
 
 def _levels(provider: str, series_id: str, currency: str) -> pd.Series | None:
@@ -76,6 +133,10 @@ def _levels(provider: str, series_id: str, currency: str) -> pd.Series | None:
         return lbma.price(series_id, currency)
     if provider == "yahoo":
         return _quoted(series_id)
+    if provider == "ken_french":
+        # Daily total returns, compounded into a level series: what 1 dollar
+        # invested on the first session was worth on each later one.
+        return (1.0 + ken_french.daily_returns(series_id)).cumprod()
     logger.warning("fournisseur de série inconnu: %s", provider)
     return None
 

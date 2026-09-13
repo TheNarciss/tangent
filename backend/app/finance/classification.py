@@ -54,6 +54,7 @@ _VENUES: tuple[tuple[str, str, str], ...] = (
     ("BB", ".BR", "EUR"),  # Euronext Brussels
     ("PL", ".LS", "EUR"),  # Euronext Lisbon
     ("UN", "", "USD"),  # NYSE
+    ("UP", "", "USD"),  # NYSE Arca, where US ETFs trade
     ("UQ", "", "USD"),  # Nasdaq
     ("UW", "", "USD"),  # Nasdaq
     ("US", "", "USD"),  # US composite

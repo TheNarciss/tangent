@@ -92,7 +92,7 @@ def test_the_library_reaches_past_2020():
 def test_the_worst_episode_is_the_dot_com_slide():
     worst = min(stress.config().scenarios, key=lambda s: s.returns["equity_world"])
     assert worst.id == "dotcom_2000"
-    assert worst.returns["equity_world"] == pytest.approx(-0.525)
+    assert worst.returns["equity_world"] == pytest.approx(-0.560)
 
 
 def test_at_least_one_inflation_regime_is_in_the_library():
@@ -106,24 +106,30 @@ def test_at_least_one_inflation_regime_is_in_the_library():
 
 
 def test_the_dollar_cushioned_the_2008_fall_for_a_european():
-    effect = _scenario("gfc_2008").currency_effect
-    assert effect is not None and effect > 0  # −48,2 % en euros contre −53,6 % en dollars
+    effect = _scenario("gfc_2008").currency_effect()
+    assert effect is not None and effect > 0  # −51,3 % en euros contre −56,4 % en dollars
 
 
 def test_the_dollar_deepened_the_dot_com_fall():
-    effect = _scenario("dotcom_2000").currency_effect
+    effect = _scenario("dotcom_2000").currency_effect()
     assert effect is not None and effect < 0
 
 
-def test_2025_was_the_currency_not_the_market():
-    s = _scenario("tariffs_2025")
-    assert s.currency_effect is not None
-    assert abs(s.currency_effect) > abs(s.returns["equity_world_usd"])
+def test_the_dollar_deepened_the_2025_fall():
+    """Peak to trough, the market itself fell; the dollar added four points on top.
+
+    The study's « it was the currency, not the market » held on month-end
+    data, where the dollar leg had almost recovered by April 30th.
+    """
+    effect = _scenario("tariffs_2025").currency_effect()
+    assert effect is not None and effect < 0
 
 
 def test_an_episode_without_a_comparable_dollar_figure_says_nothing():
-    """COVID: the published euro loss is month-end, the dollar one is daily."""
-    assert _scenario("covid_2020").currency_effect is None
+    scenario = _scenario("covid_2020").model_copy(deep=True)
+    del scenario.returns["equity_world_usd"]
+
+    assert scenario.currency_effect() is None
 
 
 # ── Exposure mapping ───────────────────────────────────────────────────────
@@ -148,16 +154,16 @@ def test_a_pure_equity_portfolio_takes_the_full_hit():
     results = stress.compute(_wealth(equity=10_000))
     worst = results[0]
     assert worst.id == "dotcom_2000"
-    assert worst.loss_eur == pytest.approx(-5_250)
-    assert worst.pnl_pct == pytest.approx(-0.525)
+    assert worst.loss_eur == pytest.approx(-5_600)
+    assert worst.pnl_pct == pytest.approx(-0.560)
 
 
 def test_a_livret_does_not_fall_and_softens_the_percentage():
     results = stress.compute(_wealth(equity=10_000, livret=10_000))
     worst = next(r for r in results if r.id == "dotcom_2000")
     # Le livret ne perd rien et gagne 8 % sur trente et un mois.
-    assert worst.loss_eur == pytest.approx(-5_250 + 800)
-    assert worst.pnl_pct == pytest.approx((-5_250 + 800) / 20_000)
+    assert worst.loss_eur == pytest.approx(-5_600 + 800)
+    assert worst.pnl_pct == pytest.approx((-5_600 + 800) / 20_000)
 
 
 def test_bonds_fell_with_equities_in_2022_only():
@@ -289,3 +295,41 @@ def test_the_first_candidate_that_covers_the_window_wins(monkeypatch):
 
     assert measured["equity_japan"] == pytest.approx(-0.2)
     assert tried == ["FIRST", "SECOND"]  # on s'arrête au premier qui répond
+
+
+# ── Les fenêtres et l'effet devise viennent de la même série ────────────────
+
+
+def test_the_span_is_used_when_the_reference_series_is_out_of_reach():
+    """Offline, every class is measured between the declared dates, as before."""
+    scenario = _scenario("gfc_2008")
+
+    assert stress.window_of(scenario) == ("2007-10-01", "2009-03-31")
+
+
+def test_every_class_is_measured_between_the_reference_dates(monkeypatch):
+    seen: list[tuple[str, str]] = []
+
+    def measure(series_id: str, provider: str, currency: str, window: tuple[str, str], **k: object):
+        seen.append(window)
+        return -0.1
+
+    monkeypatch.setattr(
+        stress.episodes, "peak_to_trough", lambda *a, **k: ("2007-10-09", "2009-03-09")
+    )
+    monkeypatch.setattr(stress.episodes, "measure", measure)
+
+    stress.measured_returns(_scenario("gfc_2008"))
+
+    assert seen and set(seen) == {("2007-10-09", "2009-03-09")}
+
+
+def test_the_currency_effect_takes_both_legs_from_the_same_source():
+    scenario = _scenario("gfc_2008")
+    declared = scenario.returns["equity_world"] - scenario.returns["equity_world_usd"]
+
+    assert scenario.currency_effect() == pytest.approx(declared)
+    assert scenario.currency_effect({"equity_world": -0.5}) == pytest.approx(declared)
+    assert scenario.currency_effect(
+        {"equity_world": -0.5, "equity_world_usd": -0.6}
+    ) == pytest.approx(0.1)

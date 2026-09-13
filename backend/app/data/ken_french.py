@@ -26,6 +26,7 @@ from .config import config
 logger = logging.getLogger(__name__)
 
 MISSING = -99.99
+_DAILY = re.compile(r"^\s*(\d{8})\s*,")
 _MONTHLY = re.compile(r"^\s*(\d{6})\s*,")
 _ANNUAL = re.compile(r"^\s*(\d{4})\s*,")
 
@@ -33,6 +34,16 @@ _ANNUAL = re.compile(r"^\s*(\d{4})\s*,")
 def regions() -> list[str]:
     """Region keys available in data_sources.yaml."""
     return list(config().ken_french.regions)
+
+
+def daily_returns(region: str) -> pd.Series:
+    """Total daily return of the region, as a fraction, indexed by session.
+
+    The daily archive sits next to the monthly one, same layout, dates on eight
+    digits. It lags the present by a month or two: fine for replaying crises,
+    not for reading today.
+    """
+    return _returns(region, _DAILY, "%Y%m%d", daily=True)
 
 
 def monthly_returns(region: str) -> pd.Series:
@@ -54,8 +65,10 @@ def window_return(region: str, start: str, end: str) -> float:
     return float((1.0 + window).prod() - 1.0)
 
 
-def _returns(region: str, pattern: re.Pattern[str], date_format: str) -> pd.Series:
-    text = _csv_text(region)
+def _returns(
+    region: str, pattern: re.Pattern[str], date_format: str, *, daily: bool = False
+) -> pd.Series:
+    text = _csv_text(region, daily=daily)
     periods: list[str] = []
     values: list[float] = []
 
@@ -85,11 +98,13 @@ def _returns(region: str, pattern: re.Pattern[str], date_format: str) -> pd.Seri
     return out
 
 
-def _csv_text(region: str) -> str:
+def _csv_text(region: str, *, daily: bool = False) -> str:
     cfg = config()
     filename = cfg.ken_french.regions.get(region)
     if not filename:
         raise DataSourceError(f"Région inconnue dans data_sources.yaml: {region}")
+    if daily:
+        filename = filename.replace("_CSV.zip", "_Daily_CSV.zip")
 
     archive = http.get_bytes(
         f"{cfg.ken_french.base_url}/{filename}", ttl_hours=cfg.cache_hours.factors

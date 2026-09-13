@@ -7,11 +7,14 @@ impossible — which is why this screen used to hold three windows, all after
 line to a class and replaying the class is what a manager does («  rejeu
 historique », EBA 2018 vocabulary), and it works from the first day.
 
-Every figure in `config/stress_scenarios.yaml` is peak-to-trough **for a euro
-investor**, so the currency move is already inside it. The same episode seen
-from a dollar investor is stored next to it, and the gap between the two is
-what the dollar cost or paid — in 2008 it cushioned five points, in 2000-03
-it deepened the fall by eight, and in 2025 it *was* the loss.
+Every figure is peak-to-trough on daily data **for a euro investor**, so the
+currency move is already inside it. The dates of each crisis come from the
+world-equity series itself; every class — and every line whose own history
+reaches back that far — is then measured between the same two days
+(`episodes`). The figures written in `config/stress_scenarios.yaml` are the
+fallbacks, aligned on what the loop measures. The same episode seen from a
+dollar investor sits next to the euro one, and the gap is what the dollar cost
+or paid — in 2008 it cushioned five points, in 2000-03 it deepened the fall.
 """
 
 from __future__ import annotations
@@ -51,6 +54,7 @@ class IndexSeries(BaseModel):
     provider: str
     id: str
     currency: str = "USD"
+    in_euros: bool = True  # False keeps the local-currency move, for the currency effect
 
 
 class Scenario(BaseModel):
@@ -83,13 +87,15 @@ class Scenario(BaseModel):
             return self.returns.get(lends, 0.0)
         return 0.0
 
-    @property
-    def currency_effect(self) -> float | None:
+    def currency_effect(self, measured: dict[str, float] | None = None) -> float | None:
         """Points the euro/dollar move added to (or took from) world equities.
 
-        None when the episode has no comparable dollar figure: comparing a
-        month-end loss with a daily one would invent a number.
+        Both legs come from the same source — measured together, or declared
+        together. None when the episode has no comparable dollar figure.
         """
+        m = measured or {}
+        if "equity_world" in m and "equity_world_usd" in m:
+            return m["equity_world"] - m["equity_world_usd"]
         if "equity_world_usd" not in self.returns:
             return None
         return self.returns["equity_world"] - self.returns["equity_world_usd"]
@@ -98,6 +104,7 @@ class Scenario(BaseModel):
 class ScenariosConfig(BaseModel):
     class_series: dict[str, list[IndexSeries]] = Field(default_factory=dict)
     fallback_class: dict[str, str] = Field(default_factory=dict)
+    reference_class: str = "equity_world"  # whose series dates the crises
     class_map: dict[str, str]
     default_asset_class: str
     envelope_classes: dict[str, str]
@@ -204,15 +211,42 @@ def measured_returns(scenario: Scenario, cfg: ScenariosConfig | None = None) -> 
     if scenario.window is None:
         return {}
 
-    window = (scenario.window.since, scenario.window.until)
+    window = window_of(scenario, c)
     out: dict[str, float] = {}
     for asset_class, candidates in c.class_series.items():
         for series in candidates:
-            fall = episodes.measure(series.id, series.provider, series.currency, window)
+            fall = episodes.measure(
+                series.id, series.provider, series.currency, window, in_euros=series.in_euros
+            )
             if fall is not None:
                 out[asset_class] = fall
                 break
     return out
+
+
+# The dates of each crisis, derived once per process from the reference series.
+_WINDOWS: dict[str, tuple[str, str]] = {}
+
+
+def window_of(scenario: Scenario, cfg: ScenariosConfig | None = None) -> tuple[str, str]:
+    """The two days every class is measured between.
+
+    The declared window is a search span; the crisis's own peak and trough
+    inside it come from the reference series (world equities in euros). When
+    that series is out of reach the span itself is used, as before.
+    """
+    c = cfg or config()
+    if scenario.window is None:
+        raise ConfigurationError(f"Scénario {scenario.id} sans fenêtre.")
+    span = (scenario.window.since, scenario.window.until)
+    if scenario.id in _WINDOWS:
+        return _WINDOWS[scenario.id]
+    for series in c.class_series.get(c.reference_class, []):
+        dated = episodes.peak_to_trough(series.id, series.provider, series.currency, span)
+        if dated is not None:
+            _WINDOWS[scenario.id] = dated
+            return dated
+    return span
 
 
 def measures_its_own_price(
@@ -228,10 +262,7 @@ def measures_its_own_price(
     c = cfg or config()
     return any(
         s.window is not None
-        and episodes.measure(
-            quote.ticker, "yahoo", quote.currency, (s.window.since, s.window.until)
-        )
-        is not None
+        and episodes.measure(quote.ticker, "yahoo", quote.currency, window_of(s, c)) is not None
         for s in c.scenarios
     )
 
@@ -258,10 +289,7 @@ def pocket_return(
     """
     if pocket.quote is not None and scenario.window is not None:
         own = episodes.measure(
-            pocket.quote.ticker,
-            "yahoo",
-            pocket.quote.currency,
-            (scenario.window.since, scenario.window.until),
+            pocket.quote.ticker, "yahoo", pocket.quote.currency, window_of(scenario)
         )
         if own is not None:
             return own
@@ -281,8 +309,8 @@ def compute(wealth: Wealth) -> list[StressTestResult]:
     for scenario in cfg.scenarios:
         measured = measured_returns(scenario, cfg)
         loss_eur = sum(p.amount * pocket_return(p, scenario, measured) for p in held)
-        equity_eur = sum(p.amount for p in held if p.asset_class == "equity_world")
-        effect = scenario.currency_effect
+        equity_eur = sum(p.amount for p in held if p.asset_class.startswith("equity_"))
+        effect = scenario.currency_effect(measured)
         results.append(
             StressTestResult(
                 id=scenario.id,

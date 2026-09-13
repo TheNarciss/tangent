@@ -74,7 +74,6 @@ def test_no_replayable_class_can_ever_count_as_zero_loss():
         set(cfg.class_map.values())
         | set(cfg.envelope_classes.values())
         | set(cfg.account_classes.values())
-        | set(cfg.class_series)
         | {cfg.default_asset_class, stress.FALLBACK_CLASS}
     )
 
@@ -157,3 +156,54 @@ def test_a_series_starting_on_the_first_session_after_the_window_opens_is_fine(m
     assert episodes.measure("X", "yahoo", "EUR", ("2020-02-19", "2020-03-23")) == pytest.approx(
         -0.3
     )
+
+
+# ── Les dates de la crise viennent de la série, pas d'une borne de mois ──────
+
+
+def test_the_window_is_the_deepest_fall_inside_the_span(monkeypatch):
+    days = pd.date_range("2008-01-01", "2009-12-31", freq="B")
+    levels = pd.Series(100.0, index=days)
+    levels.loc["2008-05-19":] = 110.0  # the peak
+    levels.loc["2008-06-01":] = 90.0
+    levels.loc["2009-03-09":] = 50.0  # the trough
+    levels.loc["2009-03-10":] = 70.0  # the rally that a month-end window would count
+    monkeypatch.setattr(episodes, "_levels", lambda *a, **k: levels)
+
+    assert episodes.peak_to_trough("X", "fred", "EUR", ("2008-01-01", "2009-06-30")) == (
+        "2008-05-19",
+        "2009-03-09",
+    )
+
+
+def test_a_series_that_never_falls_dates_nothing(monkeypatch):
+    days = pd.date_range("2020-01-01", periods=100, freq="B")
+    monkeypatch.setattr(
+        episodes, "_levels", lambda *a, **k: pd.Series(range(100), index=days, dtype=float)
+    )
+
+    assert episodes.peak_to_trough("X", "fred", "EUR", ("2020-01-01", "2020-05-01")) is None
+
+
+def test_the_dates_are_those_of_a_euro_investor(monkeypatch):
+    """A flat dollar index with a rising euro is a fall for us — dated accordingly."""
+    days = pd.date_range("2020-01-01", periods=60, freq="B")
+    monkeypatch.setattr(episodes, "_levels", lambda *a, **k: pd.Series(100.0, index=days))
+    rates = pd.Series([1.0] * 30 + [1.25] * 30, index=days)  # dollars per euro
+    monkeypatch.setattr(ecb, "named", lambda *a, **k: rates)
+
+    dated = episodes.peak_to_trough("X", "fred", "USD", ("2020-01-01", "2020-04-01"))
+
+    assert dated is not None
+    assert dated[1] == str(days[30].date())
+
+
+def test_a_local_currency_move_is_left_untouched(monkeypatch):
+    monkeypatch.setattr(fred, "series", lambda *a, **k: LEVELS)
+    monkeypatch.setattr(
+        ecb, "named", lambda *a, **k: pd.Series([1.0] * 4 + [1.25], index=LEVELS.index)
+    )
+
+    local = episodes.measure("X", "fred", "USD", ("2000-08-01", "2003-03-31"), in_euros=False)
+
+    assert local == pytest.approx(80.0 / 90.0 - 1.0)
