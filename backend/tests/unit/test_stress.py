@@ -333,3 +333,23 @@ def test_the_currency_effect_takes_both_legs_from_the_same_source():
     assert scenario.currency_effect(
         {"equity_world": -0.5, "equity_world_usd": -0.6}
     ) == pytest.approx(0.1)
+
+
+def test_the_level_that_served_is_named(monkeypatch):
+    scenario = _scenario("gfc_2008")
+    monkeypatch.setattr(stress.episodes, "measure", lambda *a, **k: -0.4)
+
+    on_line = stress.Pocket("equity_world", 1.0, classification.Quote("X.PA", "EUR"))
+    assert stress.pocket_return_and_level(on_line, scenario, {}) == (-0.4, "line")
+
+    on_index = stress.Pocket("equity_world", 1.0)
+    assert stress.pocket_return_and_level(on_index, scenario, {"equity_world": -0.5}) == (
+        -0.5,
+        "index",
+    )
+
+    declared = stress.Pocket("cash", 1.0)
+    assert stress.pocket_return_and_level(declared, scenario, {})[1] == "declared"
+
+    borrowed = stress.Pocket("equity_japan", 1.0)
+    assert stress.pocket_return_and_level(borrowed, scenario, {})[1] == "borrowed"
