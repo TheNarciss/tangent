@@ -1,8 +1,9 @@
 """OpenFIGI — ISIN to ticker, exchange and instrument name. No API key.
 
-Free tier: 25 requests/minute, 10 ISINs per request. A free key would raise
-that to 250/min; at a few lines per user we never come close, so we stay
-anonymous (ADR-024).
+Free tier: 25 requests/minute, 10 ISINs per request. A user's lines fit in
+one call; the ~300 ISINs of « La liste de l'année » take thirty, paced to stay
+under the limit and cached for a week. A free key would raise the limit to
+250/min; we stay anonymous (ADR-024).
 
 This is the reference layer that lets the rest of the app stop guessing a
 ticker from a Powens label.
@@ -30,7 +31,12 @@ def map_isins(isins: list[str]) -> dict[str, list[dict[str, Any]]]:
     for start in range(0, len(unique), size):
         batch = unique[start : start + size]
         payload = [{"idType": "ID_ISIN", "idValue": isin} for isin in batch]
-        answer = http.post_json(cfg.openfigi.base_url, payload, ttl_hours=cfg.cache_hours.reference)
+        answer = http.post_json(
+            cfg.openfigi.base_url,
+            payload,
+            ttl_hours=cfg.cache_hours.reference,
+            pace_seconds=cfg.openfigi.min_seconds_between_requests,
+        )
         out.update(_parse(batch, answer))
     return out
 

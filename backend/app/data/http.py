@@ -9,6 +9,7 @@ network exception leaking into a route.
 """
 
 import logging
+import time
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -20,6 +21,7 @@ from .config import config
 logger = logging.getLogger(__name__)
 
 _CACHE: dict[str, tuple[datetime, Any]] = {}
+_LAST_CALL: dict[str, float] = {}  # url → monotonic time of the last network call
 
 
 def clear_cache() -> None:
@@ -67,13 +69,18 @@ def get_bytes(url: str, *, ttl_hours: float) -> bytes:
     return body
 
 
-def post_json(url: str, payload: Any, *, ttl_hours: float) -> Any:
-    """POST a JSON body and decode the JSON answer. Cached under url + payload."""
+def post_json(url: str, payload: Any, *, ttl_hours: float, pace_seconds: float = 0.0) -> Any:
+    """POST a JSON body and decode the JSON answer. Cached under url + payload.
+
+    `pace_seconds` keeps two network calls to the same url at least that far
+    apart — the way to stay under a source's rate limit. Cache hits never wait.
+    """
     key = f"POST:{url}:{payload!r}"
     hit = _cached(key, ttl_hours)
     if hit is not None:
         return hit
 
+    _pace(url, pace_seconds)
     response = _request("POST", url, json=payload)
     try:
         decoded = response.json()
@@ -81,6 +88,14 @@ def post_json(url: str, payload: Any, *, ttl_hours: float) -> Any:
         raise DataSourceError(f"Réponse non-JSON de {url}: {exc}") from exc
     _store(key, decoded)
     return decoded
+
+
+def _pace(url: str, seconds: float) -> None:
+    if seconds > 0 and url in _LAST_CALL:
+        wait = _LAST_CALL[url] + seconds - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
+    _LAST_CALL[url] = time.monotonic()
 
 
 def _request(method: str, url: str, **kwargs: Any) -> httpx.Response:

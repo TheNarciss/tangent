@@ -283,9 +283,36 @@ def test_http_serves_the_second_call_from_the_cache(monkeypatch):
     assert calls["n"] == 1
 
 
+def test_http_paces_network_calls_but_not_cache_hits(monkeypatch):
+    slept: list[float] = []
+    clock = {"now": 100.0}
+
+    class _Response:
+        def json(self):
+            return {"ok": True}
+
+    monkeypatch.setattr(http, "_request", lambda method, url, **kwargs: _Response())
+    monkeypatch.setattr(http.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(http.time, "sleep", lambda s: slept.append(s))
+    http._LAST_CALL.clear()
+
+    http.post_json("https://example.test/map", [1], ttl_hours=1, pace_seconds=2.5)
+    http.post_json("https://example.test/map", [2], ttl_hours=1, pace_seconds=2.5)
+    http.post_json("https://example.test/map", [1], ttl_hours=1, pace_seconds=2.5)  # cached
+
+    assert slept == [2.5]
+
+
 def test_every_declared_source_has_an_endpoint():
     cfg = config()
 
     assert cfg.fred.series and cfg.ecb.series and cfg.ken_french.regions
-    for url in (cfg.fred.base_url, cfg.ecb.base_url, cfg.eurostat.base_url, cfg.openfigi.base_url):
+    assert cfg.xtrackers.funds
+    for url in (
+        cfg.fred.base_url,
+        cfg.ecb.base_url,
+        cfg.eurostat.base_url,
+        cfg.openfigi.base_url,
+        cfg.xtrackers.base_url,
+    ):
         assert url.startswith("https://")

@@ -101,18 +101,19 @@ openfigi:
   # Sans clé : 25 requêtes/minute, 10 ISIN par requête. Une clé gratuite
   # monterait à 250/min — inutile à notre volume (quelques lignes par user).
   max_isins_per_request: 10
+  # L'espacement entre deux appels réseau qui tient sous 25/minute. Une seule
+  # requête (quelques lignes) n'attend jamais ; l'univers de « La liste de
+  # l'année » (~300 ISIN, une fois par semaine) prend un peu plus d'une minute.
+  min_seconds_between_requests: 2.5
 
-wikipedia:
-  # Constituants des grands indices européens, lus dans le tableau « Ticker »
-  # de la page anglaise de chaque indice — déjà en notation Yahoo. STOXX ne
-  # publie plus ses fichiers de composants ; la page est la source, rien
-  # n'est recopié ici. Univers de « La liste de l'année » : places en euros,
-  # sociétés de l'UE, donc éligibles au PEA.
-  base_url: "https://en.wikipedia.org/wiki"
-  indices:
-    cac_40: "CAC_40"
-    dax: "DAX"
-    aex: "AEX_index"
-    euro_stoxx_50: "Euro_Stoxx_50"
-    ibex_35: "IBEX_35"
-    ftse_mib: "FTSE_MIB"
+xtrackers:
+  # Constituants d'indice lus dans le fichier de positions quotidien d'un ETF
+  # Xtrackers (DWS) : un fonds indiciel détient l'indice, ses positions sont
+  # les constituants du jour. Un CSV par classe de parts, sans clé ni cookie,
+  # avec l'ISIN, la devise et la place de chaque ligne. Rien n'est recopié
+  # ici. Les ISIN passent ensuite par OpenFIGI pour trouver leur cotation.
+  base_url: "https://etf.dws.com/etfdata/export/FRA/FRA/csv/product/constituent"
+  funds:
+    stoxx_europe_600: "LU0328475792"   # Xtrackers Stoxx Europe 600 UCITS ETF 1C
+    euro_stoxx_50: "LU0380865021"      # Xtrackers Euro Stoxx 50 UCITS ETF 1C
+    dax: "LU0274211480"                # Xtrackers DAX UCITS ETF 1C

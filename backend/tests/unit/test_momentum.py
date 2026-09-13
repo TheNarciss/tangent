@@ -6,13 +6,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from app.data import wikipedia
-from app.finance import momentum
+from app.data import xtrackers
+from app.errors import DataSourceError
+from app.finance import classification, momentum
 
 
 def _cfg(**over) -> momentum.MomentumConfig:
     base = {
-        "universe": ["cac_40"],
+        "universe": ["stoxx_europe_600"],
         "lookback_months": 12,
         "skip_months": 1,
         "top": 3,
@@ -34,28 +35,68 @@ def _daily(paths: dict[str, list[float]], start: str = "2020-01-01") -> pd.DataF
     return pd.DataFrame(out, index=days, dtype=float)
 
 
-# ── The parser ─────────────────────────────────────────────────────────────
+# ── The universe ───────────────────────────────────────────────────────────
+
+HOLDINGS = """ShareClass ISIN;Constituent ISIN;Constituent Name;Constituent Country;Constituent Currency ISO Code;Constituent Weighting;Constituent Rating;Constituent Main Exchange Name;Constituent Industry Classification Name
+LU0328475792;NL0010273215;ASML HOLDING;Pays-Bas;EUR;0.0433594240;Baa2;Euronext Amsterdam;Technologie
+LU0328475792;GB0005405286;HSBC HOLDINGS PLC;Royaume-Uni;GBP;0.0231685545;Aa3;London Stock Exchange;"Sociétés financières "
+LU0328475792;FR0014010OO5;L AIR LIQUIDE;France;EUR;0.0052711370;;;inconnu
+LU0328475792;FI4000552500;SAMPO CLASS A;Finlande;EUR;0.0017624400;;;"Sociétés financières "
+"""
 
 
-def test_the_ticker_column_is_read_whatever_its_position():
-    page = """
-    <table class="wikitable"><tr><th>Year</th><th>Close</th></tr><tr><td>1990</td><td>100</td></tr></table>
-    <table class="wikitable sortable">
-      <tr><th>Company</th><th>Sector</th><th>Ticker</th></tr>
-      <tr><td><a href="/x">Accor</a></td><td>Hotels</td><td>AC.PA</td></tr>
-      <tr><td>Adidas</td><td>Apparel</td><td>ADS.DE</td></tr>
-      <tr><td>Not listed here</td><td>-</td><td>Euronext Paris:&#160;XX</td></tr>
-    </table>"""
+def test_the_holdings_file_is_read_by_column_name():
+    lines = xtrackers.parse(HOLDINGS)
 
-    assert wikipedia.parse_tickers(page) == ["AC.PA", "ADS.DE"]
+    assert [x.isin for x in lines] == [
+        "NL0010273215",
+        "GB0005405286",
+        "FR0014010OO5",
+        "FI4000552500",
+    ]
+    assert lines[0].currency == "EUR" and lines[0].exchange == "Euronext Amsterdam"
+    assert lines[1].currency == "GBP"
+    assert lines[2].exchange == ""  # a fresh listing, the fund names no venue yet
+    assert lines[0].weight == pytest.approx(0.043359424)
 
 
-def test_a_non_euro_venue_is_left_out():
-    page = (
-        """<table><tr><th>Ticker</th></tr><tr><td>ABB.ST</td></tr><tr><td>AI.PA</td></tr></table>"""
-    )
+def test_the_fund_names_the_venue_openfigi_should_answer_for():
+    lines = xtrackers.parse(HOLDINGS)
 
-    assert wikipedia.parse_tickers(page) == ["AI.PA"]
+    assert lines[0].venue == "NA"
+    assert lines[2].venue is None  # no exchange named: the ISIN's home venue will do
+
+
+def test_a_reorganized_holdings_file_is_refused():
+    with pytest.raises(DataSourceError, match="colonnes absentes"):
+        xtrackers.parse("ISIN;Name\nNL0010273215;ASML\n")
+
+
+def test_the_universe_keeps_euro_lines_that_have_a_readable_quote(monkeypatch):
+    monkeypatch.setattr(xtrackers, "constituents", lambda fund: xtrackers.parse(HOLDINGS))
+    asked: dict = {}
+
+    def _quotes(isins, prefer=None):
+        asked["isins"], asked["prefer"] = isins, prefer
+        return {
+            "NL0010273215": classification.Quote("ASML.AS", "EUR"),
+            "FI4000552500": classification.Quote("SAMPO.HE", "EUR"),
+            # FR0014010OO5 is a rights line OpenFIGI does not know: absent.
+        }
+
+    monkeypatch.setattr(classification, "quotes", _quotes)
+
+    assert momentum.universe(_cfg()) == ["ASML.AS", "SAMPO.HE"]
+    assert asked["isins"] == ["NL0010273215", "FR0014010OO5", "FI4000552500"]  # euro lines only
+    assert asked["prefer"] == {"NL0010273215": "NA"}
+
+
+def test_an_empty_universe_is_an_error_not_a_silent_zero(monkeypatch):
+    monkeypatch.setattr(xtrackers, "constituents", lambda fund: xtrackers.parse(HOLDINGS))
+    monkeypatch.setattr(classification, "quotes", lambda isins, prefer=None: {})
+
+    with pytest.raises(DataSourceError):
+        momentum.universe(_cfg())
 
 
 # ── The rule ───────────────────────────────────────────────────────────────

@@ -6,11 +6,14 @@
 # Le score divise le rendement par la volatilité (Barroso & Santa-Clara 2015),
 # ce qui écarte les fusées qui explosent et adoucit les krachs de momentum.
 #
-# Rien ici n'est une donnée : l'univers vient des pages d'indices
-# (data_sources.yaml → wikipedia) et les cours de Yahoo. Ce fichier ne porte
-# que la règle.
+# Rien ici n'est une donnée : l'univers vient des positions du jour d'un ETF
+# indiciel (data_sources.yaml → xtrackers), gardées en euros, et les cours de
+# Yahoo. Ce fichier ne porte que la règle.
 
-universe: [cac_40, dax, aex, euro_stoxx_50, ibex_35, ftse_mib]
+# Le Stoxx Europe 600 en euros : grandes et moyennes capitalisations de la
+# zone euro, ~300 titres, places de l'UE — pour l'essentiel éligibles au PEA
+# (Shell ou Prosus y sont cotés en euros sans l'être).
+universe: [stoxx_europe_600]
 
 lookback_months: 12   # la fenêtre de mesure
 skip_months: 1        # le dernier mois est ignoré : il renverse à court terme

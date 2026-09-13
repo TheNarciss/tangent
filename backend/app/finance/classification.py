@@ -53,12 +53,33 @@ _VENUES: tuple[tuple[str, str, str], ...] = (
     ("SM", ".MC", "EUR"),  # BME Madrid
     ("BB", ".BR", "EUR"),  # Euronext Brussels
     ("PL", ".LS", "EUR"),  # Euronext Lisbon
+    ("FH", ".HE", "EUR"),  # Nasdaq Helsinki
+    ("AV", ".VI", "EUR"),  # Wiener Börse
+    ("ID", ".IR", "EUR"),  # Euronext Dublin
     ("UN", "", "USD"),  # NYSE
     ("UP", "", "USD"),  # NYSE Arca, where US ETFs trade
     ("UQ", "", "USD"),  # Nasdaq
     ("UW", "", "USD"),  # Nasdaq
     ("US", "", "USD"),  # US composite
 )
+
+
+# The home venue of an ISIN, by the country that issued it. Santander trades
+# in Frankfurt too, but Madrid carries its whole history and the volume; a
+# secondary listing is a last resort, not a first pick.
+_HOME: dict[str, str] = {
+    "FR": "FP",
+    "NL": "NA",
+    "DE": "GR",
+    "IT": "IM",
+    "ES": "SM",
+    "BE": "BB",
+    "PT": "PL",
+    "FI": "FH",
+    "AT": "AV",
+    "IE": "ID",
+    "US": "US",
+}
 
 
 class Rule(BaseModel):
@@ -152,7 +173,7 @@ def classify_many(instruments: list[tuple[str | None, str | None]]) -> list[Clas
         record = entries[0] if entries else None
         official = _official_name(record)
         kind = _kind(record)
-        quote = _quote(entries)
+        quote = _quote(entries, prefer=home_venue(isin))
 
         # Try both names and keep whichever one we recognise. The official name
         # is usually the better one, but not always: Amundi's Nasdaq tracker is
@@ -183,6 +204,26 @@ def classify_many(instruments: list[tuple[str | None, str | None]]) -> list[Clas
     return out
 
 
+def quotes(isins: list[str], prefer: dict[str, str] | None = None) -> dict[str, Quote]:
+    """ISIN → the Yahoo symbol we can read for it; ISINs without one are absent.
+
+    `prefer` names the venue to try first per ISIN (an OpenFIGI exchange code),
+    when the caller knows where the line really trades; the home venue of the
+    ISIN otherwise.
+    """
+    out: dict[str, Quote] = {}
+    for isin, entries in _reference_data(isins).items():
+        quote = _quote(entries, prefer=(prefer or {}).get(isin) or home_venue(isin))
+        if quote:
+            out[isin] = quote
+    return out
+
+
+def home_venue(isin: str | None) -> str | None:
+    """The OpenFIGI code of the venue an ISIN's country calls home, if we read it."""
+    return _HOME.get((isin or "").strip().upper()[:2])
+
+
 def _from_name(name: str | None, kind: str, source: str) -> Classification:
     cfg = config()
     if not name:
@@ -208,13 +249,17 @@ def _reference_data(isins: list[str]) -> dict[str, list[dict]]:
     return {isin: records for isin, records in mapped.items() if records}
 
 
-def _quote(entries: list[dict]) -> Quote | None:
+def _quote(entries: list[dict], prefer: str | None = None) -> Quote | None:
     """The line's own Yahoo symbol, picked from the venues we can read.
 
+    The preferred venue first when it is one we read, then the table's order.
     None when the instrument only trades where we cannot state the currency
     without guessing. The caller then measures the asset class instead.
     """
-    for code, suffix, currency in _VENUES:
+    venues = list(_VENUES)
+    if prefer:
+        venues.sort(key=lambda v: v[0] != prefer)
+    for code, suffix, currency in venues:
         for entry in entries:
             if entry.get("exchCode") != code:
                 continue

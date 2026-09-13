@@ -37,7 +37,7 @@ export function Picks() {
         {detail && <p className="mt-1 text-xs text-muted-foreground">{detail}</p>}
         <p className="mt-2 text-xs text-muted-foreground">
           Rien n'est affiché de périmé à la place : la liste est recalculée à chaque fois depuis les
-          pages des indices et les cours du jour.
+          positions du jour de l'ETF et les cours du jour.
         </p>
       </section>
     );
@@ -86,8 +86,9 @@ function Rule({ data }: { data: PicksResponse }) {
       {open && (
         <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-muted-foreground">
           <li>
-            Univers : les constituants actuels de {data.indices.map(indexLabel).join(", ")}, lus sur
-            les pages des indices à chaque calcul. Tous éligibles au PEA.
+            Univers : les constituants actuels de {data.indices.map(indexLabel).join(", ")}, lus à
+            chaque calcul dans les positions du jour de l'ETF qui réplique l'indice. Pour
+            l'essentiel éligibles au PEA.
           </li>
           <li>
             Score : rendement de douze mois hors le dernier, divisé par la volatilité — les fusées
@@ -354,12 +355,9 @@ function Track({ data }: { data: PicksResponse }) {
 /* ── Labels ─────────────────────────────────────────────────────────────── */
 
 const INDEX_LABELS: Record<string, string> = {
-  cac_40: "CAC 40",
-  dax: "DAX",
-  aex: "AEX",
+  stoxx_europe_600: "Stoxx Europe 600 (en euros)",
   euro_stoxx_50: "Euro Stoxx 50",
-  ibex_35: "IBEX 35",
-  ftse_mib: "FTSE MIB",
+  dax: "DAX",
 };
 
 function indexLabel(key: string): string {
