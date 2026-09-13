@@ -7,7 +7,9 @@ import App from "./App";
 import "./index.css";
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 60_000, refetchOnWindowFocus: false } },
+  // Ten minutes before a mounted query is refetched: the analytics behind
+  // most screens cost seconds of market data, and nothing here moves faster.
+  defaultOptions: { queries: { staleTime: 10 * 60_000, refetchOnWindowFocus: false } },
 });
 
 document.documentElement.classList.add("dark");

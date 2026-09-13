@@ -418,11 +418,22 @@ export function useWealthSummary() {
   });
 }
 
+/** Market-data analytics: seconds to build, and daily closes do not move within a session. */
+const ANALYTICS_STALE_MS = 30 * 60_000;
+
+/** Query keys that depend on the user's positions: invalidated after a bank sync. */
+const ANALYTICS_KEYS = ["dashboard", "timeseries", "projection", "optimizer", "verdicts"];
+
+function invalidateAnalytics(qc: ReturnType<typeof useQueryClient>) {
+  for (const key of ANALYTICS_KEYS) qc.invalidateQueries({ queryKey: [key] });
+}
+
 /** Portfolio analytics on the user's positions. */
 export function useDashboard() {
   return useQuery({
     queryKey: ["dashboard"],
     queryFn: () => http<DashboardResponse>("/dashboard"),
+    staleTime: ANALYTICS_STALE_MS,
   });
 }
 
@@ -430,6 +441,7 @@ export function useTimeseries() {
   return useQuery({
     queryKey: ["timeseries"],
     queryFn: () => http<TimeseriesResponse>("/timeseries"),
+    staleTime: ANALYTICS_STALE_MS,
   });
 }
 
@@ -449,6 +461,7 @@ export function useProjection(
       return http<ProjectionResponse>(`/projection?${params.toString()}`);
     },
     enabled: (options.enabled ?? true) && monthly >= 0 && years > 0,
+    staleTime: ANALYTICS_STALE_MS,
   });
 }
 
@@ -471,6 +484,7 @@ export function useOptimizer(req: OptimizerRequest) {
     enabled:
       req.objective !== "target_volatility" ||
       (req.max_volatility !== undefined && req.max_volatility >= 0),
+    staleTime: ANALYTICS_STALE_MS,
   });
 }
 
@@ -770,6 +784,7 @@ export function useSyncBankAccounts() {
       if (result.success) {
         qc.invalidateQueries({ queryKey: ["bank-accounts"] });
         qc.invalidateQueries({ queryKey: ["wealth"] });
+        invalidateAnalytics(qc);
       }
     },
   });
@@ -783,6 +798,7 @@ export function useRefreshBankAccounts() {
       if (result.success) {
         qc.invalidateQueries({ queryKey: ["bank-accounts"] });
         qc.invalidateQueries({ queryKey: ["wealth"] });
+        invalidateAnalytics(qc);
       }
     },
   });
@@ -903,6 +919,7 @@ export interface PicksYear {
 }
 
 export interface PicksResponse {
+  computed_at: string;
   as_of: string;
   next_review: string;
   review: "monthly" | "quarterly" | "annual";
@@ -926,13 +943,18 @@ export interface PicksResponse {
   };
 }
 
-/** Today's momentum list and its track record. 503 when a source is out of reach. */
+/**
+ * Today's momentum list and its track record, as the server last computed it.
+ * 503 for the few minutes after a restart while it is being computed: the
+ * query then asks again every minute until the list is there.
+ */
 export function usePicks() {
   return useQuery({
     queryKey: ["picks"],
     queryFn: () => http<PicksResponse>("/picks"),
     staleTime: 60 * 60_000,
     retry: false,
+    refetchInterval: (query) => (query.state.data ? false : 60_000),
   });
 }
 
@@ -1202,7 +1224,7 @@ export function useVerdicts() {
   return useQuery({
     queryKey: ["verdicts"],
     queryFn: () => http<VerdictsResponse>("/verdicts"),
-    staleTime: 60_000,
+    staleTime: ANALYTICS_STALE_MS,
   });
 }
 

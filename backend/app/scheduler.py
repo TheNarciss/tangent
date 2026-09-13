@@ -5,6 +5,8 @@ election needed. If we scale horizontally later, switch to a Redis/PG
 jobstore with locking.
 
 Jobs registered:
+- compute_picks         : daily at 06:30 Europe/Paris, and 20 s after boot when
+                          the stored list is stale -> finance.picks
 - record_portfolio_snapshots : daily at 02:00 Europe/Paris -> snapshot_job
 - submit_nightly_batch  : daily at 03:00 Europe/Paris -> batch_submitter
 - poll_pending_batches  : every 15 min from 03:00 to 09:45 Paris
@@ -17,13 +19,17 @@ next tick.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.date import DateTrigger
 
 from .db import async_session_factory
+from .finance import picks
 from .llm import batch_poller, batch_submitter
 from .snapshot_job import record_all_users
 
@@ -84,13 +90,40 @@ async def _job_record_snapshots() -> None:
             logger.exception("Scheduler: portfolio snapshots failed")
 
 
+async def _job_compute_picks() -> None:
+    """Recompute « La liste de l'année » unless the stored copy is fresh.
+
+    Minutes of Yahoo for ~300 tickers: runs in a thread so the loop keeps
+    serving. Failures are logged; the route keeps serving the last list.
+    """
+    try:
+        await asyncio.to_thread(picks.refresh_if_stale)
+    except Exception:
+        logger.exception("Scheduler: picks recompute failed")
+
+
 def setup_scheduler() -> AsyncIOScheduler:
-    """Build the scheduler with the 3 nightly jobs (not started yet).
+    """Build the scheduler with the nightly jobs (not started yet).
 
     The caller (FastAPI lifespan) is responsible for .start() and
     .shutdown(). The scheduler uses Europe/Paris time for all crons.
     """
     scheduler = AsyncIOScheduler(timezone=_PARIS)
+
+    scheduler.add_job(
+        _job_compute_picks,
+        CronTrigger(hour=6, minute=30, timezone=_PARIS),
+        id="compute_picks",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        _job_compute_picks,
+        DateTrigger(run_date=datetime.now(_PARIS) + timedelta(seconds=20)),
+        id="compute_picks_at_boot",
+        replace_existing=True,
+    )
 
     scheduler.add_job(
         _job_record_snapshots,
@@ -120,8 +153,8 @@ def setup_scheduler() -> AsyncIOScheduler:
     )
 
     logger.info(
-        "Scheduler configured: %d jobs registered (record_portfolio_snapshots, "
-        "submit_nightly_batch, poll_pending_batches)",
+        "Scheduler configured: %d jobs registered (compute_picks, "
+        "record_portfolio_snapshots, submit_nightly_batch, poll_pending_batches)",
         len(scheduler.get_jobs()),
     )
     return scheduler
