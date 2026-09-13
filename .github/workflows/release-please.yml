@@ -48,8 +48,8 @@ jobs:
       - name: Vérifier le jeton
         continue-on-error: true
         env:
-          TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
-          KIND: ${{ secrets.RELEASE_PLEASE_TOKEN && 'RELEASE_PLEASE_TOKEN' || 'GITHUB_TOKEN' }}
+          TOKEN: ${{ github.token }}
+          KIND: GITHUB_TOKEN
         run: |
           echo "jeton utilisé : $KIND"
           read=$(curl -s -o /dev/null -w '%{http_code}' \
@@ -66,7 +66,7 @@ jobs:
         continue-on-error: true
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          token: ${{ github.token }}
           release-type: simple
           target-branch: main
           config-file: .release-please-config.json
@@ -80,7 +80,7 @@ jobs:
         continue-on-error: true
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          token: ${{ github.token }}
           release-type: simple
           target-branch: main
           config-file: .release-please-config.json
@@ -93,7 +93,7 @@ jobs:
         if: steps.attempt1.outcome == 'failure' && steps.attempt2.outcome == 'failure'
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          token: ${{ github.token }}
           release-type: simple
           target-branch: main
           config-file: .release-please-config.json
