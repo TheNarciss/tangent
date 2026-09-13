@@ -76,6 +76,11 @@ class LbmaConfig(BaseModel):
     series: dict[str, str] = Field(default_factory=dict)
 
 
+class WikipediaConfig(BaseModel):
+    base_url: str
+    indices: dict[str, str] = Field(default_factory=dict)  # key → page title
+
+
 class OpenFigiConfig(BaseModel):
     base_url: str
     max_isins_per_request: int = Field(default=10, gt=0)
@@ -93,6 +98,7 @@ class DataSourcesConfig(BaseModel):
     shiller: ShillerConfig
     lbma: LbmaConfig
     openfigi: OpenFigiConfig
+    wikipedia: WikipediaConfig
 
 
 @lru_cache(maxsize=1)

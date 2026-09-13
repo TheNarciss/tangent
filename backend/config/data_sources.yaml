@@ -101,3 +101,18 @@ openfigi:
   # Sans clé : 25 requêtes/minute, 10 ISIN par requête. Une clé gratuite
   # monterait à 250/min — inutile à notre volume (quelques lignes par user).
   max_isins_per_request: 10
+
+wikipedia:
+  # Constituants des grands indices européens, lus dans le tableau « Ticker »
+  # de la page anglaise de chaque indice — déjà en notation Yahoo. STOXX ne
+  # publie plus ses fichiers de composants ; la page est la source, rien
+  # n'est recopié ici. Univers de « La liste de l'année » : places en euros,
+  # sociétés de l'UE, donc éligibles au PEA.
+  base_url: "https://en.wikipedia.org/wiki"
+  indices:
+    cac_40: "CAC_40"
+    dax: "DAX"
+    aex: "AEX_index"
+    euro_stoxx_50: "Euro_Stoxx_50"
+    ibex_35: "IBEX_35"
+    ftse_mib: "FTSE_MIB"

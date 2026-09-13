@@ -58,3 +58,4 @@ Template : [`TEMPLATE.md`](./TEMPLATE.md).
 - [ADR-028](028-one-voice-per-question.md) — Une seule voix par question, un seul sujet par écran
 - [ADR-029](029-measure-the-episodes.md) — Mesurer les crises sur un indice, plutôt que recopier des chiffres
 - [ADR-030](030-the-finest-series-that-exists.md) — Chercher la série la plus fine qui existe, sans table tenue à la main
+- [ADR-031](031-the-list-of-the-year.md) — « La liste de l'année » : une règle publiée, pas une opinion
