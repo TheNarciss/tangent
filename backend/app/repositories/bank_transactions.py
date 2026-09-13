@@ -10,11 +10,12 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import UTC, date, datetime, timedelta
-from typing import Literal
+from typing import Any, Literal
 
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from ..aggregator import Transaction
 from ..db.models import BankAccount, BankTransaction
@@ -237,7 +238,30 @@ async def monthly_inflow_to_savings(
 
 # Money that leaves a current account without being spent: moved to a livret or
 # a PEA, or paying back a loan. Tracking spending means leaving those out.
-_NOT_SPENDING_CATEGORIES = ("virement_interne", "epargne_investissement", "remboursement")
+_NOT_SPENDING_CATEGORIES = ("epargne_investissement", "remboursement")
+
+# A transfer is « internal » only when the other side exists: the same amount,
+# landing on another of the user's own accounts within a few days. The
+# categoriser labels every outgoing transfer « virement_interne » — including
+# the money sent to a card account Tangent does not know, which from here is
+# simply money gone. Matching the two legs is what decides, not the label.
+_TRANSFER_WINDOW_DAYS = 3
+
+
+def _has_counterpart(tx: type[BankTransaction]) -> Any:
+    """EXISTS: a transaction of the opposite sign on another own account, days apart."""
+    other = aliased(BankTransaction)
+    return (
+        select(other.id)
+        .where(
+            other.user_id == tx.user_id,
+            other.bank_account_id != tx.bank_account_id,
+            other.amount == -tx.amount,
+            other.transaction_date >= tx.transaction_date - timedelta(days=_TRANSFER_WINDOW_DAYS),
+            other.transaction_date <= tx.transaction_date + timedelta(days=_TRANSFER_WINDOW_DAYS),
+        )
+        .exists()
+    )
 
 
 async def spending_by_month_and_category(
@@ -263,6 +287,7 @@ async def spending_by_month_and_category(
             BankAccount.type.in_(_SPENDING_ACCOUNT_TYPES),
             (BankTransaction.category.is_(None))
             | (BankTransaction.category.not_in(_NOT_SPENDING_CATEGORIES)),
+            ~_has_counterpart(BankTransaction),
         )
         .group_by(month, BankTransaction.category)
         .order_by(month)
@@ -283,9 +308,9 @@ async def income_by_month(
 ) -> list[tuple[date, float]]:
     """Credits on current accounts since `since`, summed per month.
 
-    Money moved in from one's own savings is not income and is left out;
-    everything else that lands on a current account counts — salary, refunds,
-    a friend paying back dinner.
+    Money moved in from one's own accounts is not income and is left out —
+    recognised by its other leg, not by a label; everything else that lands on
+    a current account counts: salary, refunds, a friend paying back dinner.
     """
     month = func.date_trunc("month", BankTransaction.transaction_date).label("month")
     stmt = (
@@ -296,7 +321,7 @@ async def income_by_month(
             BankTransaction.transaction_date >= since,
             BankTransaction.amount > 0,
             BankAccount.type.in_(_SPENDING_ACCOUNT_TYPES),
-            (BankTransaction.category.is_(None)) | (BankTransaction.category != "virement_interne"),
+            ~_has_counterpart(BankTransaction),
         )
         .group_by(month)
         .order_by(month)
@@ -330,6 +355,7 @@ async def spending_by_description(
             BankAccount.type.in_(_SPENDING_ACCOUNT_TYPES),
             (BankTransaction.category.is_(None))
             | (BankTransaction.category.not_in(_NOT_SPENDING_CATEGORIES)),
+            ~_has_counterpart(BankTransaction),
         )
         .group_by(BankTransaction.description)
     )

@@ -29,8 +29,9 @@ export function Spending() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Dépenses</h1>
           <p className="text-sm text-muted-foreground">
-            Ce qui entre et sort de tes comptes courants. Les virements vers ton épargne et les
-            remboursements de prêt ne sont pas des dépenses : ils sont laissés de côté.
+            Ce qui entre et sort de tes comptes courants. Un virement vers un autre de tes comptes
+            connectés, ton épargne ou un remboursement de prêt n'est pas une dépense. Un virement
+            vers un compte que Tangent ne connaît pas en est une : l'argent est parti.
           </p>
         </div>
         {/* One filter row above everything it scopes. */}
@@ -493,6 +494,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   salaire: "Salaire",
   remboursement: "Remboursements",
   virement_interne: "Virements internes",
+  virement_sortant: "Virements sortants",
   epargne_investissement: "Épargne & investissement",
   frais_bancaires: "Frais bancaires",
   cadeaux_dons: "Cadeaux & dons",

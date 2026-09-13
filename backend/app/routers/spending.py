@@ -54,9 +54,11 @@ async def read_spending(
     """Debits on current accounts, per month and category.
 
     Transfers to savings, to investments and loan repayments are left out: the
-    money left the account but was not spent. Uncategorised debits count under
-    « autre », and the response says what share of the picture they are, so a
-    freshly synced account does not pass for a well-labelled one.
+    money left the account but was not spent. So is any transfer whose other
+    leg lands on another of the user's own accounts. A transfer with no such
+    leg counts, as « virement_sortant »: from here the money is simply gone.
+    Uncategorised debits count under « autre », and the response says what
+    share of the picture they are.
     """
     today = date.today()
     first = _shift(today.replace(day=1), -(months - 1))
@@ -76,7 +78,9 @@ async def read_spending(
     unlabelled = 0.0
     for month_start, category, total in rows:
         key = month_start.strftime("%Y-%m")
-        label = category or "autre"
+        # A transfer still here has no other leg on an own account: the money
+        # left — to a card account Tangent does not know, to someone.
+        label = "virement_sortant" if category == "virement_interne" else (category or "autre")
         if category is None:
             unlabelled += total
         by_month.setdefault(key, {})
