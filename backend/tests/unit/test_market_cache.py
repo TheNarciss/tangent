@@ -40,8 +40,8 @@ def test_a_restart_reads_the_batch_from_disk(disk, monkeypatch):
     second = market.fetch_prices(["CW8.PA"], period="1mo")
 
     assert calls == [1]
-    pd.testing.assert_frame_equal(first, second)
-    assert list(disk.glob("*.pkl"))
+    pd.testing.assert_frame_equal(first, second, check_freq=False)
+    assert list(disk.glob("*.csv"))
 
 
 def test_a_stale_file_is_refetched(disk, monkeypatch):
@@ -50,7 +50,7 @@ def test_a_stale_file_is_refetched(disk, monkeypatch):
 
     market.fetch_prices(["CW8.PA"], period="1mo")
     old = time.time() - 13 * 3600
-    for path in disk.glob("*.pkl"):
+    for path in disk.glob("*.csv"):
         os.utime(path, (old, old))
     market._CACHE.clear()
     market.fetch_prices(["CW8.PA"], period="1mo")

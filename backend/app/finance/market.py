@@ -90,7 +90,7 @@ def fetch_prices(
 
 
 def _file(key: tuple[str, str]) -> Path:
-    return _DIR / f"{hashlib.sha1(f'{key[0]}|{key[1]}'.encode()).hexdigest()}.pkl"
+    return _DIR / f"{hashlib.sha1(f'{key[0]}|{key[1]}'.encode()).hexdigest()}.csv"
 
 
 def _read_disk(key: tuple[str, str]) -> tuple[datetime, pd.DataFrame] | None:
@@ -98,7 +98,9 @@ def _read_disk(key: tuple[str, str]) -> tuple[datetime, pd.DataFrame] | None:
     try:
         if not path.exists():
             return None
-        return (datetime.fromtimestamp(path.stat().st_mtime), pd.read_pickle(path))
+        # CSV, not pickle: a file on disk must never be able to run code.
+        frame = pd.read_csv(path, index_col=0, parse_dates=True)
+        return (datetime.fromtimestamp(path.stat().st_mtime), frame)
     except Exception:  # a corrupt or half-written file is a miss, never an error
         logger.warning("cache disque illisible, ignoré: %s", path)
         return None
@@ -109,9 +111,9 @@ def _write_disk(key: tuple[str, str], prices: pd.DataFrame) -> None:
     try:
         _DIR.mkdir(parents=True, exist_ok=True)
         tmp = _file(key).with_suffix(".tmp")
-        prices.to_pickle(tmp)
+        prices.to_csv(tmp)
         tmp.replace(_file(key))
-        for old in _DIR.glob("*.pkl"):
+        for old in _DIR.glob("*.csv"):
             if datetime.now() - datetime.fromtimestamp(old.stat().st_mtime) > 2 * _TTL:
                 old.unlink(missing_ok=True)
     except Exception:
