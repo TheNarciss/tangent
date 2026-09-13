@@ -15,6 +15,7 @@ import { UserMenu } from "@/components/auth/UserMenu";
 import { Dashboard } from "@/components/Dashboard";
 import { Methode } from "@/components/Methode";
 import { OAuthCallbackHandler } from "@/components/OAuthCallback";
+import { Picks } from "@/components/Picks";
 import { Placements } from "@/components/Placements";
 import { PowensCallbackHandler } from "@/components/PowensCallback";
 import { ProfilePage } from "@/components/Profile";
@@ -80,6 +81,7 @@ function Shell() {
           <Route path={NAV_PATHS.accounts} element={<Accounts />} />
           <Route path={NAV_PATHS.spending} element={<Spending />} />
           <Route path={NAV_PATHS.investments} element={<Placements />} />
+          <Route path={NAV_PATHS.picks} element={<Picks />} />
           <Route path={NAV_PATHS.projection} element={<Projection />} />
           <Route path={NAV_PATHS.method} element={<Methode />} />
           <Route path={NAV_PATHS.profile} element={<ProfilePage />} />
@@ -133,6 +135,11 @@ function getViewConfig(pathname: string, inputs: ViewConfigInputs): ViewConfig {
       return {
         title: "Placements",
         subtitle: "Ce que tu détiens, le risque que tu prends, des pistes",
+      };
+    case NAV_PATHS.picks:
+      return {
+        title: "La liste de l'année",
+        subtitle: "Une règle publiée, pas une opinion : ce qu'elle dit d'acheter et de vendre",
       };
     case NAV_PATHS.method:
       return {

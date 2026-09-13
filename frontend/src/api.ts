@@ -894,6 +894,48 @@ export async function changePassword(
   });
 }
 
+/* ── Picks ──────────────────────────────────────────────────────────── */
+
+export interface PicksYear {
+  year: number;
+  strategy: number;
+  universe: number;
+}
+
+export interface PicksResponse {
+  as_of: string;
+  next_review: string;
+  review: "monthly" | "quarterly" | "annual";
+  guard_on: boolean;
+  held: string[];
+  bought: string[];
+  sold: string[];
+  universe_size: number;
+  indices: string[];
+  top: number;
+  track_record: {
+    since: string;
+    cagr: number;
+    universe_cagr: number;
+    max_drawdown: number;
+    universe_max_drawdown: number;
+    turnover: number;
+    reviews: number;
+    guarded_reviews: number;
+    yearly: PicksYear[];
+  };
+}
+
+/** Today's momentum list and its track record. 503 when a source is out of reach. */
+export function usePicks() {
+  return useQuery({
+    queryKey: ["picks"],
+    queryFn: () => http<PicksResponse>("/picks"),
+    staleTime: 60 * 60_000,
+    retry: false,
+  });
+}
+
 /* ── Spending ───────────────────────────────────────────────────────── */
 
 export interface MonthSpending {

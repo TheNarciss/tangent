@@ -1,6 +1,7 @@
 import {
   Compass,
   LayoutDashboard,
+  ListOrdered,
   PieChart,
   Receipt,
   TrendingUp,
@@ -16,6 +17,7 @@ export type NavView =
   | "accounts"
   | "spending"
   | "investments"
+  | "picks"
   | "projection"
   | "method"
   | "profile"
@@ -27,6 +29,7 @@ export const NAV_PATHS: Record<NavView, string> = {
   accounts: "/comptes",
   spending: "/depenses",
   investments: "/placements",
+  picks: "/placements/liste",
   projection: "/projection",
   method: "/methode",
   profile: "/profil",
@@ -76,7 +79,10 @@ export const NAV_GROUPS: NavGroup[] = [
     view: "investments",
     label: "Placements",
     icon: PieChart,
-    children: [{ view: "investments", label: "Placements", icon: PieChart }],
+    children: [
+      { view: "investments", label: "Placements", icon: PieChart },
+      { view: "picks", label: "La liste de l'année", icon: ListOrdered },
+    ],
   },
   {
     view: "projection",
