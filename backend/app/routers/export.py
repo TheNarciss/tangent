@@ -131,20 +131,35 @@ def _method(wealth: Wealth) -> dict[str, Any]:
     positions = [p for a in wealth.investment_accounts for p in a.positions]
     known = classification.classify_many([(p.label, p.isin) for p in positions])
     cfg = stress.config()
+    held = stress.pockets(wealth, cfg)
+    episodes = []
+    for s in cfg.scenarios:
+        measured = stress.measured_returns(s, cfg)
+        episodes.append(
+            {
+                "id": s.id,
+                "search_span": [s.window.since, s.window.until] if s.window else None,
+                "window": stress.window_of(s, cfg),
+                "measured": measured,
+                "declared": s.returns,
+                "pockets": [
+                    {
+                        "asset_class": p.asset_class,
+                        "ticker": p.quote.ticker if p.quote else None,
+                        "amount": p.amount,
+                        "return": ret,
+                        "level": level,
+                    }
+                    for p in held
+                    for ret, level in [stress.pocket_return_and_level(p, s, measured)]
+                ],
+            }
+        )
     return {
         "classification": [
             {"label": p.label, "isin": p.isin, "ticker": p.ticker, **vars(k)}
             for p, k in zip(positions, known, strict=True)
         ],
-        "pockets": stress.pockets(wealth, cfg),
-        "episodes": [
-            {
-                "id": s.id,
-                "search_span": [s.window.since, s.window.until] if s.window else None,
-                "window": stress.window_of(s, cfg),
-                "measured": stress.measured_returns(s, cfg),
-                "declared": s.returns,
-            }
-            for s in cfg.scenarios
-        ],
+        "pockets": held,
+        "episodes": episodes,
     }

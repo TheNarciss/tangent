@@ -281,19 +281,33 @@ def measured_classes(cfg: ScenariosConfig | None = None) -> list[str]:
 def pocket_return(
     pocket: Pocket, scenario: Scenario, measured: dict[str, float] | None = None
 ) -> float:
-    """What this slice did, measured as finely as the sources allow.
+    """What this slice did, measured as finely as the sources allow."""
+    return pocket_return_and_level(pocket, scenario, measured)[0]
+
+
+def pocket_return_and_level(
+    pocket: Pocket, scenario: Scenario, measured: dict[str, float] | None = None
+) -> tuple[float, str]:
+    """The figure and where it came from: 'line', 'index', 'declared' or 'borrowed'.
 
     Three levels, tried in order and none of them curated by hand: the line's
     own price when Yahoo has it back that far, the class's index when a
-    registered series covers the window, the study's declared figure otherwise.
+    registered series covers the window, the study's declared figure otherwise
+    — or a neighbour's, for a class that declares none.
     """
     if pocket.quote is not None and scenario.window is not None:
         own = episodes.measure(
             pocket.quote.ticker, "yahoo", pocket.quote.currency, window_of(scenario)
         )
         if own is not None:
-            return own
-    return scenario.ret(pocket.asset_class, measured, config().fallback_class)
+            return own, "line"
+    borrows = config().fallback_class
+    value = scenario.ret(pocket.asset_class, measured, borrows)
+    if measured and pocket.asset_class in measured:
+        return value, "index"
+    if pocket.asset_class in scenario.returns:
+        return value, "declared"
+    return value, "borrowed"
 
 
 def compute(wealth: Wealth) -> list[StressTestResult]:
