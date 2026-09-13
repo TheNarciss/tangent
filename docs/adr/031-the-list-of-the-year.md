@@ -24,10 +24,14 @@ prix : −45 % en deux mois au rebond de 2009 (Daniel & Moskowitz 2016).
 Une règle mécanique, lisible dans `config/momentum.yaml`, sur un univers lu en
 direct :
 
-1. **Univers** : les constituants actuels de CAC 40, DAX, AEX, Euro Stoxx 50,
-   IBEX 35 et FTSE MIB, lus dans le tableau « Ticker » de la page Wikipédia de
-   chaque indice — places en euros, sociétés de l'UE, donc éligibles au PEA.
-   Rien n'est recopié dans le dépôt.
+1. **Univers** : les constituants actuels du Stoxx Europe 600 cotés en euros,
+   lus dans le fichier de positions quotidien de l'ETF Xtrackers qui le
+   réplique (un fonds indiciel détient l'indice : ses positions sont les
+   constituants du jour), chaque ISIN résolu en cotation par OpenFIGI — places
+   de l'UE, pour l'essentiel éligibles au PEA. Rien n'est recopié dans le dépôt. Les pages
+   Wikipédia, première source retenue, répondaient 403 ou 429 à un script et
+   demandaient de lire un tableau HTML ; les exports des bourses sont chiffrés
+   (Euronext) ou vides (Deutsche Börse).
 2. **Score** : rendement des douze derniers mois hors le dernier, divisé par
    la volatilité (Barroso & Santa-Clara 2015). Trente titres, à poids égal.
 3. **Revue** trimestrielle : la liste dit ce qui entre et ce qui sort. Chaque

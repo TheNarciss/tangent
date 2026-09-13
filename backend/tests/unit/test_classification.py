@@ -226,3 +226,12 @@ def test_a_venue_with_no_ticker_is_skipped():
 def test_an_instrument_without_an_isin_has_no_quote():
     """No ISIN means no OpenFIGI listing, so the line is replayed as its class."""
     assert classification.classify("Amundi MSCI World").quote is None
+
+
+def test_the_home_venue_beats_a_secondary_listing():
+    entries = [{"exchCode": "GR", "ticker": "BSD2"}, {"exchCode": "SM", "ticker": "SAN"}]
+
+    assert classification._quote(entries) == classification.Quote("BSD2.DE", "EUR")
+    assert classification._quote(entries, prefer="SM") == classification.Quote("SAN.MC", "EUR")
+    assert classification.home_venue("ES0113900J37") == "SM"
+    assert classification.home_venue("LU1681043599") is None

@@ -11,8 +11,9 @@ guarantee. Momentum crashed −45 % in two months at the 2009 rebound (Daniel &
 Moskowitz 2016), which is why the list empties after a down year and why the
 screen caps the sleeve at a fraction of one's equities.
 
-Everything is read live — the universe from the index pages, the prices from
-Yahoo — and `config/momentum.yaml` holds nothing but the rule.
+Everything is read live — the universe from the daily holdings of an index
+fund, each ISIN's quote from OpenFIGI, the prices from Yahoo — and
+`config/momentum.yaml` holds nothing but the rule.
 
 Run `python -m app.finance.momentum` on a machine that reaches Yahoo for the
 backtest and today's list.
@@ -30,9 +31,9 @@ import pandas as pd
 import yaml
 from pydantic import BaseModel, Field
 
-from ..data import wikipedia
-from ..errors import ConfigurationError
-from . import market
+from ..data import xtrackers
+from ..errors import ConfigurationError, DataSourceError
+from . import classification, market
 
 logger = logging.getLogger(__name__)
 
@@ -79,14 +80,32 @@ def config() -> MomentumConfig:
 
 
 def universe(cfg: MomentumConfig | None = None) -> list[str]:
-    """Every ticker of every index in the rule, once."""
+    """Every euro-quoted constituent of every fund in the rule, once, as Yahoo names it.
+
+    The fund's file gives ISINs; OpenFIGI gives each one its home venue. Lines
+    quoted in another currency, and lines with no venue we can read (a rights
+    issue, a forward), are left out — a euro investor's momentum has no
+    exchange rate inside it.
+    """
     c = cfg or config()
-    seen: list[str] = []
-    for index in c.universe:
-        for ticker in wikipedia.constituents(index):
-            if ticker not in seen:
-                seen.append(ticker)
-    return seen
+    isins: list[str] = []
+    venues: dict[str, str] = {}
+    for fund in c.universe:
+        for line in xtrackers.constituents(fund):
+            if line.currency == "EUR" and line.isin not in isins:
+                isins.append(line.isin)
+                if line.venue:
+                    venues[line.isin] = line.venue
+    quoted = classification.quotes(isins, prefer=venues)
+    tickers: list[str] = []
+    for isin in isins:
+        quote = quoted.get(isin)
+        if quote and quote.currency == "EUR" and quote.ticker not in tickers:
+            tickers.append(quote.ticker)
+    if not tickers:
+        raise DataSourceError("Aucun titre de l'univers n'a de cotation lisible.")
+    logger.info("univers momentum : %d ISIN en euros, %d cotations", len(isins), len(tickers))
+    return tickers
 
 
 def month_ends(prices: pd.DataFrame) -> pd.DataFrame:

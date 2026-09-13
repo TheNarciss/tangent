@@ -19,7 +19,7 @@ from datetime import date
 
 import pandas as pd
 
-from . import damodaran, ecb, eurostat, fred, ken_french, lbma, openfigi, shiller, wikipedia
+from . import damodaran, ecb, eurostat, fred, ken_french, lbma, openfigi, shiller, xtrackers
 
 logger = logging.getLogger(__name__)
 
@@ -105,10 +105,13 @@ def _openfigi() -> str:
     return f"{len(records)} cotations, Paris → {paris}"
 
 
-def _constituents(index: str) -> Callable[[], str]:
+def _constituents(fund: str) -> Callable[[], str]:
     def run() -> str:
-        tickers = wikipedia.constituents(index)
-        return f"{len(tickers)} titres, ex. {', '.join(tickers[:3])}"
+        lines = xtrackers.constituents(fund)
+        euro = [line for line in lines if line.currency == "EUR"]
+        return (
+            f"{len(lines)} lignes, {len(euro)} en euros, ex. {', '.join(x.name for x in euro[:3])}"
+        )
 
     return run
 
@@ -157,7 +160,7 @@ PROBES: tuple[Probe, ...] = (
     Probe("shiller", "S&P total return réel", _shiller),
     *(Probe("lbma", metal, _metal(metal)) for metal in lbma.metals()),
     Probe("openfigi", "ISIN → ticker", _openfigi),
-    *(Probe("wikipedia", index, _constituents(index)) for index in wikipedia.indices()),
+    *(Probe("xtrackers", fund, _constituents(fund)) for fund in xtrackers.funds()),
     Probe("yahoo", "Cours quotidiens", _yahoo),
     *(Probe("yahoo", label, _yahoo_index(t)) for t, label in YAHOO_INDICES.items()),
 )

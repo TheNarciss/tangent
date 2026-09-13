@@ -76,14 +76,15 @@ class LbmaConfig(BaseModel):
     series: dict[str, str] = Field(default_factory=dict)
 
 
-class WikipediaConfig(BaseModel):
+class XtrackersConfig(BaseModel):
     base_url: str
-    indices: dict[str, str] = Field(default_factory=dict)  # key → page title
+    funds: dict[str, str] = Field(default_factory=dict)  # key → share-class ISIN
 
 
 class OpenFigiConfig(BaseModel):
     base_url: str
     max_isins_per_request: int = Field(default=10, gt=0)
+    min_seconds_between_requests: float = Field(default=2.5, ge=0)
 
 
 class DataSourcesConfig(BaseModel):
@@ -98,7 +99,7 @@ class DataSourcesConfig(BaseModel):
     shiller: ShillerConfig
     lbma: LbmaConfig
     openfigi: OpenFigiConfig
-    wikipedia: WikipediaConfig
+    xtrackers: XtrackersConfig
 
 
 @lru_cache(maxsize=1)
