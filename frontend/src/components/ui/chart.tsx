@@ -84,7 +84,9 @@ export function Chart({
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const update = () => setWidth(el.getBoundingClientRect().width);
+    // Layout width, not the bounding box: a sheet zooming in reports a
+    // scaled box mid-animation, and nothing tells us when it settles.
+    const update = () => setWidth(el.clientWidth);
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);

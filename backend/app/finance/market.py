@@ -1,12 +1,19 @@
-"""Market data source. Wraps yfinance with a process-local TTL cache.
+"""Market data source. Wraps yfinance with a TTL cache, in memory and on disk.
+
+Daily closes do not move during the day, and Yahoo is the slowest source the
+app has (seconds per batch, minutes when it throttles), so a batch fetched
+once serves twelve hours. The on-disk copy under `data/prices/` survives a
+restart: a deploy no longer turns every screen cold at once.
 
 Failures are reported via the application's exception hierarchy:
 - network/upstream issues → `MarketDataError`
 - valid request but unknown/empty tickers → `TickerNotFoundError`
 """
 
+import hashlib
 import logging
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import pandas as pd
 import yfinance as yf
@@ -16,7 +23,8 @@ from ..errors import MarketDataError, TickerNotFoundError
 logger = logging.getLogger(__name__)
 
 _CACHE: dict[tuple[str, str], tuple[datetime, pd.DataFrame]] = {}
-_TTL = timedelta(hours=1)
+_TTL = timedelta(hours=12)
+_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "prices"
 
 
 def fetch_prices(
@@ -37,9 +45,10 @@ def fetch_prices(
         raise TickerNotFoundError("Aucun ticker fourni.")
 
     key = (",".join(sorted(tickers)), period)
-    cached = _CACHE.get(key)
+    cached = _CACHE.get(key) or _read_disk(key)
     if cached and datetime.now() - cached[0] < _TTL:
         logger.debug("cache hit: %s", key)
+        _CACHE[key] = cached
         return cached[1].copy()
 
     try:
@@ -75,5 +84,37 @@ def fetch_prices(
         )
 
     _CACHE[key] = (datetime.now(), prices)
+    _write_disk(key, prices)
     logger.info("fetched %s (%d days, %d tickers)", tickers, len(prices), len(prices.columns))
     return prices.copy()
+
+
+def _file(key: tuple[str, str]) -> Path:
+    return _DIR / f"{hashlib.sha256(f'{key[0]}|{key[1]}'.encode()).hexdigest()}.csv"
+
+
+def _read_disk(key: tuple[str, str]) -> tuple[datetime, pd.DataFrame] | None:
+    path = _file(key)
+    try:
+        if not path.exists():
+            return None
+        # CSV, not pickle: a file on disk must never be able to run code.
+        frame = pd.read_csv(path, index_col=0, parse_dates=True)
+        return (datetime.fromtimestamp(path.stat().st_mtime), frame)
+    except Exception:  # a corrupt or half-written file is a miss, never an error
+        logger.warning("cache disque illisible, ignoré: %s", path)
+        return None
+
+
+def _write_disk(key: tuple[str, str], prices: pd.DataFrame) -> None:
+    """Best effort: a read-only data directory costs a warning, not a request."""
+    try:
+        _DIR.mkdir(parents=True, exist_ok=True)
+        tmp = _file(key).with_suffix(".tmp")
+        prices.to_csv(tmp)
+        tmp.replace(_file(key))
+        for old in _DIR.glob("*.csv"):
+            if datetime.now() - datetime.fromtimestamp(old.stat().st_mtime) > 2 * _TTL:
+                old.unlink(missing_ok=True)
+    except Exception:
+        logger.warning("cache disque non inscriptible: %s", _DIR)

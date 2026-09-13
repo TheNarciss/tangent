@@ -146,7 +146,7 @@ def _levels(provider: str, series_id: str, currency: str) -> pd.Series | None:
 # twenty lines Yahoo cannot serve would spend two hundred failed calls before
 # drawing the screen. So the answer is remembered either way.
 _QUOTED: dict[str, tuple[datetime, pd.Series | None]] = {}
-_QUOTED_TTL = timedelta(hours=1)
+_QUOTED_TTL = timedelta(hours=12)
 
 
 def prime(tickers: list[str]) -> None:

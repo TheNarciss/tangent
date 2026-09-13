@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useTimeseries } from "@/api";
 import { Timeline } from "@/components/Timeline";
@@ -15,6 +15,7 @@ interface ChartTileProps {
 }
 
 const SPARKLINE_DAYS = 90;
+const SHEET_ANIMATION_MS = 220; // the sheet's open animation is 200 ms
 const SVG_WIDTH = 300;
 const SVG_HEIGHT = 60;
 
@@ -31,6 +32,17 @@ const SVG_HEIGHT = 60;
 export function ChartTile({ className }: ChartTileProps) {
   const { data: timeseries, isLoading } = useTimeseries();
   const [open, setOpen] = useState(false);
+  // The three-panel chart mounts once the sheet has finished sliding in:
+  // rendering it during the 200 ms animation drops frames on a phone.
+  const [settled, setSettled] = useState(false);
+  useEffect(() => {
+    if (!open) {
+      setSettled(false);
+      return;
+    }
+    const timer = setTimeout(() => setSettled(true), SHEET_ANIMATION_MS);
+    return () => clearTimeout(timer);
+  }, [open]);
 
   if (isLoading || !timeseries || timeseries.portfolio.length < 2) {
     return (
@@ -116,7 +128,11 @@ export function ChartTile({ className }: ChartTileProps) {
             <BottomSheetTitle>Évolution du portefeuille</BottomSheetTitle>
           </BottomSheetHeader>
           <div className="p-4 md:p-6">
-            <Timeline ts={timeseries} />
+            {settled ? (
+              <Timeline ts={timeseries} />
+            ) : (
+              <div className="h-[520px] animate-pulse rounded-lg bg-muted/30" aria-hidden />
+            )}
           </div>
         </BottomSheetContent>
       </BottomSheet>

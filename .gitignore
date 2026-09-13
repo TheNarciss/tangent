@@ -54,6 +54,8 @@ backend/data/transactions.json
 backend/data/powens_state.json
 backend/data/backups/
 backend/data/watchlist.json
+backend/data/picks.json
+backend/data/prices/
 *.xlsx
 *.xls
 *.pdf

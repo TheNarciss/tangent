@@ -586,3 +586,39 @@ class WealthSummary(BaseModel):
 
 # Re-resolve forward references now that StressTestResult is defined.
 DashboardResponse.model_rebuild()
+
+
+# ─── « La liste de l'année » ──────────────────────────────────────────────
+
+
+class PicksYearRow(BaseModel):
+    year: int
+    strategy: float
+    universe: float
+
+
+class PicksTrackRecord(BaseModel):
+    since: str  # first month of the backtest
+    cagr: float
+    universe_cagr: float
+    max_drawdown: float
+    universe_max_drawdown: float
+    turnover: float  # fraction of the list replaced per review
+    reviews: int
+    guarded_reviews: int
+    yearly: list[PicksYearRow]
+
+
+class PicksResponse(BaseModel):
+    computed_at: str  # ISO-8601, UTC — when the scheduler built it
+    as_of: str
+    next_review: str
+    review: str  # monthly | quarterly | annual
+    guard_on: bool
+    held: list[str]
+    bought: list[str]
+    sold: list[str]
+    universe_size: int
+    indices: list[str]
+    top: int
+    track_record: PicksTrackRecord
