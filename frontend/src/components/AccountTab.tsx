@@ -1,11 +1,20 @@
 import { useState } from "react";
-import { AlertTriangle, CheckCircle2, KeyRound, Loader2, Trash2, Unlink } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Download,
+  KeyRound,
+  Loader2,
+  Trash2,
+  Unlink,
+} from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   ApiError,
   changePassword,
   deleteMyAccount,
+  exportEverything,
   listOAuthAccounts,
   deleteOAuthAccount,
   useCurrentUser,
@@ -38,6 +47,7 @@ export function AccountTab() {
       <PasswordSection />
       <OAuthSection />
       <AutoReviewSection />
+      <ExportSection />
       <DangerZone />
     </div>
   );
@@ -372,6 +382,48 @@ function OAuthRow({
 /* ──────────────────────────────────────────────────────────────────────── */
 /*  Danger zone — delete account                                            */
 /* ──────────────────────────────────────────────────────────────────────── */
+
+/* ──────────────────────────────────────────────────────────────────────── */
+/*  Export                                                                  */
+/* ──────────────────────────────────────────────────────────────────────── */
+function ExportSection() {
+  const [error, setError] = useState<string | null>(null);
+  const download = useMutation({
+    mutationFn: exportEverything,
+    onMutate: () => setError(null),
+    onSuccess: (blob) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `tangent-export-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+    onError: (e) => setError(e instanceof Error ? e.message : "Export impossible"),
+  });
+
+  return (
+    <Section
+      title="Exporter mes données"
+      description="Tout ce que Tangent sait et calcule sur ton compte, en un fichier JSON : comptes, lignes, verdicts, stress tests, projection, et les étapes intermédiaires de la méthode. Utile pour signaler un chiffre qui semble faux."
+    >
+      <Button
+        variant="outline"
+        onClick={() => download.mutate()}
+        disabled={download.isPending}
+        className="gap-2"
+      >
+        {download.isPending ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Download className="h-4 w-4" />
+        )}
+        {download.isPending ? "Préparation…" : "Télécharger l'export"}
+      </Button>
+      {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+    </Section>
+  );
+}
 
 function DangerZone() {
   const [open, setOpen] = useState(false);
