@@ -894,6 +894,37 @@ export async function changePassword(
   });
 }
 
+/* ── Spending ───────────────────────────────────────────────────────── */
+
+export interface MonthSpending {
+  month: string; // "2026-09"
+  total: number;
+  by_category: Record<string, number>;
+}
+
+export interface CategorySpending {
+  category: string;
+  total: number;
+  share: number;
+}
+
+export interface SpendingResponse {
+  months: MonthSpending[]; // oldest first, current month last (partial)
+  categories: CategorySpending[]; // whole window, largest first
+  monthly_average: number | null; // complete months only
+  current_month_total: number;
+  unlabelled_share: number;
+}
+
+/** Debits on current accounts, per month and category. */
+export function useSpending(months = 6) {
+  return useQuery({
+    queryKey: ["spending", months],
+    queryFn: () => http<SpendingResponse>(`/spending?months=${months}`),
+    staleTime: 60_000,
+  });
+}
+
 /** Everything the account holds and computes, as one JSON file (for debugging). */
 export async function exportEverything(): Promise<Blob> {
   const res = await fetch(`${API_URL}/export`, { credentials: "include" });
