@@ -898,8 +898,15 @@ export async function changePassword(
 
 export interface MonthSpending {
   month: string; // "2026-09"
-  total: number;
+  total: number; // € spent
+  income: number; // € received, own transfers left out
   by_category: Record<string, number>;
+}
+
+export interface Merchant {
+  name: string;
+  total: number;
+  count: number;
 }
 
 export interface CategorySpending {
@@ -911,7 +918,9 @@ export interface CategorySpending {
 export interface SpendingResponse {
   months: MonthSpending[]; // oldest first, current month last (partial)
   categories: CategorySpending[]; // whole window, largest first
-  monthly_average: number | null; // complete months only
+  merchants: Merchant[]; // where the money went most, over the window
+  monthly_average: number | null; // spending, complete months only
+  monthly_income_average: number | null; // income, complete months only
   current_month_total: number;
   unlabelled_share: number;
 }

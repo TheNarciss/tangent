@@ -1,15 +1,23 @@
-import { Compass, LayoutDashboard, PieChart, TrendingUp, Wallet } from "lucide-react";
+import { Compass, LayoutDashboard, PieChart, Receipt, TrendingUp, Wallet } from "lucide-react";
 import { NavLink } from "react-router-dom";
 
 import { cn } from "@/lib/utils";
 
 export type NavView =
-  "overview" | "accounts" | "investments" | "projection" | "method" | "profile" | "account";
+  | "overview"
+  | "accounts"
+  | "spending"
+  | "investments"
+  | "projection"
+  | "method"
+  | "profile"
+  | "account";
 
 /** One URL per view, so the phone's back button, refresh and shared links work. */
 export const NAV_PATHS: Record<NavView, string> = {
   overview: "/",
   accounts: "/comptes",
+  spending: "/depenses",
   investments: "/placements",
   projection: "/projection",
   method: "/methode",
@@ -33,7 +41,10 @@ export const NAV_ITEMS: NavItem[] = [
 
 /** Secondary navigation — in the sidebar on desktop, in the « Plus » sheet on
  *  a phone (the bottom bar keeps four items so it stays tappable at 390 px). */
-export const SECONDARY_NAV_ITEMS: NavItem[] = [{ view: "method", label: "Méthode", icon: Compass }];
+export const SECONDARY_NAV_ITEMS: NavItem[] = [
+  { view: "spending", label: "Dépenses", icon: Receipt },
+  { view: "method", label: "Méthode", icon: Compass },
+];
 
 interface SidebarProps {
   /** Renders below the nav (typically a UserMenu). */

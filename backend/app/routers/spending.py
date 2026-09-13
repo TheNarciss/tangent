@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date
 
 from fastapi import APIRouter, Depends, Query
@@ -17,8 +18,15 @@ router = APIRouter(tags=["spending"])
 
 class MonthSpending(BaseModel):
     month: str  # "2026-09"
-    total: float
+    total: float  # € spent
+    income: float = 0.0  # € received, own transfers left out
     by_category: dict[str, float]  # category → € spent; "autre" holds the unlabelled
+
+
+class Merchant(BaseModel):
+    name: str  # the bank's label, dates and amounts stripped
+    total: float
+    count: int
 
 
 class CategorySpending(BaseModel):
@@ -30,7 +38,9 @@ class CategorySpending(BaseModel):
 class SpendingResponse(BaseModel):
     months: list[MonthSpending]  # oldest first, the current month last (partial)
     categories: list[CategorySpending]  # over the whole window, largest first
-    monthly_average: float | None  # over complete months only
+    merchants: list[Merchant]  # where the money went most, over the window
+    monthly_average: float | None  # spending, over complete months only
+    monthly_income_average: float | None  # income, over complete months only
     current_month_total: float
     unlabelled_share: float  # part of the window still without a category
 
@@ -51,6 +61,11 @@ async def read_spending(
     today = date.today()
     first = _shift(today.replace(day=1), -(months - 1))
     rows = await tx_repo.spending_by_month_and_category(session, user.id, since=first)
+    credits = dict(
+        (m.strftime("%Y-%m"), v)
+        for m, v in await tx_repo.income_by_month(session, user.id, since=first)
+    )
+    labels = await tx_repo.spending_by_description(session, user.id, since=first)
 
     by_month: dict[str, dict[str, float]] = {}
     cursor = first
@@ -69,10 +84,12 @@ async def read_spending(
         by_category[label] = by_category.get(label, 0.0) + total
 
     month_list = [
-        MonthSpending(month=key, total=sum(cats.values()), by_category=cats)
+        MonthSpending(
+            month=key, total=sum(cats.values()), income=credits.get(key, 0.0), by_category=cats
+        )
         for key, cats in sorted(by_month.items())
     ]
-    complete = [m.total for m in month_list[:-1] if m.total > 0]
+    complete = [m for m in month_list[:-1] if m.total > 0 or m.income > 0]
     grand_total = sum(by_category.values())
     return SpendingResponse(
         months=month_list,
@@ -80,7 +97,11 @@ async def read_spending(
             CategorySpending(category=c, total=t, share=t / grand_total if grand_total else 0.0)
             for c, t in sorted(by_category.items(), key=lambda kv: -kv[1])
         ],
-        monthly_average=sum(complete) / len(complete) if complete else None,
+        merchants=_merchants(labels),
+        monthly_average=sum(m.total for m in complete) / len(complete) if complete else None,
+        monthly_income_average=(
+            sum(m.income for m in complete) / len(complete) if complete else None
+        ),
         current_month_total=month_list[-1].total if month_list else 0.0,
         unlabelled_share=unlabelled / grand_total if grand_total else 0.0,
     )
@@ -90,3 +111,27 @@ def _shift(first_of_month: date, months: int) -> date:
     """The first day of the month `months` away (negative = back)."""
     index = first_of_month.year * 12 + first_of_month.month - 1 + months
     return date(index // 12, index % 12 + 1, 1)
+
+
+# What the bank appends to a merchant's name: dates, card numbers, amounts,
+# reference numbers. Stripping them folds one shop's visits together.
+_NOISE = re.compile(r"[\d/*.,:-]+")
+_PREFIXES = ("cb ", "carte ", "paiement cb ", "prlv sepa ", "prlv ", "vir sepa ", "vir ")
+
+
+def _merchants(rows: list[tuple[str, float, int]], top: int = 10) -> list[Merchant]:
+    """The bank's labels folded by merchant, largest first."""
+    folded: dict[str, list[float]] = {}
+    for label, total, count in rows:
+        name = _NOISE.sub(" ", label.lower())
+        for prefix in _PREFIXES:
+            if name.startswith(prefix):
+                name = name[len(prefix) :]
+        name = " ".join(name.split()).strip()
+        if not name:
+            name = "sans libellé"
+        agg = folded.setdefault(name, [0.0, 0.0])
+        agg[0] += total
+        agg[1] += count
+    ranked = sorted(folded.items(), key=lambda kv: -kv[1][0])[:top]
+    return [Merchant(name=name, total=t, count=int(n)) for name, (t, n) in ranked]

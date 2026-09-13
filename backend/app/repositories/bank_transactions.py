@@ -273,3 +273,65 @@ async def spending_by_month_and_category(
         first_day = m.date() if isinstance(m, datetime) else m
         out.append((first_day, category, -float(total)))
     return out
+
+
+async def income_by_month(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    *,
+    since: date,
+) -> list[tuple[date, float]]:
+    """Credits on current accounts since `since`, summed per month.
+
+    Money moved in from one's own savings is not income and is left out;
+    everything else that lands on a current account counts — salary, refunds,
+    a friend paying back dinner.
+    """
+    month = func.date_trunc("month", BankTransaction.transaction_date).label("month")
+    stmt = (
+        select(month, func.sum(BankTransaction.amount))
+        .join(BankAccount, BankTransaction.bank_account_id == BankAccount.id)
+        .where(
+            BankTransaction.user_id == user_id,
+            BankTransaction.transaction_date >= since,
+            BankTransaction.amount > 0,
+            BankAccount.type.in_(_SPENDING_ACCOUNT_TYPES),
+            (BankTransaction.category.is_(None)) | (BankTransaction.category != "virement_interne"),
+        )
+        .group_by(month)
+        .order_by(month)
+    )
+    res = await session.execute(stmt)
+    return [((m.date() if isinstance(m, datetime) else m), float(total)) for m, total in res.all()]
+
+
+async def spending_by_description(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    *,
+    since: date,
+) -> list[tuple[str, float, int]]:
+    """Debits on current accounts since `since`, summed per bank description.
+
+    Raw labels, as the bank wrote them: the caller folds « CB CARREFOUR 12/09 »
+    and « CB CARREFOUR 03/09 » together.
+    """
+    stmt = (
+        select(
+            BankTransaction.description,
+            func.sum(BankTransaction.amount),
+            func.count(BankTransaction.id),
+        )
+        .join(BankAccount, BankTransaction.bank_account_id == BankAccount.id)
+        .where(
+            BankTransaction.user_id == user_id,
+            BankTransaction.transaction_date >= since,
+            BankTransaction.amount < 0,
+            BankAccount.type.in_(_SPENDING_ACCOUNT_TYPES),
+            (BankTransaction.category.is_(None))
+            | (BankTransaction.category.not_in(_NOT_SPENDING_CATEGORIES)),
+        )
+        .group_by(BankTransaction.description)
+    )
+    res = await session.execute(stmt)
+    return [(str(d), -float(total), int(n)) for d, total, n in res.all()]
