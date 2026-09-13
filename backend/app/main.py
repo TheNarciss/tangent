@@ -38,6 +38,7 @@ from .routers import (
     powens,
     profile,
     reviews,
+    spending,
     terms,
     verdicts,
     watchlist,
@@ -258,6 +259,7 @@ app.include_router(password_reset.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 app.include_router(analysis.router, prefix="/api")
 app.include_router(planning.router, prefix="/api")
+app.include_router(spending.router, prefix="/api")
 app.include_router(watchlist.router, prefix="/api")
 app.include_router(envelopes.router, prefix="/api")
 # Powens has TWO routers (cf ADR-020):

@@ -233,3 +233,43 @@ async def monthly_inflow_to_savings(
     if total is None:
         return None
     return float(total) / (days / 30.4375)
+
+
+# Money that leaves a current account without being spent: moved to a livret or
+# a PEA, or paying back a loan. Tracking spending means leaving those out.
+_NOT_SPENDING_CATEGORIES = ("virement_interne", "epargne_investissement", "remboursement")
+
+
+async def spending_by_month_and_category(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    *,
+    since: date,
+) -> list[tuple[date, str | None, float]]:
+    """Debits on current accounts since `since`, summed per month and category.
+
+    One grouped query: (month start, category, total spent as a positive
+    figure). Uncategorised transactions come back with a None category, so the
+    screen can say how much of the picture is still unlabelled.
+    """
+    month = func.date_trunc("month", BankTransaction.transaction_date).label("month")
+    stmt = (
+        select(month, BankTransaction.category, func.sum(BankTransaction.amount))
+        .join(BankAccount, BankTransaction.bank_account_id == BankAccount.id)
+        .where(
+            BankTransaction.user_id == user_id,
+            BankTransaction.transaction_date >= since,
+            BankTransaction.amount < 0,
+            BankAccount.type.in_(_SPENDING_ACCOUNT_TYPES),
+            (BankTransaction.category.is_(None))
+            | (BankTransaction.category.not_in(_NOT_SPENDING_CATEGORIES)),
+        )
+        .group_by(month, BankTransaction.category)
+        .order_by(month)
+    )
+    res = await session.execute(stmt)
+    out: list[tuple[date, str | None, float]] = []
+    for m, category, total in res.all():
+        first_day = m.date() if isinstance(m, datetime) else m
+        out.append((first_day, category, -float(total)))
+    return out
