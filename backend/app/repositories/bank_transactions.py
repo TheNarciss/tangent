@@ -75,6 +75,7 @@ async def upsert_transactions(
             "transaction_date": tx.transaction_date,
             "description": tx.description,
             "category": tx.category,
+            "category_source": tx.category_source,
         }
         for tx in new_txs
     ]

@@ -265,6 +265,9 @@ class Transaction(BaseModel):
     transaction_date: date = Field(..., description="Transaction date (booking date)")
     description: str
     category: str | None = Field(None, description="Provider category if available")
+    category_source: str | None = Field(
+        None, description="'api' from the provider, 'bank_code' from an MCC / ISO code rule"
+    )
     raw_data: dict[str, Any] = Field(default_factory=dict)
 
 
