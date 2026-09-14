@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..aggregator.types import AccountType, BankAccount, Investment, SyncResult, Transaction
 from ..db.models import EnableBankingSession
+from ..finance import categorization
 from ..powens.crypto import decrypt_token
 from .client import EnableBankingClient, EnableBankingError
 
@@ -134,6 +135,9 @@ def transaction_dto(tx: dict, *, account_uid: str) -> Transaction | None:
     if str(tx.get("credit_debit_indicator") or "").upper() == "DBIT":
         amount = -abs(amount)
     money = tx.get("transaction_amount") or {}
+    category = categorization.decide(
+        mcc=tx.get("merchant_category_code"), bank_code=tx.get("bank_transaction_code")
+    )
     return Transaction(
         provider=PROVIDER,
         provider_transaction_id=transaction_id(tx),
@@ -142,7 +146,8 @@ def transaction_dto(tx: dict, *, account_uid: str) -> Transaction | None:
         currency=str(money.get("currency") or "EUR").upper(),
         transaction_date=date.fromisoformat(str(raw_date)[:10]),
         description=_description(tx),
-        category=None,
+        category=category,
+        category_source=categorization.SOURCE if category else None,
         raw_data=tx,
     )
 
@@ -235,6 +240,13 @@ class EnableBankingAggregator:
                 continue
             if dto:
                 out.append(dto)
+        with_mcc = sum(1 for tx in rows if tx.get("merchant_category_code"))
+        logger.info(
+            "Enable Banking: %d opérations lues, %d avec code MCC, %d catégorisées par règle",
+            len(rows),
+            with_mcc,
+            sum(1 for d in out if d.category),
+        )
         return out
 
     async def sync(self) -> SyncResult:

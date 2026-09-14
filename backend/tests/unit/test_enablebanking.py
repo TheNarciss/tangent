@@ -106,6 +106,24 @@ def test_a_debit_is_negative_and_named_after_its_remittance_or_counterparty():
     assert aggregator.transaction_dto(no_remittance, account_uid="u-1").description == "Carrefour"
 
 
+def test_a_card_payment_is_categorised_from_its_merchant_code():
+    tx = {
+        "transaction_amount": {"amount": "42", "currency": "EUR"},
+        "credit_debit_indicator": "DBIT",
+        "booking_date": "2026-09-10",
+        "remittance_information": ["Carrefour City"],
+        "merchant_category_code": "5411",
+    }
+
+    dto = aggregator.transaction_dto(tx, account_uid="u")
+
+    assert dto is not None
+    assert dto.category == "alimentation"
+    assert dto.category_source == "bank_code"
+    without = aggregator.transaction_dto({**tx, "merchant_category_code": None}, account_uid="u")
+    assert without is not None and without.category is None and without.category_source is None
+
+
 def test_a_credit_is_positive_and_a_pending_one_is_skipped():
     credit = {
         "transaction_amount": {"amount": "100", "currency": "EUR"},

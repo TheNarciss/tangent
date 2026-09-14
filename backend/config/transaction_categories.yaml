@@ -1,0 +1,133 @@
+# Catégorisation déterministe d'une opération, à la relève, avant tout LLM.
+#
+# Deux sources normalisées, qui viennent de la banque elle-même :
+#
+# - le code marchand MCC (ISO 18245) que les réseaux carte attachent à chaque
+#   paiement : 5411 est un supermarché partout dans le monde, quel que soit
+#   le libellé. Les plages ci-dessous sont celles de la norme, rangées dans
+#   nos catégories (celles du gap-filler, transaction_category.py) ;
+# - le code d'opération ISO 20022 (domaine/famille/sous-famille) : un retrait,
+#   un prélèvement, un virement se reconnaissent sans lire le libellé.
+#
+# Ce fichier ne porte que des règles. Ce qu'aucune règle ne couvre reste sans
+# catégorie et passe au LLM de nuit, comme avant.
+
+mcc:
+  # Transport aérien, location, hôtels (plages « travel » de la norme)
+  - {from: 3000, to: 3299, category: voyages}     # compagnies aériennes
+  - {from: 3300, to: 3499, category: transport}   # loueurs de voitures
+  - {from: 3500, to: 3999, category: voyages}     # hôtels
+  - {mcc: 4111, category: transport}              # transports en commun
+  - {mcc: 4112, category: transport}              # rail voyageurs
+  - {mcc: 4121, category: transport}              # taxis, VTC
+  - {mcc: 4131, category: transport}              # bus
+  - {mcc: 4411, category: voyages}                # croisières, ferries
+  - {mcc: 4511, category: voyages}                # compagnies aériennes
+  - {mcc: 4722, category: voyages}                # agences de voyage
+  - {mcc: 4784, category: transport}              # péages
+  - {mcc: 4789, category: transport}              # autres transports
+  - {from: 4812, to: 4816, category: telecom_internet}
+  - {mcc: 4899, category: abonnements}            # câble, streaming
+  - {mcc: 4900, category: charges_logement}       # électricité, gaz, eau
+  - {mcc: 5111, category: shopping}               # papeterie
+  - {mcc: 5192, category: loisirs}                # livres, presse
+  - {mcc: 5200, category: shopping}               # bricolage
+  - {from: 5211, to: 5261, category: shopping}    # matériaux, jardin
+  - {mcc: 5300, category: alimentation}           # clubs de gros
+  - {mcc: 5310, category: shopping}               # discount
+  - {mcc: 5311, category: shopping}               # grands magasins
+  - {mcc: 5331, category: shopping}               # bazars
+  - {mcc: 5399, category: shopping}
+  - {mcc: 5411, category: alimentation}           # supermarchés
+  - {mcc: 5422, category: alimentation}           # boucheries
+  - {mcc: 5441, category: alimentation}           # confiseries
+  - {mcc: 5451, category: alimentation}           # crémeries
+  - {mcc: 5462, category: alimentation}           # boulangeries
+  - {mcc: 5499, category: alimentation}           # épiceries, marchés
+  - {mcc: 5511, category: transport}              # concessionnaires
+  - {mcc: 5531, category: transport}              # accessoires auto
+  - {mcc: 5532, category: transport}              # pneus
+  - {mcc: 5533, category: transport}              # pièces auto
+  - {mcc: 5541, category: carburant}              # stations-service
+  - {mcc: 5542, category: carburant}              # pompes automatiques
+  - {mcc: 5552, category: carburant}              # recharge électrique
+  - {from: 5611, to: 5699, category: shopping}    # habillement
+  - {from: 5712, to: 5722, category: shopping}    # meubles, électroménager
+  - {mcc: 5732, category: shopping}               # électronique
+  - {mcc: 5733, category: loisirs}                # musique, instruments
+  - {mcc: 5734, category: abonnements}            # logiciels
+  - {mcc: 5735, category: loisirs}                # disques
+  - {from: 5811, to: 5814, category: restaurant}  # traiteurs, restaurants, bars, fast-food
+  - {from: 5815, to: 5818, category: abonnements} # biens numériques
+  - {mcc: 5912, category: sante}                  # pharmacies
+  - {mcc: 5921, category: alimentation}           # cavistes
+  - {mcc: 5940, category: loisirs}                # vélos
+  - {mcc: 5941, category: loisirs}                # sport
+  - {mcc: 5942, category: loisirs}                # librairies
+  - {mcc: 5943, category: shopping}               # papeterie
+  - {mcc: 5944, category: shopping}               # bijouterie
+  - {mcc: 5945, category: loisirs}                # jouets, jeux
+  - {mcc: 5946, category: loisirs}                # photo
+  - {mcc: 5947, category: cadeaux_dons}           # cadeaux
+  - {mcc: 5948, category: shopping}               # maroquinerie
+  - {mcc: 5949, category: shopping}               # mercerie
+  - {from: 5960, to: 5969, category: shopping}    # vente à distance
+  - {mcc: 5970, category: loisirs}                # loisirs créatifs
+  - {mcc: 5977, category: shopping}               # cosmétiques
+  - {mcc: 5992, category: cadeaux_dons}           # fleuristes
+  - {mcc: 5993, category: autre}                  # tabac
+  - {mcc: 5994, category: loisirs}                # presse
+  - {mcc: 5995, category: shopping}               # animaleries
+  - {mcc: 5999, category: shopping}
+  - {mcc: 6300, category: assurance}
+  - {mcc: 7011, category: voyages}                # hôtels
+  - {mcc: 7012, category: voyages}                # timeshare
+  - {mcc: 7032, category: voyages}                # campings
+  - {mcc: 7033, category: voyages}                # campings
+  - {mcc: 7210, category: autre}                  # blanchisserie
+  - {mcc: 7216, category: autre}                  # pressing
+  - {mcc: 7230, category: autre}                  # coiffeurs
+  - {mcc: 7298, category: autre}                  # instituts de beauté
+  - {mcc: 7299, category: autre}
+  - {mcc: 7372, category: abonnements}            # services informatiques, SaaS
+  - {mcc: 7399, category: autre}
+  - {mcc: 7512, category: transport}              # location de voitures
+  - {mcc: 7523, category: transport}              # parkings
+  - {mcc: 7531, category: transport}              # carrosserie
+  - {mcc: 7538, category: transport}              # garages
+  - {mcc: 7542, category: transport}              # lavage auto
+  - {from: 7829, to: 7841, category: loisirs}     # cinéma, vidéo
+  - {mcc: 7911, category: loisirs}                # danse
+  - {mcc: 7922, category: loisirs}                # théâtre, billetterie
+  - {mcc: 7929, category: loisirs}                # spectacles
+  - {mcc: 7932, category: loisirs}                # billards
+  - {mcc: 7933, category: loisirs}                # bowling
+  - {mcc: 7941, category: loisirs}                # clubs de sport
+  - {mcc: 7991, category: loisirs}                # musées, sites
+  - {mcc: 7992, category: loisirs}                # golf
+  - {mcc: 7993, category: loisirs}                # jeux vidéo
+  - {mcc: 7994, category: loisirs}                # salles de jeux
+  - {mcc: 7995, category: loisirs}                # paris
+  - {mcc: 7996, category: loisirs}                # parcs d'attractions
+  - {mcc: 7997, category: loisirs}                # salles de sport, clubs
+  - {mcc: 7998, category: loisirs}                # aquariums
+  - {mcc: 7999, category: loisirs}
+  - {from: 8011, to: 8099, category: sante}       # médecins, dentistes, hôpitaux
+  - {from: 8211, to: 8299, category: education}   # écoles, universités
+  - {mcc: 8398, category: cadeaux_dons}           # associations
+  - {mcc: 8651, category: cadeaux_dons}           # organisations politiques
+  - {mcc: 8661, category: cadeaux_dons}           # organisations religieuses
+  - {mcc: 8999, category: autre}                  # services professionnels
+  - {mcc: 9311, category: impots_taxes}
+  - {mcc: 9399, category: impots_taxes}           # services publics
+  - {mcc: 9402, category: autre}                  # poste
+
+# Code d'opération ISO 20022 : domaine/famille[/sous-famille], tels que la
+# banque les envoie. Un virement n'est catégorisé que par le LLM (interne,
+# salaire, remboursement : ça se lit dans le libellé), donc absent d'ici.
+bank_transaction_code:
+  - {code: PMNT/CCRD/CWDL, category: autre}       # retrait d'espèces
+  - {code: PMNT/MCRD/CWDL, category: autre}       # retrait d'espèces (carte de crédit)
+  - {code: ACMT/MDOP/CHRG, category: frais_bancaires}
+  - {code: ACMT/MCOP/CHRG, category: frais_bancaires}
+  - {code: PMNT/IDDT/UPDD, category: frais_bancaires} # prélèvement de frais
