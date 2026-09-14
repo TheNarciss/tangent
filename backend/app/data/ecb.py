@@ -26,10 +26,14 @@ def series(key: str, *, start: date | None = None, last_n: int | None = None) ->
     if start:
         params["startPeriod"] = start.isoformat()
 
-    body = http.get_text(
-        f"{cfg.ecb.base_url}/{key}", params=params, ttl_hours=cfg.cache_hours.macro
+    url = f"{cfg.ecb.base_url}/{key}"
+    return http.parsed(
+        f"ecb:{url}:{sorted(params.items())}",
+        ttl_hours=cfg.cache_hours.macro,
+        build=lambda: _parse_csv(
+            http.get_text(url, params=params, ttl_hours=cfg.cache_hours.macro), key
+        ),
     )
-    return _parse_csv(body, key)
 
 
 def named(name: str, *, start: date | None = None, last_n: int | None = None) -> pd.Series:

@@ -10,6 +10,7 @@ network exception leaking into a route.
 
 import logging
 import time
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -88,6 +89,22 @@ def post_json(url: str, payload: Any, *, ttl_hours: float, pace_seconds: float =
         raise DataSourceError(f"Réponse non-JSON de {url}: {exc}") from exc
     _store(key, decoded)
     return decoded
+
+
+def parsed(key: str, *, ttl_hours: float, build: Callable[[], Any]) -> Any:
+    """What a source module makes of a body, kept as long as the body itself.
+
+    The raw cache spares the network, not the parsing: a stress test reads the
+    same ECB rate or Ken French archive a hundred times per screen, and each
+    read was a `read_csv` of the whole file. The built value is shared — callers
+    slice it, never write into it.
+    """
+    hit = _cached(f"PARSED:{key}", ttl_hours)
+    if hit is not None:
+        return hit
+    value = build()
+    _store(f"PARSED:{key}", value)
+    return value
 
 
 def _pace(url: str, seconds: float) -> None:

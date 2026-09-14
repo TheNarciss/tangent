@@ -92,6 +92,13 @@ def _check_header(sheet: pd.DataFrame, position: int, expect: str, name: str) ->
 
 def _sheet() -> pd.DataFrame:
     cfg = config().shiller
+    return http.parsed(
+        f"shiller:{cfg.url}", ttl_hours=config().cache_hours.factors, build=_read_sheet
+    )
+
+
+def _read_sheet() -> pd.DataFrame:
+    cfg = config().shiller
     workbook = http.get_bytes(cfg.url, ttl_hours=config().cache_hours.factors)
     try:
         return pd.read_excel(io.BytesIO(workbook), sheet_name=cfg.sheet, header=None, engine="xlrd")

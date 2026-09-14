@@ -28,8 +28,14 @@ def series(series_id: str, *, start: date | None = None) -> pd.Series:
     if start:
         params["cosd"] = start.isoformat()
 
-    body = http.get_text(cfg.fred.base_url, params=params, ttl_hours=cfg.cache_hours.macro)
-    return _parse_csv(body, series_id)
+    return http.parsed(
+        f"fred:{sorted(params.items())}",
+        ttl_hours=cfg.cache_hours.macro,
+        build=lambda: _parse_csv(
+            http.get_text(cfg.fred.base_url, params=params, ttl_hours=cfg.cache_hours.macro),
+            series_id,
+        ),
+    )
 
 
 def named(name: str, *, start: date | None = None) -> pd.Series:

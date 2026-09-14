@@ -316,3 +316,39 @@ def test_every_declared_source_has_an_endpoint():
         cfg.xtrackers.base_url,
     ):
         assert url.startswith("https://")
+
+
+def test_parsed_series_is_built_once_per_ttl(monkeypatch):
+    """The parsed value is shared across calls: one read_csv per body, not one per use."""
+    builds = 0
+
+    def build() -> int:
+        nonlocal builds
+        builds += 1
+        return builds
+
+    assert http.parsed("k", ttl_hours=1, build=build) == 1
+    assert http.parsed("k", ttl_hours=1, build=build) == 1
+    assert builds == 1
+
+    http.clear_cache()
+    assert http.parsed("k", ttl_hours=1, build=build) == 2
+
+
+def test_ecb_parses_each_body_once(monkeypatch):
+    parses = 0
+    original = ecb._parse_csv
+
+    def counting(body: str, key: str) -> pd.Series:
+        nonlocal parses
+        parses += 1
+        return original(body, key)
+
+    monkeypatch.setattr(http, "get_text", lambda *a, **k: ECB_CSV)
+    monkeypatch.setattr(ecb, "_parse_csv", counting)
+
+    first = ecb.named("eur_usd")
+    second = ecb.named("eur_usd")
+
+    assert parses == 1
+    assert first.equals(second)

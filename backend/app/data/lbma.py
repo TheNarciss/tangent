@@ -36,8 +36,14 @@ def price(metal: str, currency: str = "EUR") -> pd.Series:
     if currency not in CURRENCIES:
         raise DataSourceError(f"Devise LBMA inconnue: {currency} (attendu {CURRENCIES}).")
 
-    body = http.get_text(f"{cfg.lbma.base_url}/{series}.json", ttl_hours=cfg.cache_hours.macro)
-    return _parse(body, metal, CURRENCIES.index(currency))
+    url = f"{cfg.lbma.base_url}/{series}.json"
+    return http.parsed(
+        f"lbma:{url}:{currency}",
+        ttl_hours=cfg.cache_hours.macro,
+        build=lambda: _parse(
+            http.get_text(url, ttl_hours=cfg.cache_hours.macro), metal, CURRENCIES.index(currency)
+        ),
+    )
 
 
 def window_return(metal: str, start: str, end: str, currency: str = "EUR") -> float:

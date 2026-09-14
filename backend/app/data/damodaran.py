@@ -72,6 +72,13 @@ def _column(frame: pd.DataFrame, label: str, asset_class: str) -> pd.Series:
 
 def _sheet() -> pd.DataFrame:
     cfg = config().damodaran
+    return http.parsed(
+        f"damodaran:{cfg.url}", ttl_hours=config().cache_hours.factors, build=_read_sheet
+    )
+
+
+def _read_sheet() -> pd.DataFrame:
+    cfg = config().damodaran
     workbook = http.get_bytes(cfg.url, ttl_hours=config().cache_hours.factors)
     try:
         with warnings.catch_warnings():
