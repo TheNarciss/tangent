@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +24,7 @@ from .client import EnableBankingClient, EnableBankingError
 logger = logging.getLogger(__name__)
 
 PROVIDER = "enablebanking"
+SAFE_WINDOW_DAYS = 89  # what PSD2 guarantees once the consent's first minutes are gone
 
 # ISO 20022 cash account types → our taxonomy. Anything else is a current account.
 _ACCOUNT_TYPES = {
@@ -185,7 +186,20 @@ class EnableBankingAggregator:
 
     async def get_transactions(self, account_id: str, limit: int = 100) -> list[Transaction]:
         async with EnableBankingClient() as client:
-            rows = await client.get_transactions(account_id, date_from=self._since)
+            try:
+                rows = await client.get_transactions(account_id, date_from=self._since)
+            except EnableBankingError as exc:
+                # Some banks refuse a window older than what PSD2 guarantees
+                # (90 days): ask for that much rather than nothing.
+                shorter = date.today() - timedelta(days=SAFE_WINDOW_DAYS)
+                if exc.status != 400 or self._since >= shorter:
+                    raise
+                logger.info(
+                    "Enable Banking: fenêtre refusée depuis %s, relecture depuis %s",
+                    self._since,
+                    shorter,
+                )
+                rows = await client.get_transactions(account_id, date_from=shorter)
         out: list[Transaction] = []
         for tx in rows:
             try:
@@ -198,22 +212,30 @@ class EnableBankingAggregator:
         return out
 
     async def sync(self) -> SyncResult:
+        """Accounts first; an account whose transactions fail is kept, with its error noted."""
         now = datetime.now(UTC)
         try:
             accounts = await self.get_accounts()
-            transactions: list[Transaction] = []
-            for acc in accounts:
-                transactions.extend(await self.get_transactions(acc.provider_account_id))
-            return SyncResult(
-                success=True,
-                provider=PROVIDER,
-                accounts=accounts,
-                transactions=transactions,
-                synced_at=now,
-            )
         except EnableBankingError as exc:
             logger.warning("Enable Banking sync failed for user=%s: %s", self._user_id, exc)
             return SyncResult(success=False, provider=PROVIDER, error=str(exc), synced_at=now)
+
+        transactions: list[Transaction] = []
+        failures: list[str] = []
+        for acc in accounts:
+            try:
+                transactions.extend(await self.get_transactions(acc.provider_account_id))
+            except EnableBankingError as exc:
+                logger.warning("Enable Banking: opérations de %s illisibles: %s", acc.name, exc)
+                failures.append(f"{acc.name}: {exc}")
+        return SyncResult(
+            success=True,
+            provider=PROVIDER,
+            accounts=accounts,
+            transactions=transactions,
+            error="; ".join(failures) or None,
+            synced_at=now,
+        )
 
     async def handle_webhook(self, payload: dict[str, Any]) -> dict[str, Any]:
         return {"status": "ignored"}
@@ -235,7 +257,5 @@ async def sync_row(db: AsyncSession, row: EnableBankingSession, *, since: date) 
     result = await aggregator.sync()
     if result.success:
         row.last_sync_at = result.synced_at
-        row.last_error = None
-    else:
-        row.last_error = result.error
+    row.last_error = result.error
     return result

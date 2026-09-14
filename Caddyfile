@@ -5,8 +5,11 @@
         # Two exceptions (Powens sandbox limitation: single redirect URI):
         #   - /auth/powens/* (OAuth initiate + callback)
         #   - /webhooks/powens (external POST from Powens, currently disabled)
+        # Same exception for Enable Banking: the callback URL is registered at
+        # the provider (ADR-032).
         path /api/*
         path /auth/powens/*
+        path /auth/enablebanking/*
         path /webhooks/powens
     }
 
