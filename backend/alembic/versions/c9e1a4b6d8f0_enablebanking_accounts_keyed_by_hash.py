@@ -2,9 +2,15 @@
 
 An account's uid is scoped to the Enable Banking session, so two consents
 for the same bank stored every account twice, with its transactions. The
-identification_hash is the identity that survives a consent. This
-migration keeps, per user and bank, the newest consent and the accounts it
-read, drops the duplicates, and re-keys what remains on the hash.
+identification_hash is the identity that survives a consent; its SHA-256
+digest fits the 64-character key column without losing what distinguishes
+two accounts (the first 80 characters of the hash are the same for every
+account of a bank).
+
+This migration keeps, per user and per hash, the account row that carries
+the most transactions (the first read after a consent has the long
+history), drops the others with their transactions, keeps the newest
+consent per bank and re-tags the accounts to it, and re-keys on the digest.
 
 Revision ID: c9e1a4b6d8f0
 Revises: b8d0f3a5c7e9
@@ -20,30 +26,52 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # 1. Accounts read by an older consent, when the newest consent read the
-    #    same account (same hash): gone, with their transactions (FK cascade).
+    # 1. Accounts without a hash cannot be matched to anything: the next read
+    #    recreates them under a stable key.
+    op.execute(
+        """
+        DELETE FROM bank_accounts
+        WHERE provider = 'enablebanking'
+          AND (raw_data->>'identification_hash') IS NULL
+        """
+    )
+    # 2. One row per (user, hash): the one with the most transactions, then
+    #    the most recently read. The others go, with their transactions.
+    op.execute(
+        """
+        WITH ranked AS (
+            SELECT a.id,
+                   row_number() OVER (
+                       PARTITION BY a.user_id, a.raw_data->>'identification_hash'
+                       ORDER BY (SELECT count(*) FROM bank_transactions t
+                                 WHERE t.bank_account_id = a.id) DESC,
+                                a.last_synced_at DESC NULLS LAST,
+                                a.id
+                   ) AS rank
+            FROM bank_accounts a
+            WHERE a.provider = 'enablebanking'
+        )
+        DELETE FROM bank_accounts
+        WHERE id IN (SELECT id FROM ranked WHERE rank > 1)
+        """
+    )
+    # 3. One consent per (user, bank): the newest. The surviving accounts of
+    #    that bank are re-tagged to it, so that unlinking still takes them.
     op.execute(
         """
         WITH newest AS (
-            SELECT DISTINCT ON (user_id, bank_name) id, user_id
+            SELECT DISTINCT ON (user_id, bank_name) id, user_id, bank_name
             FROM enablebanking_sessions
             ORDER BY user_id, bank_name, created_at DESC
         )
-        DELETE FROM bank_accounts a
-        USING bank_accounts b, newest n
+        UPDATE bank_accounts a
+        SET raw_data = a.raw_data || jsonb_build_object('enablebanking_session', n.id::text)
+        FROM newest n
         WHERE a.provider = 'enablebanking'
-          AND b.provider = 'enablebanking'
-          AND a.user_id = b.user_id
           AND a.user_id = n.user_id
-          AND a.id <> b.id
-          AND a.raw_data->>'identification_hash' IS NOT NULL
-          AND a.raw_data->>'identification_hash' = b.raw_data->>'identification_hash'
-          AND b.raw_data->>'enablebanking_session' = n.id::text
-          AND a.raw_data->>'enablebanking_session' <> n.id::text
+          AND a.institution_name = n.bank_name
         """
     )
-    # 2. Older consents for the same bank: gone. (Their access at the bank
-    #    lapses with valid_until; the user can also revoke it in the bank's app.)
     op.execute(
         """
         WITH newest AS (
@@ -56,7 +84,6 @@ def upgrade() -> None:
         WHERE s.user_id = n.user_id AND s.bank_name = n.bank_name AND s.id <> n.id
         """
     )
-    # 3. Orphans of a deleted consent: gone too.
     op.execute(
         """
         DELETE FROM bank_accounts a
@@ -67,19 +94,15 @@ def upgrade() -> None:
           )
         """
     )
-    # 4. What remains is keyed on the stable identity, when it is unique for
-    #    the user (two pockets sharing a hash keep their uid).
+    # 4. The stable key: a digest of the hash.
     op.execute(
         """
-        UPDATE bank_accounts a
-        SET provider_account_id = left(a.raw_data->>'identification_hash', 64)
-        WHERE a.provider = 'enablebanking'
-          AND a.raw_data->>'identification_hash' IS NOT NULL
-          AND (
-              SELECT count(*) FROM bank_accounts b
-              WHERE b.user_id = a.user_id AND b.provider = 'enablebanking'
-                AND b.raw_data->>'identification_hash' = a.raw_data->>'identification_hash'
-          ) = 1
+        UPDATE bank_accounts
+        SET provider_account_id = encode(
+            sha256(convert_to(raw_data->>'identification_hash', 'UTF8')), 'hex'
+        )
+        WHERE provider = 'enablebanking'
+          AND (raw_data->>'identification_hash') IS NOT NULL
         """
     )
 

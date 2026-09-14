@@ -107,8 +107,16 @@ def disambiguate(accounts: list[BankAccount]) -> list[BankAccount]:
 
 
 def account_key(acc: dict) -> str:
-    """The identity that survives a new consent: the hash, else the session's uid."""
-    return str(acc.get("identification_hash") or acc["uid"])[:64]
+    """The identity that survives a new consent: the hash, else the session's uid.
+
+    Enable Banking's hash is long and its first 80 characters are the same for
+    every account of a bank (they describe the fields hashed): only a digest of
+    the whole fits the 64-character column without losing what distinguishes.
+    """
+    hash_ = acc.get("identification_hash")
+    if hash_:
+        return hashlib.sha256(str(hash_).encode()).hexdigest()
+    return str(acc["uid"])[:64]
 
 
 def transaction_id(tx: dict) -> str:
