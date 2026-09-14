@@ -208,10 +208,12 @@ function EnableBankingRow({
             ) : (
               <span className="ml-2">· consentement jusqu'au {until}</span>
             )}
-            {!expired && error && (
-              <span className="ml-2 text-[hsl(var(--loss))]">dernière relève en échec</span>
-            )}
           </p>
+          {!expired && error && (
+            <p className="mt-0.5 break-words text-xs text-[hsl(var(--loss))]">
+              Dernière relève en échec : {error}
+            </p>
+          )}
         </div>
         {expired && (
           <Button variant="outline" size="sm" onClick={reconnect} disabled={busy}>

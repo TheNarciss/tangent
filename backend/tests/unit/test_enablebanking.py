@@ -135,3 +135,74 @@ def test_a_consent_is_expired_once_valid_until_has_passed():
     assert aggregator.is_expired(row)
     row.valid_until = datetime.now(UTC) + timedelta(days=1)
     assert not aggregator.is_expired(row)
+
+
+class _FakeClient:
+    """Enable Banking as seen by the aggregator: one account, transactions that fail."""
+
+    def __init__(self, *, fail_transactions: bool):
+        self.fail = fail_transactions
+        self.windows: list = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return None
+
+    async def get_session(self, session_id):
+        return {"accounts": [{"uid": "u-1", "name": "Main", "currency": "EUR"}]}
+
+    async def get_balances(self, uid):
+        return [{"balance_type": "CLBD", "balance_amount": {"amount": "10", "currency": "EUR"}}]
+
+    async def get_transactions(self, uid, *, date_from=None, date_to=None):
+        self.windows.append(date_from)
+        if self.fail:
+            raise client.EnableBankingError("Enable Banking a répondu 500: boom", status=500)
+        if len(self.windows) == 1:
+            raise client.EnableBankingError("Enable Banking a répondu 400: date_from", status=400)
+        return [
+            {
+                "entry_reference": "r1",
+                "transaction_amount": {"amount": "3", "currency": "EUR"},
+                "credit_debit_indicator": "DBIT",
+                "booking_date": "2026-09-10",
+                "remittance_information": ["Coffee"],
+            }
+        ]
+
+
+def _aggregator(fake, since):
+    return aggregator.EnableBankingAggregator(
+        session_id="s",
+        session_key="k",
+        institution_name="Revolut",
+        user_id=uuid.uuid4(),
+        since=since,
+    )
+
+
+@pytest.mark.asyncio
+async def test_accounts_are_kept_when_their_transactions_cannot_be_read(monkeypatch):
+    fake = _FakeClient(fail_transactions=True)
+    monkeypatch.setattr(aggregator, "EnableBankingClient", lambda: fake)
+
+    result = await _aggregator(fake, datetime.now(UTC).date() - timedelta(days=700)).sync()
+
+    assert result.success
+    assert [a.name for a in result.accounts] == ["Main"]
+    assert result.transactions == []
+    assert result.error and "Main" in result.error
+
+
+@pytest.mark.asyncio
+async def test_a_refused_window_is_retried_over_the_guaranteed_ninety_days(monkeypatch):
+    fake = _FakeClient(fail_transactions=False)
+    monkeypatch.setattr(aggregator, "EnableBankingClient", lambda: fake)
+    since = datetime.now(UTC).date() - timedelta(days=700)
+
+    result = await _aggregator(fake, since).sync()
+
+    assert [w for w in fake.windows] == [since, datetime.now(UTC).date() - timedelta(days=89)]
+    assert len(result.transactions) == 1 and result.error is None
