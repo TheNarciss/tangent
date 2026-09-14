@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..finance import merchants
 from ..finance.fees import autodetect_broker
 from ..repositories import account_holdings as holdings_repo
 from ..repositories import bank_accounts as accounts_repo
@@ -50,6 +51,16 @@ async def persist_sync_result(
     holdings_by_acc: dict[str, list[Investment]] = {}
     for inv in result.investments:
         holdings_by_acc.setdefault(inv.provider_account_id, []).append(inv)
+    # What a past decision on the same merchant already settled, before the LLM.
+    if any(tx.category is None for tx in result.transactions):
+        learned = await bank_txs_repo.learned_categories(session, user_id)
+        for tx in result.transactions:
+            if tx.category is None:
+                known = learned.get(merchants.fold(tx.description))
+                if known:
+                    tx.category = known
+                    tx.category_source = bank_txs_repo.LEARNED_SOURCE
+
     txs_by_acc: dict[str, list[Transaction]] = {}
     for tx in result.transactions:
         txs_by_acc.setdefault(tx.provider_account_id, []).append(tx)

@@ -91,6 +91,21 @@ def account_dto(
     )
 
 
+def disambiguate(accounts: list[BankAccount]) -> list[BankAccount]:
+    """Revolut names every pocket after its holder: tell them apart by currency and kind."""
+    names = [a.name for a in accounts]
+    for acc in accounts:
+        if names.count(acc.name) > 1:
+            kind = " épargne" if acc.type == AccountType.SAVINGS else ""
+            acc.name = f"{acc.institution_name} {acc.currency}{kind}"
+    seen: dict[str, int] = {}
+    for acc in accounts:
+        seen[acc.name] = seen.get(acc.name, 0) + 1
+        if seen[acc.name] > 1:
+            acc.name = f"{acc.name} ({seen[acc.name]})"
+    return accounts
+
+
 def account_key(acc: dict) -> str:
     """The identity that survives a new consent: the hash, else the session's uid."""
     return str(acc.get("identification_hash") or acc["uid"])[:64]
@@ -206,7 +221,7 @@ class EnableBankingAggregator:
                         synced_at=synced_at,
                     )
                 )
-        return out
+        return disambiguate(out)
 
     async def get_investments(self, account_id: str) -> list[Investment]:
         return []  # Account information only; no securities through this channel yet.

@@ -97,18 +97,23 @@ async def _create_batch_with_retry(client: Any, requests: list[Request]) -> Any:
     return await client.beta.messages.batches.create(requests=requests)
 
 
-async def submit_nightly_batch(session: AsyncSession) -> ReviewBatch | None:
-    """Build and submit one batch containing all opt-in users.
+async def submit_nightly_batch(
+    session: AsyncSession, *, gaps_only: bool = False
+) -> ReviewBatch | None:
+    """Build and submit one batch: a review per opt-in user, plus every gap to fill.
+
+    Gaps (a transaction without category, a holding without TER) are filled
+    whether or not anyone opted in to the briefing; `gaps_only` skips the
+    reviews altogether, for a catch-up run outside the night.
 
     Returns:
         The persisted ReviewBatch, or None if there was no work to do
-        (no opt-in users, cap reached, or no valid requests built).
+        (cap reached, or no valid requests built).
     """
     # 1. List opt-in users
-    opted_in_profiles = await profile_repo.list_opted_in_users(session)
+    opted_in_profiles = [] if gaps_only else await profile_repo.list_opted_in_users(session)
     if not opted_in_profiles:
-        logger.info("No opt-in users for nightly batch — skipping")
-        return None
+        logger.info("No review to build for this batch (opt-in users: 0)")
 
     n_users = len(opted_in_profiles)
     estimated_total = n_users * estimate_cost_per_review()
@@ -194,7 +199,7 @@ async def submit_nightly_batch(session: AsyncSession) -> ReviewBatch | None:
     n_gap_fills = len(gap_requests)
 
     if not requests:
-        logger.warning("No valid requests built — aborting batch submit")
+        logger.info("Nothing to submit: no review and no gap")
         return None
 
     if skipped:

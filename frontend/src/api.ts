@@ -586,6 +586,18 @@ export async function unlinkEnableBankingSession(id: string): Promise<void> {
   await http<void>(`/enablebanking/sessions/${id}`, { method: "DELETE" });
 }
 
+/* ── Admin ──────────────────────────────────────────────────────────── */
+
+export interface CategorizeReport {
+  learned: number;
+  batch: { id: string; n_requests: number } | null;
+}
+
+/** Superuser only: past decisions applied at once, the rest sent to the LLM. */
+export async function adminCategorizeNow(): Promise<CategorizeReport> {
+  return http<CategorizeReport>("/admin/categorize", { method: "POST" });
+}
+
 /* ── Password reset hooks ─────────────────────────────────────────────── */
 export function useRequestReset() {
   return useMutation({

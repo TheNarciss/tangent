@@ -11,8 +11,8 @@ Jobs registered:
                           -> enablebanking.aggregator (PSD2 allows four a day)
 - record_portfolio_snapshots : daily at 02:00 Europe/Paris -> snapshot_job
 - submit_nightly_batch  : daily at 03:00 Europe/Paris -> batch_submitter
-- poll_pending_batches  : every 15 min from 03:00 to 09:45 Paris
-                          -> batch_poller (idempotent, skips finished)
+- poll_pending_batches  : every 15 min, all day -> batch_poller (idempotent,
+                          skips finished; a catch-up batch can be sent any time)
 
 Both jobs open their own AsyncSession (no FastAPI Depends in APScheduler).
 Exceptions are caught and logged so the scheduler keeps running for the
@@ -68,8 +68,9 @@ async def _job_submit_nightly() -> None:
 async def _job_poll_pending() -> None:
     """Poll all in-progress batches.
 
-    Called every 15 min from 03:00 to 09:45 Paris. Idempotent: already
-    finished batches are skipped at the repo layer.
+    Called every 15 min, all day: the nightly batch lands in the morning, a
+    catch-up batch whenever the admin asks. Idempotent: already finished
+    batches are skipped at the repo layer.
     """
     async with async_session_factory() as session:
         try:
@@ -178,7 +179,7 @@ def setup_scheduler() -> AsyncIOScheduler:
 
     scheduler.add_job(
         _job_poll_pending,
-        CronTrigger(hour="3-9", minute="0,15,30,45", timezone=_PARIS),
+        CronTrigger(minute="0,15,30,45", timezone=_PARIS),
         id="poll_pending_batches",
         replace_existing=True,
         max_instances=1,
