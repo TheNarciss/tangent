@@ -544,6 +544,48 @@ export async function getPowensWebviewUrl(): Promise<string> {
   return result.webview_url;
 }
 
+/* ── Enable Banking (ADR-032) ───────────────────────────────────────── */
+
+export interface EnableBankingSession {
+  id: string;
+  bank_name: string;
+  accounts_count: number;
+  valid_until: string;
+  expired: boolean;
+  last_sync_at: string | null;
+  last_error: string | null;
+}
+
+/** Whether the server holds Enable Banking credentials. */
+export function useEnableBankingStatus() {
+  return useQuery({
+    queryKey: ["enablebanking", "status"],
+    queryFn: () => http<{ configured: boolean }>("/enablebanking/status"),
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
+export function useEnableBankingSessions() {
+  return useQuery({
+    queryKey: ["enablebanking", "sessions"],
+    queryFn: () => http<EnableBankingSession[]>("/enablebanking/sessions"),
+  });
+}
+
+/** Where to send the user so the bank asks for their consent. */
+export async function startEnableBankingAuth(bankName: string, country = "FR"): Promise<string> {
+  const out = await http<{ url: string }>("/enablebanking/authorize", {
+    method: "POST",
+    body: JSON.stringify({ bank_name: bankName, country }),
+  });
+  return out.url;
+}
+
+export async function unlinkEnableBankingSession(id: string): Promise<void> {
+  await http<void>(`/enablebanking/sessions/${id}`, { method: "DELETE" });
+}
+
 /* ── Password reset hooks ─────────────────────────────────────────────── */
 export function useRequestReset() {
   return useMutation({

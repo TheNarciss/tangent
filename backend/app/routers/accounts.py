@@ -23,7 +23,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -31,11 +31,12 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..aggregator import AccountType, Investment, Transaction
+from ..aggregator.persist import Persisted, persist_sync_result
+from ..aggregator.types import AccountType, SyncResult
 from ..auth import User, current_active_user
 from ..db import get_session
-from ..db.models import BankAccount, PowensCredential
-from ..finance.fees import autodetect_broker
+from ..db.models import BankAccount, EnableBankingSession, PowensCredential
+from ..enablebanking import aggregator as enablebanking_agg
 from ..finance.gap_filler.fields.transaction_category import CATEGORIES
 from ..powens.aggregator import PowensAggregator
 from ..powens.client import PowensClient, PowensError
@@ -43,8 +44,9 @@ from ..powens.crypto import decrypt_token
 from ..repositories import account_holdings as holdings_repo
 from ..repositories import bank_accounts as accounts_repo
 from ..repositories import bank_transactions as bank_txs_repo
-from ..repositories import profile as profile_repo
 from ..sync_cache import sync_cache
+
+DAILY_SYNC_DAYS = 31  # Enable Banking: the rolling month, deduplicated on insert
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/accounts", tags=["accounts"])
@@ -529,43 +531,38 @@ async def refresh_accounts(
     stmt = select(PowensCredential).where(PowensCredential.user_id == user.id)
     res = await session.execute(stmt)
     cred = res.scalars().first()
-    if cred is None:
-        raise HTTPException(
-            status_code=400,
-            detail="No Powens connection. Connect Powens first.",
-        )
 
-    token = decrypt_token(cred.encrypted_token)
-
-    # 1. Force every connection to re-sync with its bank
+    # 1. Force every Powens connection to re-sync with its bank
     triggered_count = 0
-    async with PowensClient(token=token) as client:
-        try:
-            connections = await client.get_connections()
-        except PowensError as exc:
-            logger.warning("refresh user=%s: get_connections failed: %s", user.id, exc)
-            connections = []
-
-        for conn in connections:
-            conn_id = conn.get("id")
-            if not isinstance(conn_id, int):
-                continue
+    if cred is not None:
+        token = decrypt_token(cred.encrypted_token)
+        async with PowensClient(token=token) as client:
             try:
-                await client.force_sync(conn_id)
-                triggered_count += 1
-                logger.info(
-                    "refresh user=%s: triggered Powens force_sync conn=%s",
-                    user.id,
-                    conn_id,
-                )
+                connections = await client.get_connections()
             except PowensError as exc:
-                # 409 = sync already in progress / rate-limited — that's fine
-                logger.info(
-                    "refresh user=%s: force_sync conn=%s skipped (%s)",
-                    user.id,
-                    conn_id,
-                    exc,
-                )
+                logger.warning("refresh user=%s: get_connections failed: %s", user.id, exc)
+                connections = []
+
+            for conn in connections:
+                conn_id = conn.get("id")
+                if not isinstance(conn_id, int):
+                    continue
+                try:
+                    await client.force_sync(conn_id)
+                    triggered_count += 1
+                    logger.info(
+                        "refresh user=%s: triggered Powens force_sync conn=%s",
+                        user.id,
+                        conn_id,
+                    )
+                except PowensError as exc:
+                    # 409 = sync already in progress / rate-limited — that's fine
+                    logger.info(
+                        "refresh user=%s: force_sync conn=%s skipped (%s)",
+                        user.id,
+                        conn_id,
+                        exc,
+                    )
 
     # 2. Give Powens time to talk to the bank
     if triggered_count > 0:
@@ -587,99 +584,60 @@ async def refresh_accounts(
 
 
 async def _do_sync(user: User, session: AsyncSession) -> SyncReport:
-    """Actual sync logic — no cache check, always hits Powens.
+    """Actual sync logic — no cache check, always hits the providers.
 
-    Extracted so /sync and /refresh can share it.
+    Powens when the user has a credential, then every live Enable Banking
+    session. One provider failing does not hide the others' data: the report
+    carries its error next to the counts.
     """
+    now = datetime.now(UTC)
+    results: list[SyncResult] = []
+
     stmt = select(PowensCredential).where(PowensCredential.user_id == user.id)
-    res = await session.execute(stmt)
-    cred = res.scalars().first()
-    if cred is None:
-        raise HTTPException(
-            status_code=400,
-            detail="No Powens connection. Connect Powens first.",
+    cred = (await session.execute(stmt)).scalars().first()
+    if cred is not None:
+        token = decrypt_token(cred.encrypted_token)
+        results.append(await PowensAggregator(token=token, user_id=user.id, session=session).sync())
+
+    rows = (
+        (
+            await session.execute(
+                select(EnableBankingSession).where(EnableBankingSession.user_id == user.id)
+            )
         )
-
-    token = decrypt_token(cred.encrypted_token)
-    aggregator = PowensAggregator(token=token, user_id=user.id, session=session)
-    result = await aggregator.sync()
-
-    if not result.success:
-        return SyncReport(success=False, error=result.error, synced_at=result.synced_at)
-
-    # Persist accounts (BankAccount + nested Loan upsert if applicable)
-    account_id_map: dict[str, uuid.UUID] = {}
-    persisted_accounts = 0
-    for acc_dto in result.accounts:
-        orm = await accounts_repo.upsert_account(session, user.id, acc_dto)
-        account_id_map[acc_dto.provider_account_id] = orm.id
-        persisted_accounts += 1
-
-    holdings_by_acc: dict[str, list[Investment]] = {}
-    for inv in result.investments:
-        holdings_by_acc.setdefault(inv.provider_account_id, []).append(inv)
-
-    txs_by_acc: dict[str, list[Transaction]] = {}
-    for tx in result.transactions:
-        txs_by_acc.setdefault(tx.provider_account_id, []).append(tx)
-
-    persisted_holdings = 0
-    for prov_acc_id, holdings in holdings_by_acc.items():
-        if prov_acc_id in account_id_map:
-            persisted = await holdings_repo.replace_holdings(
-                session, user.id, account_id_map[prov_acc_id], holdings
-            )
-            persisted_holdings += len(persisted)
-
-    persisted_txs = 0
-    for prov_acc_id, txs in txs_by_acc.items():
-        if prov_acc_id in account_id_map:
-            inserted = await bank_txs_repo.upsert_transactions(
-                session, user.id, account_id_map[prov_acc_id], txs
-            )
-            persisted_txs += inserted
-
-    # ── Autodetect default broker on first sync (if not yet set) ────────────
-    profile = await profile_repo.get_or_create(session, user.id)
-    if profile.default_broker is None:
-        # Pick the institution of the LARGEST investment wrapper (PEA / CTO / AV)
-        invest_types = {AccountType.PEA, AccountType.CTO, AccountType.LIFE_INSURANCE}
-        candidates = [
-            (acc.institution_name, float(acc.valuation or acc.balance or 0))
-            for acc in result.accounts
-            if acc.type in invest_types and acc.institution_name
-        ]
-        if candidates:
-            candidates.sort(key=lambda x: x[1], reverse=True)
-            broker_id = autodetect_broker(candidates[0][0])
-            if broker_id:
-                await profile_repo.update(session, user.id, {"default_broker": broker_id})
-                logger.info(
-                    "Autodetected broker=%s from institution=%r for user=%s",
-                    broker_id,
-                    candidates[0][0],
-                    user.id,
-                )
-
-    # ── Legacy bridge: sync to portfolios/positions table ────────────────────
-    # The legacy dashboard/historique/optimisation routes still read from this
-    # table. Until we migrate them, derive legacy data from the new sync result.
-
-    logger.info(
-        "Sync user=%s: %d accounts, %d holdings, %d new txs",
-        user.id,
-        persisted_accounts,
-        persisted_holdings,
-        persisted_txs,
+        .scalars()
+        .all()
     )
+    for row in rows:
+        if enablebanking_agg.is_expired(row, now):
+            continue
+        results.append(
+            await enablebanking_agg.sync_row(
+                session, row, since=date.today() - timedelta(days=DAILY_SYNC_DAYS)
+            )
+        )
+    await session.commit()
+
+    if not results:
+        raise HTTPException(status_code=400, detail="Aucune banque connectée.")
+
+    failures = [r.error or r.provider for r in results if not r.success]
+    if len(failures) == len(results):
+        return SyncReport(success=False, error="; ".join(failures), synced_at=now)
+
+    total = Persisted()
+    for result in results:
+        if result.success:
+            total = total + await persist_sync_result(session, user.id, result)
 
     return SyncReport(
         success=True,
-        accounts_persisted=persisted_accounts,
-        holdings_persisted=persisted_holdings,
-        transactions_persisted=persisted_txs,
-        synced_at=result.synced_at,
+        accounts_persisted=total.accounts,
+        holdings_persisted=total.holdings,
+        transactions_persisted=total.transactions,
+        synced_at=now,
         from_cache=False,
+        error="; ".join(failures) or None,
     )
 
 

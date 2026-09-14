@@ -146,7 +146,7 @@ async def test_get_account_404_for_other_users_account(client):
 
 
 @pytest.mark.integration
-async def test_sync_without_powens_credential_returns_400(client):
+async def test_sync_without_any_bank_returns_400(client):
     run_id = uuid.uuid4().hex[:8]
     cookie, _user_id = await _register_login_and_get_id(
         client, f"nosync-{run_id}@test.com", "TestPwd123!"
@@ -155,6 +155,6 @@ async def test_sync_without_powens_credential_returns_400(client):
         client.cookies.clear()
         resp = await client.post("/api/accounts/sync", cookies={"tangent_auth": cookie})
         assert resp.status_code == 400
-        assert "Powens" in resp.json()["detail"]
+        assert "Aucune banque" in resp.json()["detail"]
     finally:
         pass  # no DB cleanup needed (no rows created)

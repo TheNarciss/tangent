@@ -30,6 +30,7 @@ from .routers import (
     admin,
     analysis,
     dashboard,
+    enablebanking,
     envelopes,
     export,
     oauth_accounts,
@@ -270,6 +271,8 @@ app.include_router(envelopes.router, prefix="/api")
 # - router: /sync/* (normal namespace under /api/)
 app.include_router(powens.legacy_router)
 app.include_router(powens.router, prefix="/api")
+app.include_router(enablebanking.legacy_router)
+app.include_router(enablebanking.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(profile.router, prefix="/api")
 app.include_router(account.router, prefix="/api")
