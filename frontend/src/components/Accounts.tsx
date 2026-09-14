@@ -188,7 +188,7 @@ export function Accounts() {
       </section>
 
       {accounts.isLoading && (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="h-24 animate-pulse rounded-xl bg-muted/30" />
           ))}
@@ -233,7 +233,7 @@ export function Accounts() {
                   {g === "loan" ? `−${fmt.eur(total)}` : fmt.eur(total)}
                 </span>
               </div>
-              <div className="grid gap-3 md:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 {list.map((a) => (
                   <AccountCard key={a.id} account={a} onOpen={() => setSelected(a)} />
                 ))}

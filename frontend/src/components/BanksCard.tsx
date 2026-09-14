@@ -103,9 +103,9 @@ function BankRow({
 
   return (
     <div className="rounded-md border px-3 py-2">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-[12rem] flex-1">
           <p className="truncate text-sm font-medium">{name}</p>
           <p className="text-xs text-muted-foreground">
             {accountsCount} compte{accountsCount > 1 ? "s" : ""} · mis à jour{" "}
@@ -118,7 +118,12 @@ function BankRow({
           </p>
         </div>
         {!confirming && (
-          <Button variant="ghost" size="sm" onClick={() => setConfirming(true)}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setConfirming(true)}
+            className="ml-auto shrink-0"
+          >
             Retirer
           </Button>
         )}
@@ -194,9 +199,9 @@ function EnableBankingRow({
 
   return (
     <div className="rounded-md border px-3 py-2">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-[12rem] flex-1">
           <p className="truncate text-sm font-medium">{name}</p>
           <p className="text-xs text-muted-foreground">
             {accountsCount} compte{accountsCount > 1 ? "s" : ""} · mis à jour{" "}
@@ -215,16 +220,18 @@ function EnableBankingRow({
             </p>
           )}
         </div>
-        {expired && (
-          <Button variant="outline" size="sm" onClick={reconnect} disabled={busy}>
-            {busy ? "Redirection…" : "Reconnecter"}
-          </Button>
-        )}
-        {!confirming && (
-          <Button variant="ghost" size="sm" onClick={() => setConfirming(true)}>
-            Retirer
-          </Button>
-        )}
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          {expired && (
+            <Button variant="outline" size="sm" onClick={reconnect} disabled={busy}>
+              {busy ? "Redirection…" : "Reconnecter"}
+            </Button>
+          )}
+          {!confirming && (
+            <Button variant="ghost" size="sm" onClick={() => setConfirming(true)}>
+              Retirer
+            </Button>
+          )}
+        </div>
       </div>
       {confirming && (
         <div className="mt-2 flex flex-wrap items-center justify-end gap-2 text-xs">
