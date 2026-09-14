@@ -4,6 +4,11 @@ One `EnableBankingSession` row = one consent at one bank for one user. The
 accounts it exposes carry the row id in `raw_data["enablebanking_session"]`,
 the way Powens accounts carry `id_connection`, so a row can be unlinked with
 its accounts.
+
+An account's `uid` is scoped to the session: the next consent gives the same
+account another uid. Its `identification_hash` is the stable identity Enable
+Banking provides for exactly that, so it is our provider_account_id and the
+uid only serves the API calls of the day.
 """
 
 from __future__ import annotations
@@ -72,7 +77,7 @@ def account_dto(
     name = acc.get("name") or acc.get("product") or f"{institution_name} {currency}"
     return BankAccount(
         provider=PROVIDER,
-        provider_account_id=str(acc["uid"]),
+        provider_account_id=account_key(acc),
         name=str(name),
         type=account_type(acc),
         currency=currency,
@@ -83,6 +88,11 @@ def account_dto(
         last_synced_at=synced_at,
         raw_data={**acc, "enablebanking_session": session_key},
     )
+
+
+def account_key(acc: dict) -> str:
+    """The identity that survives a new consent: the hash, else the session's uid."""
+    return str(acc.get("identification_hash") or acc["uid"])[:64]
 
 
 def transaction_id(tx: dict) -> str:
@@ -164,12 +174,19 @@ class EnableBankingAggregator:
         async with EnableBankingClient() as client:
             data = await client.get_session(self._session_id)
             out: list[BankAccount] = []
+            seen: set[str] = set()
             for entry in data.get("accounts_data") or data.get("accounts") or []:
                 uid = entry if isinstance(entry, str) else (entry or {}).get("uid")
                 if not uid:
                     continue
                 acc = await client.get_account_details(str(uid))
                 acc["uid"] = str(uid)
+                if isinstance(entry, dict) and entry.get("identification_hash"):
+                    acc.setdefault("identification_hash", entry["identification_hash"])
+                if account_key(acc) in seen:
+                    # Two pockets the bank hashes alike: the second keeps its uid.
+                    acc.pop("identification_hash", None)
+                seen.add(account_key(acc))
                 try:
                     balances = await client.get_balances(str(acc["uid"]))
                 except EnableBankingError as exc:
@@ -189,7 +206,11 @@ class EnableBankingAggregator:
     async def get_investments(self, account_id: str) -> list[Investment]:
         return []  # Account information only; no securities through this channel yet.
 
-    async def get_transactions(self, account_id: str, limit: int = 100) -> list[Transaction]:
+    async def get_transactions(
+        self, account_id: str, limit: int = 100, *, key: str | None = None
+    ) -> list[Transaction]:
+        """`account_id` is the session's uid (what the API wants); `key` the stable
+        provider_account_id the transactions are filed under."""
         async with EnableBankingClient() as client:
             try:
                 rows = await client.get_transactions(account_id, date_from=self._since)
@@ -208,7 +229,7 @@ class EnableBankingAggregator:
         out: list[Transaction] = []
         for tx in rows:
             try:
-                dto = transaction_dto(tx, account_uid=account_id)
+                dto = transaction_dto(tx, account_uid=key or account_id)
             except (KeyError, TypeError, ValueError) as exc:
                 logger.warning("Enable Banking: transaction illisible ignorée: %s", exc)
                 continue
@@ -229,7 +250,11 @@ class EnableBankingAggregator:
         failures: list[str] = []
         for acc in accounts:
             try:
-                transactions.extend(await self.get_transactions(acc.provider_account_id))
+                transactions.extend(
+                    await self.get_transactions(
+                        str(acc.raw_data["uid"]), key=acc.provider_account_id
+                    )
+                )
             except EnableBankingError as exc:
                 logger.warning("Enable Banking: opérations de %s illisibles: %s", acc.name, exc)
                 failures.append(f"{acc.name}: {exc}")

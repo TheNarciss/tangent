@@ -40,6 +40,7 @@ def test_the_bearer_token_is_signed_for_enable_banking(keypair):
 def test_an_account_becomes_a_checking_account_with_its_booked_balance():
     acc = {
         "uid": "u-1",
+        "identification_hash": "hash-that-survives-a-new-consent",
         "account_id": {"iban": "LT00REVO0000000000"},
         "name": "Main",
         "currency": "eur",
@@ -60,12 +61,18 @@ def test_an_account_becomes_a_checking_account_with_its_booked_balance():
     )
 
     assert dto.provider == "enablebanking"
+    assert dto.provider_account_id == "hash-that-survives-a-new-consent"  # not the uid
+    assert dto.raw_data["uid"] == "u-1"
     assert dto.type == AccountType.CHECKING
     assert dto.currency == "EUR"
     assert dto.balance == 100.0  # booked beats available
     assert dto.iban == "LT00REVO0000000000"
     assert dto.institution_name == "Revolut"
     assert dto.raw_data["enablebanking_session"] == "row-1"
+
+
+def test_without_a_hash_the_uid_is_the_key():
+    assert aggregator.account_key({"uid": "u-9"}) == "u-9"
 
 
 def test_without_a_booked_balance_the_first_one_the_bank_sends_is_used():
@@ -157,6 +164,8 @@ class _FakeClient:
     async def get_account_details(self, uid):
         return {"name": "Main", "currency": "EUR", "cash_account_type": "CACC"}
 
+    # No identification_hash in the details: the one from the session listing is used.
+
     async def get_balances(self, uid):
         return [{"balance_type": "CLBD", "balance_amount": {"amount": "10", "currency": "EUR"}}]
 
@@ -196,7 +205,8 @@ async def test_accounts_are_kept_when_their_transactions_cannot_be_read(monkeypa
 
     assert result.success
     assert [a.name for a in result.accounts] == ["Main"]
-    assert result.accounts[0].provider_account_id == "u-1"
+    assert result.accounts[0].provider_account_id == "h"  # the session's hash, not the uid
+    assert result.accounts[0].raw_data["uid"] == "u-1"
     assert result.transactions == []
     assert result.error and "Main" in result.error
 
@@ -211,3 +221,4 @@ async def test_a_refused_window_is_retried_over_the_guaranteed_ninety_days(monke
 
     assert [w for w in fake.windows] == [since, datetime.now(UTC).date() - timedelta(days=89)]
     assert len(result.transactions) == 1 and result.error is None
+    assert result.transactions[0].provider_account_id == "h"  # filed under the stable key

@@ -25,7 +25,7 @@ from ..db.models import BankAccount, EnableBankingSession
 from ..enablebanking import settings
 from ..enablebanking.aggregator import is_expired, sync_row
 from ..enablebanking.client import EnableBankingClient, EnableBankingError
-from ..powens.crypto import encrypt_token
+from ..powens.crypto import decrypt_token, encrypt_token
 
 logger = logging.getLogger(__name__)
 
@@ -139,15 +139,30 @@ async def callback(
         return _back("error&error=encryption_not_configured")
 
     aspsp = opened.get("aspsp") or {}
-    row = EnableBankingSession(
-        user_id=user.id,
-        encrypted_session_id=encrypted,
-        bank_name=str(aspsp.get("name") or claims.get("bank") or "Banque"),
-        bank_country=str(aspsp.get("country") or claims.get("country") or "FR")[:2],
-        psu_type=str(opened.get("psu_type") or "personal"),
-        valid_until=_parse_valid_until((opened.get("access") or {}).get("valid_until")),
+    bank_name = str(aspsp.get("name") or claims.get("bank") or "Banque")
+    # One consent per bank and per user: a reconnection replaces the old one,
+    # its accounts keep their identity (identification_hash) and their history.
+    row = (
+        (
+            await db.execute(
+                select(EnableBankingSession)
+                .where(EnableBankingSession.user_id == user.id)
+                .where(EnableBankingSession.bank_name == bank_name)
+            )
+        )
+        .scalars()
+        .first()
     )
-    db.add(row)
+    if row is not None:
+        await _revoke(row)
+    else:
+        row = EnableBankingSession(user_id=user.id, bank_name=bank_name)
+        db.add(row)
+    row.encrypted_session_id = encrypted
+    row.bank_country = str(aspsp.get("country") or claims.get("country") or "FR")[:2]
+    row.psu_type = str(opened.get("psu_type") or "personal")
+    row.valid_until = _parse_valid_until((opened.get("access") or {}).get("valid_until"))
+    row.last_error = None
     await db.commit()
     await db.refresh(row)
 
@@ -213,13 +228,7 @@ async def delete_session(
     row = await db.get(EnableBankingSession, session_row_id)
     if row is None or row.user_id != user.id:
         raise HTTPException(status_code=404, detail="Connexion inconnue.")
-    try:
-        from ..powens.crypto import decrypt_token
-
-        async with EnableBankingClient() as client:
-            await client.delete_session(decrypt_token(row.encrypted_session_id))
-    except (EnableBankingError, ValueError) as exc:
-        logger.warning("Enable Banking: révocation de %s échouée, nettoyage local: %s", row.id, exc)
+    await _revoke(row)
     accounts = (
         (
             await db.execute(
@@ -239,6 +248,15 @@ async def delete_session(
 
 
 # ── helpers ────────────────────────────────────────────────────────────────
+
+
+async def _revoke(row: EnableBankingSession) -> None:
+    """Best effort: end the consent at Enable Banking; a failure is only logged."""
+    try:
+        async with EnableBankingClient() as client:
+            await client.delete_session(decrypt_token(row.encrypted_session_id))
+    except (EnableBankingError, ValueError) as exc:
+        logger.warning("Enable Banking: révocation de %s échouée: %s", row.id, exc)
 
 
 def _require_configured() -> None:
