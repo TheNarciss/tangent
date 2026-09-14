@@ -151,7 +151,11 @@ class _FakeClient:
         return None
 
     async def get_session(self, session_id):
-        return {"accounts": [{"uid": "u-1", "name": "Main", "currency": "EUR"}]}
+        # As the API answers: uids only, details behind their own endpoint.
+        return {"accounts": ["u-1"], "accounts_data": [{"uid": "u-1", "identification_hash": "h"}]}
+
+    async def get_account_details(self, uid):
+        return {"name": "Main", "currency": "EUR", "cash_account_type": "CACC"}
 
     async def get_balances(self, uid):
         return [{"balance_type": "CLBD", "balance_amount": {"amount": "10", "currency": "EUR"}}]
@@ -192,6 +196,7 @@ async def test_accounts_are_kept_when_their_transactions_cannot_be_read(monkeypa
 
     assert result.success
     assert [a.name for a in result.accounts] == ["Main"]
+    assert result.accounts[0].provider_account_id == "u-1"
     assert result.transactions == []
     assert result.error and "Main" in result.error
 

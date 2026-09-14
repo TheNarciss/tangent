@@ -134,6 +134,10 @@ class EnableBankingClient:
 
     # ── Account data ───────────────────────────────────────────────────────
 
+    async def get_account_details(self, account_uid: str) -> dict:
+        """Name, currency, type, IBAN: a session only lists uids."""
+        return await self._request("GET", f"/accounts/{account_uid}/details")
+
     async def get_balances(self, account_uid: str) -> list[dict]:
         data = await self._request("GET", f"/accounts/{account_uid}/balances")
         return list(data.get("balances") or [])

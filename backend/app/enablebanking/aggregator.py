@@ -158,13 +158,18 @@ class EnableBankingAggregator:
         self._since = since
 
     async def get_accounts(self) -> list[BankAccount]:
+        """A session lists uids (plus an identification hash); each account's
+        details come from their own endpoint."""
         synced_at = datetime.now(UTC)
         async with EnableBankingClient() as client:
             data = await client.get_session(self._session_id)
             out: list[BankAccount] = []
-            for acc in data.get("accounts") or []:
-                if not acc.get("uid"):
+            for entry in data.get("accounts_data") or data.get("accounts") or []:
+                uid = entry if isinstance(entry, str) else (entry or {}).get("uid")
+                if not uid:
                     continue
+                acc = await client.get_account_details(str(uid))
+                acc["uid"] = str(uid)
                 try:
                     balances = await client.get_balances(str(acc["uid"]))
                 except EnableBankingError as exc:
