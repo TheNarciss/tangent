@@ -11,6 +11,7 @@ from ..db import get_session
 from ..db.models import ReviewBatch
 from ..finance.gap_filler import engine as gap_filler_engine
 from ..llm import batch_poller, batch_submitter
+from ..repositories import bank_transactions as tx_repo
 from ..repositories import review_batches as batches_repo
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -104,6 +105,25 @@ async def submit_batch(
     if batch is None:
         return {"status": "skipped", "reason": "no opt-in users or cost cap reached"}
     return _batch_to_dict(batch)
+
+
+@router.post("/categorize")
+async def categorize_now(
+    superuser: User = Depends(_superuser),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Catch up on categories now, for everyone: past decisions first, then the LLM.
+
+    What a past decision on the same merchant settles is applied at once;
+    what remains goes into a gap-fill batch, whose answers the poller
+    applies within the hour.
+    """
+    users = (await session.execute(select(User))).scalars().all()
+    learned = 0
+    for user in users:
+        learned += await tx_repo.apply_learned_categories(session, user.id)
+    batch = await batch_submitter.submit_nightly_batch(session, gaps_only=True)
+    return {"learned": learned, "batch": _batch_to_dict(batch) if batch else None}
 
 
 @router.post("/batches/poll-all")

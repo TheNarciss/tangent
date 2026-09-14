@@ -19,6 +19,7 @@ from sqlalchemy.orm import aliased
 
 from ..aggregator import Transaction
 from ..db.models import BankAccount, BankTransaction
+from ..finance import merchants
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +98,72 @@ async def upsert_transactions(
         len(rows) - inserted,
     )
     return inserted
+
+
+LEARNED_SOURCE = "history"  # category_source when a past decision on the same merchant decided
+
+
+async def learned_categories(session: AsyncSession, user_id: uuid.UUID) -> dict[str, str]:
+    """Merchant → category, from what was decided before for this user.
+
+    A merchant is a folded label (`merchants.fold`). The user's own choice
+    wins; otherwise the most recent decision, whoever made it.
+    """
+    stmt = (
+        select(
+            BankTransaction.description,
+            BankTransaction.category,
+            BankTransaction.category_source,
+            BankTransaction.category_resolved_at,
+            BankTransaction.transaction_date,
+        )
+        .where(BankTransaction.user_id == user_id, BankTransaction.category.is_not(None))
+        .order_by(BankTransaction.transaction_date.desc())
+    )
+    rows = (await session.execute(stmt)).all()
+    return learn(
+        [
+            (str(d), str(c), s, r or datetime.combine(t, datetime.min.time(), UTC))
+            for d, c, s, r, t in rows
+        ]
+    )
+
+
+def learn(rows: list[tuple[str, str, str | None, datetime]]) -> dict[str, str]:
+    """(label, category, source, when) → merchant → category. Pure, testable."""
+    best: dict[str, tuple[int, datetime, str]] = {}
+    for label, category, source, when in rows:
+        key = merchants.fold(label)
+        rank = (1 if source == "user" else 0, when, category)
+        if key not in best or rank[:2] > best[key][:2]:
+            best[key] = rank
+    return {key: category for key, (_, _, category) in best.items()}
+
+
+async def apply_learned_categories(session: AsyncSession, user_id: uuid.UUID) -> int:
+    """Fill the empty categories a past decision on the same merchant can decide."""
+    learned = await learned_categories(session, user_id)
+    if not learned:
+        return 0
+    stmt = select(BankTransaction.id, BankTransaction.description).where(
+        BankTransaction.user_id == user_id,
+        BankTransaction.category.is_(None),
+        BankTransaction.category_source.is_distinct_from("user"),
+    )
+    by_category: dict[str, list[uuid.UUID]] = {}
+    for row_id, description in (await session.execute(stmt)).all():
+        category = learned.get(merchants.fold(str(description)))
+        if category:
+            by_category.setdefault(category, []).append(row_id)
+    now = datetime.now(UTC)
+    for category, ids in by_category.items():
+        await session.execute(
+            update(BankTransaction)
+            .where(BankTransaction.id.in_(ids))
+            .values(category=category, category_source=LEARNED_SOURCE, category_resolved_at=now)
+        )
+    await session.commit()
+    return sum(len(ids) for ids in by_category.values())
 
 
 async def update_category(

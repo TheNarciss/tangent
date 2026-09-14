@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from datetime import date
 
 from fastapi import APIRouter, Depends, Query
@@ -11,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import User, current_active_user
 from ..db import get_session
+from ..finance import merchants
 from ..repositories import bank_transactions as tx_repo
 
 router = APIRouter(tags=["spending"])
@@ -117,23 +117,11 @@ def _shift(first_of_month: date, months: int) -> date:
     return date(index // 12, index % 12 + 1, 1)
 
 
-# What the bank appends to a merchant's name: dates, card numbers, amounts,
-# reference numbers. Stripping them folds one shop's visits together.
-_NOISE = re.compile(r"[\d/*.,:-]+")
-_PREFIXES = ("cb ", "carte ", "paiement cb ", "prlv sepa ", "prlv ", "vir sepa ", "vir ")
-
-
 def _merchants(rows: list[tuple[str, float, int]], top: int = 10) -> list[Merchant]:
     """The bank's labels folded by merchant, largest first."""
     folded: dict[str, list[float]] = {}
     for label, total, count in rows:
-        name = _NOISE.sub(" ", label.lower())
-        for prefix in _PREFIXES:
-            if name.startswith(prefix):
-                name = name[len(prefix) :]
-        name = " ".join(name.split()).strip()
-        if not name:
-            name = "sans libellé"
+        name = merchants.fold(label)
         agg = folded.setdefault(name, [0.0, 0.0])
         agg[0] += total
         agg[1] += count

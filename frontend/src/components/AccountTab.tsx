@@ -5,6 +5,7 @@ import {
   Download,
   KeyRound,
   Loader2,
+  Tags,
   Trash2,
   Unlink,
 } from "lucide-react";
@@ -12,6 +13,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   ApiError,
+  adminCategorizeNow,
   changePassword,
   deleteMyAccount,
   exportEverything,
@@ -48,8 +50,58 @@ export function AccountTab() {
       <OAuthSection />
       <AutoReviewSection />
       <ExportSection />
+      <AdminSection />
       <DangerZone />
     </div>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────────────── */
+/*  Admin                                                                   */
+/* ──────────────────────────────────────────────────────────────────────── */
+
+function AdminSection() {
+  const { data: user } = useCurrentUser();
+  const qc = useQueryClient();
+  const run = useMutation({
+    mutationFn: adminCategorizeNow,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["spending"] });
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+    },
+  });
+  if (!user?.is_superuser) return null;
+
+  return (
+    <Section
+      title="Administration"
+      description="Rattraper les catégories manquantes sans attendre la nuit : ce qu'une décision passée sur le même commerçant règle est appliqué tout de suite, le reste part au LLM et revient dans l'heure."
+    >
+      <Button
+        variant="outline"
+        onClick={() => run.mutate()}
+        disabled={run.isPending}
+        className="gap-2"
+      >
+        <Tags className="h-4 w-4" />
+        {run.isPending ? "Catégorisation…" : "Catégoriser maintenant"}
+      </Button>
+      {run.data && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          {run.data.learned} opération{run.data.learned > 1 ? "s" : ""} catégorisée
+          {run.data.learned > 1 ? "s" : ""} d'après l'historique
+          {run.data.batch
+            ? ` · ${run.data.batch.n_requests} envoyée${run.data.batch.n_requests > 1 ? "s" : ""} au LLM`
+            : " · rien à envoyer au LLM"}
+          .
+        </p>
+      )}
+      {run.error && (
+        <p className="mt-2 text-xs text-[hsl(var(--loss))]">
+          {run.error instanceof Error ? run.error.message : "Erreur inconnue"}
+        </p>
+      )}
+    </Section>
   );
 }
 
