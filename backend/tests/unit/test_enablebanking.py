@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -61,7 +62,9 @@ def test_an_account_becomes_a_checking_account_with_its_booked_balance():
     )
 
     assert dto.provider == "enablebanking"
-    assert dto.provider_account_id == "hash-that-survives-a-new-consent"  # not the uid
+    assert (
+        dto.provider_account_id == hashlib.sha256(b"hash-that-survives-a-new-consent").hexdigest()
+    )
     assert dto.raw_data["uid"] == "u-1"
     assert dto.type == AccountType.CHECKING
     assert dto.currency == "EUR"
@@ -73,6 +76,16 @@ def test_an_account_becomes_a_checking_account_with_its_booked_balance():
 
 def test_without_a_hash_the_uid_is_the_key():
     assert aggregator.account_key({"uid": "u-9"}) == "u-9"
+
+
+def test_two_hashes_that_share_a_long_prefix_get_different_keys():
+    prefix = (
+        "WwpbCiJhY2NvdW50IiwKImFjY291bnRfaWQiLAoiaWJhbiIKXSwKWwoiYWNjb3VudCIsCiJjdXJyZW5jeSIKXQpd."
+    )
+    eur = aggregator.account_key({"uid": "a", "identification_hash": prefix + "eur"})
+    gbp = aggregator.account_key({"uid": "b", "identification_hash": prefix + "gbp"})
+
+    assert eur != gbp and len(eur) == 64 == len(gbp)
 
 
 def test_without_a_booked_balance_the_first_one_the_bank_sends_is_used():
@@ -223,7 +236,7 @@ async def test_accounts_are_kept_when_their_transactions_cannot_be_read(monkeypa
 
     assert result.success
     assert [a.name for a in result.accounts] == ["Main"]
-    assert result.accounts[0].provider_account_id == "h"  # the session's hash, not the uid
+    assert result.accounts[0].provider_account_id == hashlib.sha256(b"h").hexdigest()
     assert result.accounts[0].raw_data["uid"] == "u-1"
     assert result.transactions == []
     assert result.error and "Main" in result.error
@@ -239,4 +252,4 @@ async def test_a_refused_window_is_retried_over_the_guaranteed_ninety_days(monke
 
     assert [w for w in fake.windows] == [since, datetime.now(UTC).date() - timedelta(days=89)]
     assert len(result.transactions) == 1 and result.error is None
-    assert result.transactions[0].provider_account_id == "h"  # filed under the stable key
+    assert result.transactions[0].provider_account_id == hashlib.sha256(b"h").hexdigest()
