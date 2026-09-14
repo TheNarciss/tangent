@@ -653,3 +653,32 @@ class ReviewBatch(Base):
     # Cost estimate at submit time vs actual cost computed from results.
     estimated_cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
     actual_cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+class EnableBankingSession(Base):
+    """One PSD2 consent at one bank through Enable Banking, per user (ADR-032).
+
+    The session id is the credential: encrypted at rest like the Powens token.
+    `valid_until` is the consent's end (180 days at most); past it the bank
+    refuses, and the user reconnects.
+    """
+
+    __tablename__ = "enablebanking_sessions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    encrypted_session_id: Mapped[str] = mapped_column(String, nullable=False)
+    bank_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    bank_country: Mapped[str] = mapped_column(String(2), nullable=False)
+    psu_type: Mapped[str] = mapped_column(String(16), nullable=False, default="personal")
+    valid_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    last_error: Mapped[str | None] = mapped_column(Text, default=None)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )

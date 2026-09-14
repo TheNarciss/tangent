@@ -13,6 +13,7 @@ import { AddBankButton } from "@/components/AddBankButton";
 import { AuthScreen } from "@/components/auth/AuthScreen";
 import { UserMenu } from "@/components/auth/UserMenu";
 import { Dashboard } from "@/components/Dashboard";
+import { EnableBankingCallbackHandler } from "@/components/EnableBankingCallback";
 import { Methode } from "@/components/Methode";
 import { OAuthCallbackHandler } from "@/components/OAuthCallback";
 import { Picks } from "@/components/Picks";
@@ -66,6 +67,7 @@ function Shell() {
   return (
     <>
       <PowensCallbackHandler />
+      <EnableBankingCallbackHandler />
       <OAuthCallbackHandler />
       <AppShell
         pageTitle={config.title}

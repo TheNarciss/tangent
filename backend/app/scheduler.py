@@ -7,6 +7,8 @@ jobstore with locking.
 Jobs registered:
 - compute_picks         : daily at 06:30 Europe/Paris, and 20 s after boot when
                           the stored list is stale -> finance.picks
+- sync_enablebanking    : daily at 07:15 Europe/Paris, every live consent
+                          -> enablebanking.aggregator (PSD2 allows four a day)
 - record_portfolio_snapshots : daily at 02:00 Europe/Paris -> snapshot_job
 - submit_nightly_batch  : daily at 03:00 Europe/Paris -> batch_submitter
 - poll_pending_batches  : every 15 min from 03:00 to 09:45 Paris
@@ -21,14 +23,18 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
+from sqlalchemy import select
 
+from .aggregator.persist import persist_sync_result
 from .db import async_session_factory
+from .db.models import EnableBankingSession
+from .enablebanking import aggregator as enablebanking_agg
 from .finance import picks
 from .llm import batch_poller, batch_submitter
 from .snapshot_job import record_all_users
@@ -102,6 +108,24 @@ async def _job_compute_picks() -> None:
         logger.exception("Scheduler: picks recompute failed")
 
 
+async def _job_sync_enablebanking() -> None:
+    """Read the rolling month of every live Enable Banking consent, one user at a time."""
+    async with async_session_factory() as session:
+        try:
+            rows = (await session.execute(select(EnableBankingSession))).scalars().all()
+            now = datetime.now(UTC)
+            since = date.today() - timedelta(days=31)
+            for row in rows:
+                if enablebanking_agg.is_expired(row, now):
+                    continue
+                result = await enablebanking_agg.sync_row(session, row, since=since)
+                if result.success:
+                    await persist_sync_result(session, row.user_id, result)
+                await session.commit()
+        except Exception:
+            logger.exception("Scheduler: Enable Banking sync failed")
+
+
 def setup_scheduler() -> AsyncIOScheduler:
     """Build the scheduler with the nightly jobs (not started yet).
 
@@ -123,6 +147,15 @@ def setup_scheduler() -> AsyncIOScheduler:
         DateTrigger(run_date=datetime.now(_PARIS) + timedelta(seconds=20)),
         id="compute_picks_at_boot",
         replace_existing=True,
+    )
+
+    scheduler.add_job(
+        _job_sync_enablebanking,
+        CronTrigger(hour=7, minute=15, timezone=_PARIS),
+        id="sync_enablebanking",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
     )
 
     scheduler.add_job(
@@ -153,7 +186,7 @@ def setup_scheduler() -> AsyncIOScheduler:
     )
 
     logger.info(
-        "Scheduler configured: %d jobs registered (compute_picks, "
+        "Scheduler configured: %d jobs registered (compute_picks, sync_enablebanking, "
         "record_portfolio_snapshots, submit_nightly_batch, poll_pending_batches)",
         len(scheduler.get_jobs()),
     )
