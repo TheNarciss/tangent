@@ -41,6 +41,7 @@ def _response(computed_at: datetime) -> PicksResponse:
 @pytest.fixture
 def store(tmp_path, monkeypatch):
     monkeypatch.setattr(picks, "_PATH", tmp_path / "picks.json")
+    monkeypatch.setattr(picks, "_MEMORY", None)
     return tmp_path / "picks.json"
 
 
@@ -91,3 +92,16 @@ def test_an_unreadable_file_is_a_miss(store):
     store.write_text("{not json")
 
     assert picks.load() is None
+
+
+def test_an_unwritable_directory_still_serves_the_list(tmp_path, monkeypatch):
+    fresh = _response(datetime.now(UTC))
+    monkeypatch.setattr(picks, "build", lambda: fresh)
+    monkeypatch.setattr(picks, "_MEMORY", None)
+    blocked = tmp_path / "not-a-dir"
+    blocked.write_text("in the way")
+    monkeypatch.setattr(picks, "_PATH", blocked / "picks.json")
+
+    picks.refresh()  # logs the OSError, does not raise
+
+    assert picks.load() == fresh  # from memory

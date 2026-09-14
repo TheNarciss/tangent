@@ -144,15 +144,20 @@ async def _process_one_batch(
     Returns (n_succeeded, n_errored, n_expired, total_cost) on completion,
     or None if the Anthropic batch hasn't finished yet (skip + retry).
     """
+    # Read once: a rollback further down expires the ORM object, and touching
+    # it again would trigger a lazy refresh outside the async context.
+    batch_id = batch.id
+    anthropic_id = batch.anthropic_batch_id
+
     client = anthropic_client.get_client()
-    anthropic_batch = await client.beta.messages.batches.retrieve(batch.anthropic_batch_id)
+    anthropic_batch = await client.beta.messages.batches.retrieve(anthropic_id)
 
     processing_status = getattr(anthropic_batch, "processing_status", None)
     if processing_status != "ended":
         logger.info(
             "Batch %s (anthropic_id=%s) processing_status=%s — skipping",
-            batch.id,
-            batch.anthropic_batch_id,
+            batch_id,
+            anthropic_id,
             processing_status,
         )
         return None
@@ -163,7 +168,7 @@ async def _process_one_batch(
     n_expired = 0
     total_cost = 0.0
 
-    async for result in await client.beta.messages.batches.results(batch.anthropic_batch_id):
+    async for result in await client.beta.messages.batches.results(anthropic_id):
         custom_id = result.custom_id
 
         # Gap-fill dispatch (ADR-021 Universal Gap-Filler).
@@ -177,7 +182,7 @@ async def _process_one_batch(
                 logger.exception(
                     "Gap-fill dispatch failed for custom_id=%s (batch %s)",
                     custom_id,
-                    batch.id,
+                    batch_id,
                 )
                 n_errored += 1
             continue
@@ -188,7 +193,7 @@ async def _process_one_batch(
             logger.error(
                 "Invalid custom_id=%r in batch %s — skipping",
                 custom_id,
-                batch.id,
+                batch_id,
             )
             n_errored += 1
             continue
@@ -215,7 +220,7 @@ async def _process_one_batch(
                         sources=sources,
                         wealth_snapshot={},  # not re-stored; was used at submit time
                         generation_mode="batch",
-                        batch_id=batch.id,
+                        batch_id=batch_id,
                     )
                 except IntegrityError:
                     # Race: user already has today's review (manually generated
@@ -237,28 +242,28 @@ async def _process_one_batch(
                 logger.exception(
                     "Failed to persist succeeded result for user %s (batch %s)",
                     user_id,
-                    batch.id,
+                    batch_id,
                 )
                 n_errored += 1
 
         elif result_type == "errored":
             logger.warning(
                 "Batch %s user %s errored: %s",
-                batch.id,
+                batch_id,
                 user_id,
                 getattr(result.result, "error", "unknown"),
             )
             n_errored += 1
         elif result_type == "expired":
-            logger.warning("Batch %s user %s expired", batch.id, user_id)
+            logger.warning("Batch %s user %s expired", batch_id, user_id)
             n_expired += 1
         elif result_type == "canceled":
-            logger.warning("Batch %s user %s canceled", batch.id, user_id)
+            logger.warning("Batch %s user %s canceled", batch_id, user_id)
             n_errored += 1
         else:
             logger.error(  # type: ignore[unreachable]
                 "Batch %s user %s unknown result type=%r",
-                batch.id,
+                batch_id,
                 user_id,
                 result_type,
             )
@@ -266,7 +271,7 @@ async def _process_one_batch(
 
     await batches_repo.update_completion(
         session,
-        batch.id,
+        batch_id,
         status="ended",
         n_succeeded=n_succeeded,
         n_errored=n_errored,
@@ -277,7 +282,7 @@ async def _process_one_batch(
 
     logger.info(
         "Batch %s finalized: succeeded=%d errored=%d expired=%d cost=$%.4f",
-        batch.id,
+        batch_id,
         n_succeeded,
         n_errored,
         n_expired,
@@ -298,15 +303,13 @@ async def poll_pending_batches(session: AsyncSession) -> int:
         return 0
 
     finalized = 0
-    for batch in in_progress:
+    for batch_id, batch in [(b.id, b) for b in in_progress]:
         try:
             result = await _process_one_batch(session, batch)
             if result is not None:
                 finalized += 1
         except Exception:
-            logger.exception(
-                "Failed to process batch %s, will retry next poll",
-                batch.id,
-            )
+            logger.exception("Failed to process batch %s, will retry next poll", batch_id)
+            await session.rollback()  # a clean session for the next batch
 
     return finalized

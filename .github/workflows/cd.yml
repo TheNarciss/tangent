@@ -55,6 +55,10 @@ jobs:
         working-directory: /home/ubuntu/projet_finance
         run: |
           set -euo pipefail
+          # backend/data is bind-mounted and written by the container's user
+          # (uid 1000): the price cache and the list of the year live there.
+          mkdir -p backend/data
+          chmod -R a+rwX backend/data 2>/dev/null || sudo chmod -R a+rwX backend/data || true
           # The caddy image now bundles the frontend Vite build (see Dockerfile.caddy),
           # so rebuilding caddy = redeploying both Caddy config AND frontend bundle.
           docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build

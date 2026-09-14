@@ -22,6 +22,10 @@ logger = logging.getLogger(__name__)
 _PATH = Path(__file__).resolve().parent.parent.parent / "data" / "picks.json"
 FRESH_FOR = timedelta(hours=24)
 
+# The last list computed by this process: what the route serves when the
+# data directory cannot be written (a bind mount owned by another user).
+_MEMORY: PicksResponse | None = None
+
 
 def build() -> PicksResponse:
     """The list, what changed since the last review, and the rule's track record."""
@@ -62,23 +66,38 @@ def build() -> PicksResponse:
 
 
 def refresh() -> PicksResponse:
-    """Recompute the list and store it. Raises AppError when a source is out of reach."""
+    """Recompute the list and store it. Raises AppError when a source is out of reach.
+
+    A data directory that cannot be written costs a warning, not the list:
+    the process keeps it in memory until the next restart.
+    """
+    global _MEMORY
     out = build()
-    _PATH.parent.mkdir(parents=True, exist_ok=True)
-    _PATH.write_text(out.model_dump_json())
-    logger.info("picks: liste recalculée, %d titres, écrite dans %s", len(out.held), _PATH)
+    _MEMORY = out
+    try:
+        _PATH.parent.mkdir(parents=True, exist_ok=True)
+        _PATH.write_text(out.model_dump_json())
+        logger.info("picks: liste recalculée, %d titres, écrite dans %s", len(out.held), _PATH)
+    except OSError as exc:
+        logger.error(
+            "picks: liste recalculée (%d titres) mais %s n'est pas inscriptible (%s) : "
+            "servie depuis la mémoire jusqu'au prochain redémarrage",
+            len(out.held),
+            _PATH,
+            exc,
+        )
     return out
 
 
 def load() -> PicksResponse | None:
     """The stored list, or None when nothing has been computed yet."""
     if not _PATH.exists():
-        return None
+        return _MEMORY
     try:
         return PicksResponse.model_validate_json(_PATH.read_text())
-    except ValueError:
+    except (OSError, ValueError):
         logger.warning("picks: fichier illisible, il sera recalculé: %s", _PATH)
-        return None
+        return _MEMORY
 
 
 def is_fresh() -> bool:
