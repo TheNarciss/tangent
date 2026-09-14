@@ -35,7 +35,7 @@ from .aggregator.persist import persist_sync_result
 from .db import async_session_factory
 from .db.models import EnableBankingSession
 from .enablebanking import aggregator as enablebanking_agg
-from .finance import picks
+from .finance import macro, picks, stress
 from .llm import batch_poller, batch_submitter
 from .snapshot_job import record_all_users
 
@@ -97,6 +97,20 @@ async def _job_record_snapshots() -> None:
             logger.exception("Scheduler: portfolio snapshots failed")
 
 
+async def _job_warm_sources() -> None:
+    """Read the crisis series and the policy rate once, before anyone asks.
+
+    Every restart empties the source cache, and the first Placements screen
+    after a deploy paid the whole read — the Ken French archives, the ECB
+    rates, the metal fixings — before drawing. Seconds in a thread at boot.
+    """
+    try:
+        await asyncio.to_thread(stress.measured_classes)
+        await asyncio.to_thread(macro.risk_free_rate)
+    except Exception:
+        logger.exception("sources non préchargées")
+
+
 async def _job_compute_picks() -> None:
     """Recompute « La liste de l'année » unless the stored copy is fresh.
 
@@ -147,6 +161,12 @@ def setup_scheduler() -> AsyncIOScheduler:
         _job_compute_picks,
         DateTrigger(run_date=datetime.now(_PARIS) + timedelta(seconds=20)),
         id="compute_picks_at_boot",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        _job_warm_sources,
+        DateTrigger(run_date=datetime.now(_PARIS) + timedelta(seconds=5)),
+        id="warm_sources_at_boot",
         replace_existing=True,
     )
 

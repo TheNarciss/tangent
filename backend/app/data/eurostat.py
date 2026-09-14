@@ -26,12 +26,14 @@ def hicp_index() -> pd.Series:
         "coicop": hicp.coicop,
         "unit": hicp.unit,
     }
-    body = http.get_text(
-        f"{cfg.eurostat.base_url}/{hicp.dataset}",
-        params=params,
+    url = f"{cfg.eurostat.base_url}/{hicp.dataset}"
+    return http.parsed(
+        f"eurostat:{url}:{sorted(params.items())}",
         ttl_hours=cfg.cache_hours.macro,
+        build=lambda: _parse_jsonstat(
+            http.get_text(url, params=params, ttl_hours=cfg.cache_hours.macro)
+        ),
     )
-    return _parse_jsonstat(body)
 
 
 def inflation_yoy() -> float:

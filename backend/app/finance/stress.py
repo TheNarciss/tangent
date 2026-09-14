@@ -317,7 +317,12 @@ def compute(wealth: Wealth) -> list[StressTestResult]:
     total = sum(p.amount for p in held)
     if total <= 0:
         return []
-    episodes.prime([p.quote.ticker for p in held if p.quote is not None])
+    # The lines held and the class indices Yahoo serves, in one round trip:
+    # asked one by one they cost a call each, before the first scenario.
+    episodes.prime(
+        [p.quote.ticker for p in held if p.quote is not None]
+        + [s.id for series in cfg.class_series.values() for s in series if s.provider == "yahoo"]
+    )
 
     results: list[StressTestResult] = []
     for scenario in cfg.scenarios:

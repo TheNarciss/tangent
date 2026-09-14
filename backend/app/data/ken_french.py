@@ -68,6 +68,16 @@ def window_return(region: str, start: str, end: str) -> float:
 def _returns(
     region: str, pattern: re.Pattern[str], date_format: str, *, daily: bool = False
 ) -> pd.Series:
+    return http.parsed(
+        f"ken_french:{region}:{date_format}:{daily}",
+        ttl_hours=config().cache_hours.factors,
+        build=lambda: _parse(region, pattern, date_format, daily=daily),
+    )
+
+
+def _parse(
+    region: str, pattern: re.Pattern[str], date_format: str, *, daily: bool = False
+) -> pd.Series:
     text = _csv_text(region, daily=daily)
     periods: list[str] = []
     values: list[float] = []
