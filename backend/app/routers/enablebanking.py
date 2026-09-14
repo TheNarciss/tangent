@@ -151,10 +151,16 @@ async def callback(
     await db.commit()
     await db.refresh(row)
 
-    # Full history now, while the bank still allows it.
-    result = await sync_row(db, row, since=date.today() - timedelta(days=FIRST_SYNC_DAYS))
-    if result.success:
-        await persist_sync_result(db, user.id, result)
+    # Full history now, while the bank still allows it. The consent is stored
+    # whatever happens next: a failed first read shows on the row, it does
+    # not cost the user another trip to the bank.
+    try:
+        result = await sync_row(db, row, since=date.today() - timedelta(days=FIRST_SYNC_DAYS))
+        if result.success:
+            await persist_sync_result(db, user.id, result)
+    except Exception as exc:
+        logger.exception("Enable Banking: première relève en échec pour user=%s", user.id)
+        row.last_error = f"{type(exc).__name__}: {exc}"[:500]
     await db.commit()
     return _back("success")
 
