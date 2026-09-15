@@ -38,6 +38,14 @@ jobs:
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
+      - name: Select Xcode 26 (Apple requires the iOS 26 SDK for uploads)
+        run: |
+          set -euo pipefail
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1 || true)
+          if [ -z "$XCODE" ]; then echo "Xcode 26 introuvable sur ce runner"; ls /Applications | grep Xcode; exit 1; fi
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
       - name: Web bundle into the Xcode project
         working-directory: frontend
         env:
@@ -81,6 +89,14 @@ jobs:
           node-version: "22"
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
+
+      - name: Select Xcode 26 (Apple requires the iOS 26 SDK for uploads)
+        run: |
+          set -euo pipefail
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1 || true)
+          if [ -z "$XCODE" ]; then echo "Xcode 26 introuvable sur ce runner"; ls /Applications | grep Xcode; exit 1; fi
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
 
       - name: Web bundle into the Xcode project
         working-directory: frontend
