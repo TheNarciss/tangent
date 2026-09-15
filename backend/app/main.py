@@ -19,6 +19,7 @@ from fastapi_users.router.oauth import STATE_TOKEN_AUDIENCE
 
 from . import logging_config
 from .auth import UserCreate, UserRead, UserUpdate, auth_backend, fastapi_users
+from .auth import apple as apple_auth
 from .auth import session as app_session
 from .auth.app_router import (
     APP_GOOGLE_CALLBACK_PATH,
@@ -325,6 +326,18 @@ else:
         "OAUTH_STATE_SECRET, FRONTEND_URL in backend/.env to enable."
     )
 
+
+@app.get("/api/auth/providers", tags=["auth"])
+async def auth_providers() -> dict[str, bool]:
+    """Which sign-in buttons the front may show: only what the backend can honour."""
+    return {"google": is_oauth_configured(), "apple": apple_auth.is_configured()}
+
+
+if apple_auth.is_configured():
+    app.include_router(apple_auth.build_router(), prefix="/api/auth/apple", tags=["auth"])
+    logger.info("Sign in with Apple mounted (ADR-035)")
+else:
+    logger.warning("Sign in with Apple not configured — set APPLE_* in backend/.env to enable.")
 
 # ─── Business routers (all require auth via current_active_user) ──────────
 app.include_router(accounts.router, prefix="/api")
