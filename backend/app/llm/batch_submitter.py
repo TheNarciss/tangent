@@ -34,15 +34,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..auth import User
 from ..db.models import ReviewBatch
 from ..deps import get_user_wealth
-from ..finance import market_leads
-from ..finance import verdicts as verdicts_engine
 from ..finance.gap_filler import engine as gap_filler_engine
 from ..finance.gap_filler.registry import GappableField
 from ..repositories import bank_transactions as tx_repo
 from ..repositories import profile as profile_repo
 from ..repositories import review_batches as batches_repo
-from ..snapshot_job import performance_for
-from . import anthropic_client, cost_tracker
+from . import anthropic_client, briefing_inputs, cost_tracker
 from ._retry import retry_on_overload
 from .prompt_builder import SYSTEM_PROMPT, build_anonymized_snapshot, build_user_prompt
 
@@ -137,11 +134,14 @@ async def submit_nightly_batch(
         logger.warning("Daily cost cap reached — refusing batch submit")
         return None
 
-    # 3. Build per-user requests. The market leads are the same list for everyone.
+    # 3. Build per-user requests. The leads, the list and the rates are the same for everyone.
     requests: list[Request] = []
     skipped: list[uuid.UUID] = []
-    collected = market_leads.load() if opted_in_profiles else None
-    leads = collected.leads if collected else []
+    shared = (
+        await briefing_inputs.collect_shared_async()
+        if opted_in_profiles
+        else briefing_inputs.SharedInputs()
+    )
 
     for profile in opted_in_profiles:
         user_id = profile.user_id
@@ -156,14 +156,20 @@ async def submit_nightly_batch(
                 continue
 
             wealth = await get_user_wealth(user=user, session=session)
-            spending = await tx_repo.monthly_outflow(session, user.id)
-            saved = await tx_repo.monthly_inflow_to_savings(session, user.id)
-            perf = await performance_for(session, user.id)
-            verdicts = verdicts_engine.compute_all(
-                wealth, profile, monthly_spending=spending, monthly_saved=saved, perf=perf
-            ).verdicts
+            mine = await briefing_inputs.collect_user(session, user.id, wealth, profile)
             snapshot = build_anonymized_snapshot(
-                wealth, profile, verdicts=verdicts, market_leads=leads
+                wealth,
+                profile,
+                verdicts=mine.verdicts,
+                market_leads=shared.market_leads,
+                spending=mine.spending,
+                monthly_saved=mine.monthly_saved,
+                performance=mine.performance,
+                history=mine.history,
+                watchlist=mine.watchlist,
+                previous_review=mine.previous_review,
+                picks=shared.picks,
+                macro=shared.macro,
             )
             user_prompt = build_user_prompt(snapshot)
 

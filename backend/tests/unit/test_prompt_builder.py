@@ -270,3 +270,173 @@ def test_no_verdicts_means_no_section():
     snapshot = prompt_builder.build_anonymized_snapshot(_make_wealth(), _make_profile())
     assert snapshot["verdicts"] == []
     assert "Verdicts de la méthode" not in prompt_builder.build_user_prompt(snapshot)
+
+
+# ── everything the app knows reaches the briefing ─────────────────────────
+
+
+def _full_snapshot():
+    from app.finance.performance import Performance, Point
+    from app.models import PicksResponse, PicksTrackRecord
+    from app.routers.spending import CategorySpending, MonthSpending, SpendingResponse
+
+    history = [
+        Point(day=date(2026, 5, 3), value=2000.0, net_flow=0.0),
+        Point(day=date(2026, 5, 26), value=2100.0, net_flow=0.0),
+        Point(day=date(2026, 6, 1), value=2200.0, net_flow=100.0),
+        Point(day=date(2026, 6, 2), value=2300.0, net_flow=0.0),
+    ]
+    perf = Performance(
+        start=date(2026, 1, 2),
+        end=date(2026, 6, 2),
+        days=151,
+        twr=0.052,
+        twr_annualized=0.13,
+        irr=0.11,
+        behaviour_gap=-0.02,
+        index=[1.0, 1.052],
+        drawdown=-0.01,
+        max_drawdown=-0.08,
+        peak_day=date(2026, 5, 20),
+        net_flows=1200.0,
+        first_value=1000.0,
+        last_value=2300.0,
+    )
+    spending = SpendingResponse(
+        months=[
+            MonthSpending(month="2026-05", total=1500.0, income=2400.0, by_category={}),
+            MonthSpending(month="2026-06", total=120.0, income=0.0, by_category={}),
+        ],
+        categories=[
+            CategorySpending(category="logement", total=1800.0, share=0.6),
+            CategorySpending(category="autre", total=300.0, share=0.1),
+        ],
+        merchants=[],
+        monthly_average=1450.0,
+        monthly_income_average=2400.0,
+        current_month_total=120.0,
+        unlabelled_share=0.1,
+    )
+    picks = PicksResponse(
+        computed_at="2026-06-01T02:00:00Z",
+        as_of="2026-05-29",
+        next_review="2026-06-30",
+        review="monthly",
+        guard_on=False,
+        held=["DCAM.PA", "PE500.PA"],
+        bought=["PE500.PA"],
+        sold=["CW8.PA"],
+        universe_size=40,
+        indices=["^STOXX"],
+        top=2,
+        track_record=PicksTrackRecord(
+            since="2010-01",
+            cagr=0.1,
+            universe_cagr=0.07,
+            max_drawdown=-0.3,
+            universe_max_drawdown=-0.4,
+            turnover=0.2,
+            reviews=190,
+            guarded_reviews=20,
+            yearly=[],
+        ),
+    )
+    return prompt_builder.build_anonymized_snapshot(
+        _make_wealth(),
+        _make_profile(),
+        spending=spending,
+        monthly_saved=350.0,
+        performance=perf,
+        history=history,
+        watchlist=["EWLD.PA"],
+        previous_review="# Ce qui a bougé chez toi\nHier, rien de notable.",
+        picks=picks,
+        macro={"policy_rate": 0.0215, "inflation": 0.019},
+    )
+
+
+def test_snapshot_carries_everything_the_app_knows():
+    snap = _full_snapshot()
+    assert snap["macro"] == {"policy_rate_pct": 2.15, "inflation_pct": 1.9}
+    assert [h["day"] for h in snap["history"]] == [
+        "2026-05-03",
+        "2026-05-26",
+        "2026-06-01",
+        "2026-06-02",
+    ]
+    assert snap["performance"]["twr_pct"] == 5.2
+    assert snap["performance"]["behaviour_gap_pct"] == -2.0
+    assert snap["spending"]["categories"][0] == {
+        "category": "logement",
+        "total_eur": 1800.0,
+        "share_pct": 60.0,
+    }
+    assert snap["monthly_saved_eur"] == 350.0
+    assert snap["watchlist"] == ["EWLD.PA"]
+    assert snap["picks"]["held"] == ["DCAM.PA", "PE500.PA"]
+    assert snap["previous_review"].startswith("# Ce qui a bougé")
+
+
+def test_user_prompt_renders_the_daily_readings_net_of_contributions():
+    prompt = prompt_builder.build_user_prompt(_full_snapshot())
+    assert "## Relevés quotidiens du portefeuille" in prompt
+    assert "Valeur au 2026-06-02 : 2,300.00 €" in prompt
+    # since yesterday: 2300 − 2200, no contribution on the 2nd
+    assert "Depuis hier (2026-06-01) : +100.00 €" in prompt
+    # since 7 days: 2300 − 2100 − 100 paid in on the 1st
+    assert "Depuis 7 jours (2026-05-26) : +100.00 €, versements sur la période 100.00 €" in prompt
+    assert "Depuis 30 jours (2026-05-03) : +200.00 €, versements sur la période 100.00 €" in prompt
+
+
+def test_user_prompt_renders_the_other_sections():
+    prompt = prompt_builder.build_user_prompt(_full_snapshot())
+    assert "## Performance mesurée depuis le 2026-01-02 (151 jours)" in prompt
+    assert "(pondéré par le temps) : +5.20 %" in prompt
+    assert "Recul depuis le plus haut : -1.00 % (plus haut le 2026-05-20), pire recul" in prompt
+    assert "Versé au total sur la période : 1,200.00 €" in prompt
+    assert "## Dépenses et épargne" in prompt
+    assert "Dépenses moyennes par mois : 1,450 €" in prompt
+    assert "logement 1,800 €" in prompt
+    assert "Mis de côté en moyenne par mois (livrets et placements) : 350 €" in prompt
+    assert "## Contexte observé" in prompt
+    assert "Taux directeur : 2.15 %" in prompt
+    assert "## Liste de suivi" in prompt and "`EWLD.PA`" in prompt
+    assert "## « La liste de l'année »" in prompt
+    assert "Entrées à la dernière revue : `PE500.PA`" in prompt
+    assert "Sorties à la dernière revue : `CW8.PA`" in prompt
+    assert "## Briefing d'hier" in prompt
+    assert "Hier, rien de notable." in prompt
+    # order: yesterday's briefing comes last, right before the instruction
+    assert prompt.index("## Briefing d'hier") > prompt.index("## « La liste de l'année »")
+
+
+def test_without_the_extra_data_the_prompt_is_unchanged_in_shape():
+    snap = prompt_builder.build_anonymized_snapshot(_make_wealth(), _make_profile())
+    prompt = prompt_builder.build_user_prompt(snap)
+    for header in (
+        "## Relevés quotidiens",
+        "## Performance mesurée",
+        "## Dépenses et épargne",
+        "## Contexte observé",
+        "## Liste de suivi",
+        "## « La liste de l'année »",
+        "## Briefing d'hier",
+    ):
+        assert header not in prompt, header
+
+
+def test_a_single_reading_is_not_a_movement():
+    from app.finance.performance import Point
+
+    snap = prompt_builder.build_anonymized_snapshot(
+        _make_wealth(), _make_profile(), history=[Point(date(2026, 6, 2), 2300.0, 0.0)]
+    )
+    assert "## Relevés quotidiens" not in prompt_builder.build_user_prompt(snap)
+
+
+def test_system_prompt_tells_the_model_what_the_extra_data_is_for():
+    sp = prompt_builder.SYSTEM_PROMPT
+    assert "relevés quotidiens" in sp.lower()
+    assert "briefing d'hier" in sp.lower()
+    assert "liste de l'année" in sp.lower()
+    assert "pas de leçon de budget" in sp.lower()
