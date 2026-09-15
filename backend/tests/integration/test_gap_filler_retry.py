@@ -82,7 +82,9 @@ async def test_rows_sent_or_answered_empty_wait_before_being_asked_again(client)
         # Sent to the LLM: stamped, and out of the next collection.
         async with async_session_factory() as session:
             gaps = await engine.collect_gaps(session, user_id=user_id, fields=[FIELD_CATEGORY])
-            await engine.mark_submitted(session, gaps[:2])
+            sent = [g for g in gaps if g.row_id in before[:2]]
+            assert len(sent) == 2
+            await engine.mark_submitted(session, sent)
             await session.commit()
         assert await _gaps_for(user_id) == before[2:]
 
