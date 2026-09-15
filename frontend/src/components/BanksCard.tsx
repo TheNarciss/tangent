@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 import {
   fetchBankConnections,
@@ -10,6 +11,7 @@ import {
   useEnableBankingSessions,
 } from "@/api";
 import { relativeTime } from "@/lib/accounts";
+import { openExternalFlow, platform } from "@/native/flows";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -186,10 +188,12 @@ function EnableBankingRow({
     },
     onError: (e) => setFailure(e instanceof Error ? e.message : "Erreur inconnue"),
   });
+  const navigate = useNavigate();
   const reconnect = async () => {
     setBusy(true);
     try {
-      window.location.href = await startEnableBankingAuth(name);
+      await openExternalFlow(await startEnableBankingAuth(name, "FR", platform()), navigate);
+      setBusy(false);
     } catch (e) {
       setFailure(e instanceof Error ? e.message : "Erreur inconnue");
       setBusy(false);

@@ -73,4 +73,4 @@ def test_challenge_shape_and_return_url():
     assert session.is_challenge(session.challenge_of("v" * 43))
     assert not session.is_challenge("short")
     assert not session.is_challenge("bad chars!" * 6)
-    assert session.app_return(code="abc") == f"{session.APP_RETURN_URL}?code=abc"
+    assert session.app_return("auth", code="abc") == f"{session.APP_RETURN_BASE}auth?code=abc"

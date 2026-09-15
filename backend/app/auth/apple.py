@@ -255,7 +255,7 @@ def build_router() -> APIRouter:
             claims = decode_jwt(token, app_session.JWT_SECRET, [app_session.SESSION_AUDIENCE])
             back: Response = RedirectResponse(
                 url=app_session.app_return(
-                    code=app_session.mint_exchange_code(claims["sub"], challenge)
+                    "auth", code=app_session.mint_exchange_code(claims["sub"], challenge)
                 ),
                 status_code=303,
             )
@@ -315,7 +315,7 @@ def _cookie_value(response: Response) -> str | None:
 def _back(challenge: str | None, *, error: str) -> RedirectResponse:
     """Where a failed attempt lands: the app when the flow was the app's, else the site."""
     if challenge:
-        return RedirectResponse(url=app_session.app_return(error=error), status_code=303)
+        return RedirectResponse(url=app_session.app_return("auth", error=error), status_code=303)
     return RedirectResponse(url=f"{FRONTEND_URL}/?oauth_error={error}", status_code=303)
 
 

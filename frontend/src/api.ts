@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { clearProfile } from "@/lib/profile";
 
-const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8000/api";
+export const API_URL =
+  (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8000/api";
 // Backend root (without /api). Used for the Powens initiate/callback flow,
 // which keeps the legacy /auth/powens/* path due to the Powens sandbox
 // dashboard accepting only a single redirect URI (cf ADR-020 exception).
@@ -525,9 +526,9 @@ export function useSyncStatus() {
   });
 }
 
-export async function getPowensWebviewUrl(): Promise<string> {
+export async function getPowensWebviewUrl(platform: "web" | "app" = "web"): Promise<string> {
   // Powens initiate is on /auth/powens/* (ADR-020 Powens exception, not /api/*)
-  const powensRes = await fetch(`${BACKEND_BASE}/auth/powens/initiate`, {
+  const powensRes = await fetch(`${BACKEND_BASE}/auth/powens/initiate?platform=${platform}`, {
     credentials: "include",
   });
   if (!powensRes.ok) {
@@ -574,10 +575,14 @@ export function useEnableBankingSessions() {
 }
 
 /** Where to send the user so the bank asks for their consent. */
-export async function startEnableBankingAuth(bankName: string, country = "FR"): Promise<string> {
+export async function startEnableBankingAuth(
+  bankName: string,
+  country = "FR",
+  platform: "web" | "app" = "web",
+): Promise<string> {
   const out = await http<{ url: string }>("/enablebanking/authorize", {
     method: "POST",
-    body: JSON.stringify({ bank_name: bankName, country }),
+    body: JSON.stringify({ bank_name: bankName, country, platform }),
   });
   return out.url;
 }
@@ -869,6 +874,14 @@ export interface OAuthAccountPublic {
   id: string;
   oauth_name: "google" | "apple";
   account_email: string;
+}
+
+/** The iPhone app got an Apple id_token from iOS itself: the backend opens the session (ADR-035). */
+export function signInWithAppleToken(identityToken: string, nonce: string): Promise<void> {
+  return http<void>("/auth/apple/native", {
+    method: "POST",
+    body: JSON.stringify({ identity_token: identityToken, nonce }),
+  });
 }
 
 /** The iPhone app trades the code the system browser brought back for the session (ADR-035). */

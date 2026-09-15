@@ -10,6 +10,7 @@ import logging
 import os
 import uuid
 from datetime import UTC, date, datetime, timedelta
+from typing import Literal
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException
@@ -19,7 +20,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..aggregator.persist import persist_sync_result
-from ..auth import User, current_active_user
+from ..auth import User, current_active_user, current_active_user_optional
+from ..auth import session as app_session
 from ..db.engine import get_session
 from ..db.models import BankAccount, EnableBankingSession
 from ..enablebanking import settings
@@ -47,6 +49,7 @@ class BankOut(BaseModel):
 class AuthorizeIn(BaseModel):
     bank_name: str = Field(min_length=1, max_length=64)
     country: str = Field(default="FR", min_length=2, max_length=2)
+    platform: Literal["web", "app"] = "web"  # the app returns to tangent://banks (ADR-035)
 
 
 class AuthorizeOut(BaseModel):
@@ -95,7 +98,7 @@ async def authorize(body: AuthorizeIn, user: User = Depends(current_active_user)
                 country=country,
                 psu_type="personal",
                 redirect_url=settings.redirect_url,
-                state=_sign_state(user.id, body.bank_name, country),
+                state=_sign_state(user.id, body.bank_name, country, body.platform),
                 valid_until=_consent_end(bank.get("maximum_consent_validity")),
             )
     except EnableBankingError as exc:
@@ -108,35 +111,47 @@ async def callback(
     code: str | None = None,
     state: str | None = None,
     error: str | None = None,
-    user: User = Depends(current_active_user),
+    cookie_user: User | None = Depends(current_active_user_optional),
     db: AsyncSession = Depends(get_session),
 ) -> RedirectResponse:
-    """The bank sent the user back: open the session, store it, read everything once."""
-    if error or not code or not state:
-        return _back(f"error&error={error or 'no_code'}")
+    """The bank sent the user back: open the session, store it, read everything once.
+
+    From the app the return lands in the system browser, which holds no
+    session cookie: the signed state alone says who started the flow.
+    """
     try:
-        claims = _read_state(state)
+        claims = _read_state(state or "")
     except jwt.PyJWTError:
         return _back("error&error=bad_state")
-    if claims.get("sub") != str(user.id):
-        return _back("error&error=wrong_user")
+    platform = str(claims.get("platform", "web"))
+    if error or not code:
+        return _back(f"error&error={error or 'no_code'}", platform)
+    user = cookie_user
+    if user is not None and claims.get("sub") != str(user.id):
+        return _back("error&error=wrong_user", platform)
+    if user is None:
+        if platform != "app":
+            return _back("error&error=wrong_user", platform)
+        user = await db.get(User, uuid.UUID(str(claims["sub"])))
+        if user is None or not user.is_active:
+            return _back("error&error=wrong_user", platform)
 
     try:
         async with EnableBankingClient() as client:
             opened = await client.create_session(code)
     except EnableBankingError as exc:
         logger.warning("Enable Banking callback user=%s: %s", user.id, exc)
-        return _back("error&error=session")
+        return _back("error&error=session", platform)
 
     if not opened.get("accounts"):
         # Restricted mode: the bank answered, but none of its accounts are linked
         # to the application in Enable Banking's control panel.
-        return _back("error&error=no_linked_accounts")
+        return _back("error&error=no_linked_accounts", platform)
 
     try:
         encrypted = encrypt_token(str(opened["session_id"]))
     except ValueError:
-        return _back("error&error=encryption_not_configured")
+        return _back("error&error=encryption_not_configured", platform)
 
     aspsp = opened.get("aspsp") or {}
     bank_name = str(aspsp.get("name") or claims.get("bank") or "Banque")
@@ -177,7 +192,7 @@ async def callback(
         logger.exception("Enable Banking: première relève en échec pour user=%s", user.id)
         row.last_error = f"{type(exc).__name__}: {exc}"[:500]
     await db.commit()
-    return _back("success")
+    return _back("success", platform)
 
 
 @router.get("/sessions", response_model=list[SessionOut])
@@ -264,13 +279,14 @@ def _require_configured() -> None:
         raise HTTPException(status_code=503, detail="Enable Banking n'est pas configuré.")
 
 
-def _sign_state(user_id: uuid.UUID, bank: str, country: str) -> str:
+def _sign_state(user_id: uuid.UUID, bank: str, country: str, platform: str = "web") -> str:
     now = datetime.now(UTC)
     return jwt.encode(
         {
             "sub": str(user_id),
             "bank": bank,
             "country": country,
+            "platform": platform,
             "purpose": "enablebanking",
             "iat": now,
             "exp": now + _STATE_TTL,
@@ -305,5 +321,8 @@ def _parse_valid_until(value: object) -> datetime:
     return datetime.now(UTC) + timedelta(days=CONSENT_DAYS)
 
 
-def _back(status: str) -> RedirectResponse:
+def _back(status: str, platform: str = "web") -> RedirectResponse:
+    """Back to the site, or into the app when the flow started there."""
+    if platform == "app":
+        return RedirectResponse(url=f"{app_session.APP_RETURN_BASE}banks?enablebanking={status}")
     return RedirectResponse(url=f"{settings.frontend_url}/?enablebanking={status}")

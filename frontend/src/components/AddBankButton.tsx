@@ -1,5 +1,6 @@
 import { Building2, Plus } from "lucide-react";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import {
   getPowensWebviewUrl,
@@ -16,6 +17,7 @@ import {
 } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { openExternalFlow, platform } from "@/native/flows";
 
 /** The bank Enable Banking carries for us; everything else goes through Powens (ADR-032). */
 const ENABLEBANKING_BANK = "Revolut";
@@ -45,6 +47,7 @@ function AddBankSheet({
   const enablebanking = useEnableBankingStatus();
   const [busy, setBusy] = useState<"revolut" | "other" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   const go = async (which: "revolut" | "other") => {
     setBusy(which);
@@ -52,9 +55,11 @@ function AddBankSheet({
     try {
       const url =
         which === "revolut"
-          ? await startEnableBankingAuth(ENABLEBANKING_BANK)
-          : await getPowensWebviewUrl();
-      window.location.href = url;
+          ? await startEnableBankingAuth(ENABLEBANKING_BANK, "FR", platform())
+          : await getPowensWebviewUrl(platform());
+      await openExternalFlow(url, navigate);
+      setBusy(null);
+      onOpenChange(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erreur inconnue");
       setBusy(null);

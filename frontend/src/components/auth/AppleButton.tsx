@@ -1,7 +1,8 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
-import { startAppleLogin } from "@/api";
+import { signInWithApple } from "@/native/flows";
 
 /** The Apple mark, as Apple's guidelines draw it: plain, single colour. */
 function AppleIcon() {
@@ -14,6 +15,7 @@ function AppleIcon() {
 
 /** Sign in with Apple, on the site. Black on light, white on dark, as Apple asks. */
 export function AppleButton({ disabled }: { disabled?: boolean }) {
+  const qc = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -21,7 +23,8 @@ export function AppleButton({ disabled }: { disabled?: boolean }) {
     setBusy(true);
     setError(null);
     try {
-      await startAppleLogin();
+      await signInWithApple(qc);
+      setBusy(false);
     } catch (e) {
       setBusy(false);
       setError(e instanceof Error ? e.message : "Erreur inconnue.");

@@ -5,14 +5,19 @@ Each authenticated user manages their own Powens token. All sync state
 """
 
 import logging
-from datetime import UTC, datetime
+import os
+import uuid
+from datetime import UTC, datetime, timedelta
+from typing import Literal
 
+import jwt
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..auth import User, current_active_user
+from ..auth import User, current_active_user, current_active_user_optional
+from ..auth import session as app_session
 from ..db.engine import get_session
 from ..db.models import PowensCredential
 from ..powens import settings as powens_settings
@@ -32,8 +37,43 @@ router = APIRouter(tags=["sync"])
 legacy_router = APIRouter(tags=["powens-legacy"])
 
 
+_STATE_SECRET = os.getenv("OAUTH_STATE_SECRET", "") or os.getenv("JWT_SECRET", "")
+_STATE_TTL = timedelta(minutes=30)
+
+
+def _sign_state(user_id: uuid.UUID, platform: str) -> str:
+    """Who started the flow and from where; Powens hands it back untouched."""
+    now = datetime.now(UTC)
+    return jwt.encode(
+        {
+            "sub": str(user_id),
+            "platform": platform,
+            "purpose": "powens",
+            "iat": now,
+            "exp": now + _STATE_TTL,
+        },
+        _STATE_SECRET,
+        algorithm="HS256",
+    )
+
+
+def _read_state(state: str) -> dict:
+    claims = jwt.decode(state, _STATE_SECRET, algorithms=["HS256"])
+    if claims.get("purpose") != "powens":
+        raise jwt.InvalidTokenError("wrong purpose")
+    return claims
+
+
+def _back(status: str, platform: str = "web") -> RedirectResponse:
+    """Back to the site, or into the app when the flow started there (ADR-035)."""
+    if platform == "app":
+        return RedirectResponse(url=f"{app_session.APP_RETURN_BASE}banks?powens_sync={status}")
+    return RedirectResponse(url=f"{powens_settings.frontend_url}/?powens_sync={status}")
+
+
 @legacy_router.get("/auth/powens/initiate")
 async def get_powens_webview(
+    platform: Literal["web", "app"] = "web",
     user: User = Depends(current_active_user),
     session: AsyncSession = Depends(get_session),
 ):
@@ -55,6 +95,7 @@ async def get_powens_webview(
     base_url = (
         f"https://{powens_settings.domain}/2.0/auth/webview/connect"
         f"?client_id={powens_settings.client_id}&redirect_uri={redirect_uri}"
+        f"&state={_sign_state(user.id, platform)}"
     )
 
     # If a credential already exists, generate a temp code to ADD a new
@@ -86,9 +127,10 @@ async def get_powens_webview(
 
 @legacy_router.get("/auth/powens/callback")
 async def powens_auth_callback(
-    user: User = Depends(current_active_user),
+    cookie_user: User | None = Depends(current_active_user_optional),
     code: str | None = None,
     connection_id: str | None = None,
+    state: str | None = None,
     session: AsyncSession = Depends(get_session),
 ):
     """OAuth callback — handles both first-time connect and "add another bank".
@@ -100,6 +142,26 @@ async def powens_auth_callback(
       because the existing token already covers the new connection. Nothing
       to persist; we just confirm to the frontend.
     """
+    # Who is this for: the cookie on the site; from the app, the signed state alone
+    # (the system browser that reaches this URL holds no session cookie, ADR-035).
+    platform = "web"
+    claims: dict = {}
+    if state:
+        try:
+            claims = _read_state(state)
+            platform = str(claims.get("platform", "web"))
+        except jwt.PyJWTError:
+            return _back("error&error=bad_state")
+    user = cookie_user
+    if user is not None and claims and claims.get("sub") != str(user.id):
+        return _back("error&error=wrong_user", platform)
+    if user is None:
+        if platform != "app" or not claims:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        user = await session.get(User, uuid.UUID(str(claims["sub"])))
+        if user is None or not user.is_active:
+            return _back("error&error=wrong_user", platform)
+
     # Case 2: adding a bank to existing Powens user — no new token to store
     if code is None:
         logger.info(
@@ -107,22 +169,18 @@ async def powens_auth_callback(
             user.id,
             connection_id,
         )
-        return RedirectResponse(url=f"{powens_settings.frontend_url}/?powens_sync=success")
+        return _back("success", platform)
 
     # Case 1: first-time connect — exchange code → token, store credential
     try:
         token_data = await exchange_code_for_token(code)
     except Exception:
         logger.exception("Powens token exchange failed for user %s", user.id)
-        return RedirectResponse(
-            url=f"{powens_settings.frontend_url}/?powens_sync=error&error=token_exchange_failed"
-        )
+        return _back("error&error=token_exchange_failed", platform)
 
     access_token = token_data.get("access_token")
     if not access_token:
-        return RedirectResponse(
-            url=f"{powens_settings.frontend_url}/?powens_sync=error&error=no_access_token"
-        )
+        return _back("error&error=no_access_token", platform)
 
     stmt = select(PowensCredential).where(PowensCredential.user_id == user.id)
     res = await session.execute(stmt)
@@ -145,7 +203,7 @@ async def powens_auth_callback(
         logger.info("Stored initial Powens token for user_id=%s", user.id)
     await session.commit()
 
-    return RedirectResponse(url=f"{powens_settings.frontend_url}/?powens_sync=success")
+    return _back("success", platform)
 
 
 @router.get("/sync/status")

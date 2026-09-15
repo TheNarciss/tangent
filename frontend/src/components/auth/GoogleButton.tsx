@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
-import { startGoogleAssociate, startGoogleLogin } from "@/api";
+import { startGoogleAssociate } from "@/api";
+import { signInWithGoogle } from "@/native/flows";
 
 interface GoogleButtonProps {
   /** "login" = signup OR login flow (non-authenticated user).
@@ -42,6 +44,7 @@ function GoogleIcon() {
 }
 
 export function GoogleButton({ mode, label, disabled }: GoogleButtonProps) {
+  const qc = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,11 +56,12 @@ export function GoogleButton({ mode, label, disabled }: GoogleButtonProps) {
     setError(null);
     try {
       if (mode === "login") {
-        await startGoogleLogin();
+        await signInWithGoogle(qc);
       } else {
         await startGoogleAssociate();
       }
-      // startGoogle* triggers window.location.href = ... — page navigates away.
+      // On the site the page navigates away; in the app the session is now open.
+      setBusy(false);
     } catch (e) {
       setBusy(false);
       setError(e instanceof Error ? e.message : "Erreur inconnue.");

@@ -214,7 +214,9 @@ async def test_app_start_and_callback_hand_back_an_exchange_code(client, monkeyp
     )
     assert resp.status_code == 303
     location = resp.headers["location"]
-    assert location.startswith(app_session.APP_RETURN_URL) and COOKIE_NAME not in location
+    assert (
+        location.startswith(f"{app_session.APP_RETURN_BASE}auth?") and COOKIE_NAME not in location
+    )
     code = parse_qs(urlparse(location).query)["code"][0]
     user_id = app_session.redeem_exchange_code(code, verifier)
     session_cookie = resp.headers.get("set-cookie", "")
