@@ -5,6 +5,7 @@
  * strings or scaled coordinates. No d3, no recharts — the surface is small enough
  * that pulling a chart lib would cost more than it saves.
  */
+import { formatDate } from "@/lib/accounts";
 
 export type Scale = (v: number) => number;
 
@@ -76,8 +77,7 @@ export function areaPath(
   return path;
 }
 
-/** Compact "MMM YYYY" for FR locale, e.g. "mars 2025". */
-const fmtMonth = new Intl.DateTimeFormat("fr-FR", { month: "short", year: "numeric" });
+/** Compact "MMM YYYY" in the language in effect, e.g. "mars 2025" / "Mar 2025". */
 export function formatDateTick(iso: string): string {
-  return fmtMonth.format(new Date(iso));
+  return formatDate(iso, { month: "short", year: "numeric" });
 }

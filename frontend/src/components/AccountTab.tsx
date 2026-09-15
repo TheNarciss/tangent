@@ -24,6 +24,15 @@ import {
   useCurrentUser,
 } from "@/api";
 import { useProfile } from "@/lib/profile";
+import { cn } from "@/lib/utils";
+import {
+  LOCALES,
+  detectLocale,
+  setLocalePreference,
+  useLocalePreference,
+  useT,
+  type LocalePreference,
+} from "@/i18n";
 import { BRIEFING_TIME } from "@/components/dashboard/AiBriefTile";
 import { Button } from "@/components/ui/button";
 import { Section } from "@/components/ui/section";
@@ -41,13 +50,14 @@ import { Label } from "@/components/ui/label";
 /**
  * Mon compte — gestion du compte Tangent et de ses connexions externes.
  *
- * 4 sections : Email, Mot de passe, Comptes liés (OAuth)
- * (Powens), Zone dangereuse (delete account).
+ * Sections : Email, Langue, Mot de passe, Comptes liés (OAuth), Briefing,
+ * Export, Administration, Zone dangereuse (delete account).
  */
 export function AccountTab() {
   return (
     <div className="space-y-12">
       <EmailSection />
+      <LanguageSection />
       <PasswordSection />
       <OAuthSection />
       <AutoReviewSection />
@@ -64,6 +74,7 @@ export function AccountTab() {
 
 function AdminSection() {
   const { data: user } = useCurrentUser();
+  const { t, tn } = useT();
   const qc = useQueryClient();
   const run = useMutation({
     mutationFn: adminCategorizeNow,
@@ -79,10 +90,7 @@ function AdminSection() {
   if (!user?.is_superuser) return null;
 
   return (
-    <Section
-      title="Administration"
-      description="Tout ce qui appelle le LLM à la demande, pour vérifier sans attendre la nuit. Chaque appel compte dans le budget du jour."
-    >
+    <Section title={t("account.adminSection.title")} description={t("account.adminSection.desc")}>
       <div className="flex flex-wrap gap-2">
         <Button
           variant="outline"
@@ -91,7 +99,9 @@ function AdminSection() {
           className="gap-2"
         >
           <Sparkles className="h-4 w-4" />
-          {brief.isPending ? "Génération, une à deux minutes…" : "Générer mon briefing maintenant"}
+          {brief.isPending
+            ? t("account.adminSection.generating")
+            : t("account.adminSection.generate")}
         </Button>
         <Button
           variant="outline"
@@ -100,32 +110,31 @@ function AdminSection() {
           className="gap-2"
         >
           <Tags className="h-4 w-4" />
-          {run.isPending ? "Catégorisation…" : "Catégoriser maintenant"}
+          {run.isPending
+            ? t("account.adminSection.categorizing")
+            : t("account.adminSection.categorize")}
         </Button>
       </div>
       {brief.isSuccess && (
-        <p className="mt-2 text-xs text-muted-foreground">
-          Briefing généré : il t'attend sur l'Aperçu.
-        </p>
+        <p className="mt-2 text-xs text-muted-foreground">{t("account.adminSection.briefReady")}</p>
       )}
       {brief.error && (
         <p className="mt-2 text-xs text-[hsl(var(--loss))]">
-          {brief.error instanceof Error ? brief.error.message : "Erreur inconnue"}
+          {brief.error instanceof Error ? brief.error.message : t("common.unknownError")}
         </p>
       )}
       {run.data && (
         <p className="mt-2 text-xs text-muted-foreground">
-          {run.data.learned} opération{run.data.learned > 1 ? "s" : ""} catégorisée
-          {run.data.learned > 1 ? "s" : ""} d'après l'historique
+          {tn("account.adminSection.learned", run.data.learned)}
           {run.data.batch
-            ? ` · ${run.data.batch.n_requests} envoyée${run.data.batch.n_requests > 1 ? "s" : ""} au LLM`
-            : " · rien à envoyer au LLM"}
+            ? tn("account.adminSection.sent", run.data.batch.n_requests)
+            : t("account.adminSection.nothingSent")}
           .
         </p>
       )}
       {run.error && (
         <p className="mt-2 text-xs text-[hsl(var(--loss))]">
-          {run.error instanceof Error ? run.error.message : "Erreur inconnue"}
+          {run.error instanceof Error ? run.error.message : t("common.unknownError")}
         </p>
       )}
     </Section>
@@ -138,17 +147,64 @@ function AdminSection() {
 
 function EmailSection() {
   const { data: user } = useCurrentUser();
+  const { t } = useT();
   if (!user) return null;
 
   return (
-    <Section title="Email" description="Identifiant principal de ton compte.">
+    <Section title={t("account.email.title")} description={t("account.email.desc")}>
       <div className="flex items-center gap-3 rounded-md border bg-muted/30 px-3 py-2">
         <span className="font-mono text-sm">{user.email}</span>
         {user.is_superuser && (
           <span className="ml-auto text-[11px] uppercase tracking-wider text-[hsl(var(--gain))]">
-            Admin
+            {t("account.admin")}
           </span>
         )}
+      </div>
+    </Section>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────────────── */
+/*  Language                                                                */
+/* ──────────────────────────────────────────────────────────────────────── */
+
+function LanguageSection() {
+  const { t } = useT();
+  const preference = useLocalePreference();
+  const detected = detectLocale(typeof navigator === "undefined" ? [] : navigator.languages);
+  const choices: { value: LocalePreference; label: string; hint?: string }[] = [
+    {
+      value: "auto",
+      label: t("account.language.auto"),
+      hint: t("account.language.autoHint", { language: t(`account.language.${detected}`) }),
+    },
+    ...LOCALES.map((l) => ({ value: l, label: t(`account.language.${l}`) })),
+  ];
+
+  return (
+    <Section title={t("account.language.title")} description={t("account.language.desc")}>
+      <div className="flex flex-col gap-2 sm:flex-row" role="radiogroup">
+        {choices.map((c) => {
+          const selected = preference === c.value;
+          return (
+            <button
+              key={c.value}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              onClick={() => setLocalePreference(c.value)}
+              className={cn(
+                "flex min-h-[44px] flex-1 flex-col items-start rounded-md border px-3 py-2 text-left text-sm transition-colors",
+                selected
+                  ? "border-primary bg-primary/10 font-medium"
+                  : "border-border hover:bg-accent/50",
+              )}
+            >
+              <span>{c.label}</span>
+              {c.hint && <span className="text-xs text-muted-foreground">{c.hint}</span>}
+            </button>
+          );
+        })}
       </div>
     </Section>
   );
@@ -160,6 +216,7 @@ function EmailSection() {
 
 function PasswordSection() {
   const { data: user } = useCurrentUser();
+  const { t } = useT();
   const [open, setOpen] = useState(false);
 
   if (!user) return null;
@@ -167,22 +224,18 @@ function PasswordSection() {
   const hasPassword = user.has_password ?? true;
 
   return (
-    <Section
-      title="Mot de passe"
-      description="Le mot de passe est haché avec Argon2id. Jamais lisible, même par l'administrateur."
-    >
+    <Section title={t("account.password.title")} description={t("account.password.desc")}>
       {hasPassword ? (
         <>
           <Button variant="outline" onClick={() => setOpen(true)} className="gap-2">
             <KeyRound className="h-4 w-4" />
-            Changer mon mot de passe
+            {t("account.password.change")}
           </Button>
           <ChangePasswordDialog open={open} onOpenChange={setOpen} />
         </>
       ) : (
         <div className="rounded-md border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-          Tu te connectes uniquement via un fournisseur OAuth (Google). Aucun mot de passe défini
-          sur ce compte.
+          {t("account.password.none")}
         </div>
       )}
     </Section>
@@ -201,6 +254,7 @@ function ChangePasswordDialog({
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const { t } = useT();
 
   const mutation = useMutation({
     mutationFn: () => changePassword(current, next),
@@ -212,7 +266,7 @@ function ChangePasswordDialog({
       }, 1500);
     },
     onError: (e) => {
-      setError(e instanceof Error ? e.message : "Erreur inconnue");
+      setError(e instanceof Error ? e.message : t("common.unknownError"));
     },
   });
 
@@ -227,15 +281,15 @@ function ChangePasswordDialog({
   const handleSubmit = () => {
     setError(null);
     if (next.length < 8) {
-      setError("Le nouveau mot de passe doit faire au moins 8 caractères.");
+      setError(t("account.password.tooShort"));
       return;
     }
     if (next !== confirm) {
-      setError("Les mots de passe ne correspondent pas.");
+      setError(t("account.password.differ"));
       return;
     }
     if (next === current) {
-      setError("Le nouveau mot de passe doit différer de l'ancien.");
+      setError(t("account.password.sameAsOld"));
       return;
     }
     mutation.mutate();
@@ -251,17 +305,14 @@ function ChangePasswordDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Changer mon mot de passe</DialogTitle>
-          <DialogDescription>
-            Renseigne ton mot de passe actuel pour confirmer ton identité, puis choisis-en un
-            nouveau (8 caractères minimum).
-          </DialogDescription>
+          <DialogTitle>{t("account.password.change")}</DialogTitle>
+          <DialogDescription>{t("account.password.dialogDesc")}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3 py-2">
           <div className="space-y-1.5">
             <Label htmlFor="current_pwd" className="text-xs">
-              Mot de passe actuel
+              {t("account.password.current")}
             </Label>
             <Input
               id="current_pwd"
@@ -274,7 +325,7 @@ function ChangePasswordDialog({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="new_pwd" className="text-xs">
-              Nouveau mot de passe
+              {t("account.password.new")}
             </Label>
             <Input
               id="new_pwd"
@@ -287,7 +338,7 @@ function ChangePasswordDialog({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="confirm_pwd" className="text-xs">
-              Confirme le nouveau mot de passe
+              {t("account.password.confirmNew")}
             </Label>
             <Input
               id="confirm_pwd"
@@ -303,7 +354,7 @@ function ChangePasswordDialog({
           {success && (
             <div className="flex items-center gap-2 text-sm text-[hsl(var(--gain))]">
               <CheckCircle2 className="h-4 w-4" />
-              Mot de passe mis à jour.
+              {t("account.password.updated")}
             </div>
           )}
         </div>
@@ -314,14 +365,14 @@ function ChangePasswordDialog({
             onClick={() => onOpenChange(false)}
             disabled={mutation.isPending}
           >
-            Annuler
+            {t("common.cancel")}
           </Button>
           <Button
             onClick={handleSubmit}
             disabled={!current || !next || !confirm || mutation.isPending || success}
           >
             {mutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            {success ? "Sauvegardé" : "Enregistrer"}
+            {success ? t("common.saved") : t("common.save")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -335,6 +386,7 @@ function ChangePasswordDialog({
 
 function OAuthSection() {
   const { data: user } = useCurrentUser();
+  const { t } = useT();
   const accounts = useQuery({
     queryKey: ["user", "oauth-accounts"],
     queryFn: listOAuthAccounts,
@@ -343,17 +395,14 @@ function OAuthSection() {
   const hasPassword = user?.has_password ?? true;
 
   return (
-    <Section
-      title="Comptes liés"
-      description="Comptes externes que tu peux utiliser pour te connecter à Tangent."
-    >
-      {accounts.isLoading && <p className="text-sm text-muted-foreground">Chargement…</p>}
+    <Section title={t("account.oauth.title")} description={t("account.oauth.desc")}>
+      {accounts.isLoading && <p className="text-sm text-muted-foreground">{t("common.loading")}</p>}
       {accounts.isError && (
-        <p className="text-sm text-[hsl(var(--loss))]">Impossible de charger les comptes liés.</p>
+        <p className="text-sm text-[hsl(var(--loss))]">{t("account.oauth.loadFailed")}</p>
       )}
       {accounts.data && accounts.data.length === 0 && (
         <div className="rounded-md border border-dashed py-6 text-center text-sm text-muted-foreground">
-          Aucun compte externe lié pour l&apos;instant.
+          {t("account.oauth.none")}
         </div>
       )}
       {accounts.data && accounts.data.length > 0 && (
@@ -385,6 +434,7 @@ function OAuthRow({
   canUnlink: boolean;
 }) {
   const qc = useQueryClient();
+  const { t } = useT();
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -395,7 +445,7 @@ function OAuthRow({
       setConfirming(false);
     },
     onError: (e) => {
-      setError(e instanceof Error ? e.message : "Erreur inconnue");
+      setError(e instanceof Error ? e.message : t("common.unknownError"));
     },
   });
 
@@ -416,22 +466,21 @@ function OAuthRow({
           className="gap-2 text-muted-foreground hover:text-[hsl(var(--loss))]"
           title={
             !canUnlink
-              ? "Définis d'abord un mot de passe — sinon tu perdrais l'accès à ton compte"
-              : `Délier ${label}`
+              ? t("account.oauth.unlinkBlocked")
+              : t("account.oauth.unlinkNamed", { provider: label })
           }
         >
           <Unlink className="h-3.5 w-3.5" />
-          Délier
+          {t("account.oauth.unlink")}
         </Button>
       </div>
 
       <Dialog open={confirming} onOpenChange={setConfirming}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Délier {label} ?</DialogTitle>
+            <DialogTitle>{t("account.oauth.unlinkTitle", { provider: label })}</DialogTitle>
             <DialogDescription>
-              Tu ne pourras plus utiliser {label} pour te connecter. Ton compte Tangent reste actif
-              via ton email et ton mot de passe.
+              {t("account.oauth.unlinkDesc", { provider: label })}
             </DialogDescription>
           </DialogHeader>
           {error && <p className="text-sm text-[hsl(var(--loss))]">{error}</p>}
@@ -441,7 +490,7 @@ function OAuthRow({
               onClick={() => setConfirming(false)}
               disabled={mutation.isPending}
             >
-              Annuler
+              {t("common.cancel")}
             </Button>
             <Button
               variant="destructive"
@@ -449,7 +498,7 @@ function OAuthRow({
               disabled={mutation.isPending}
             >
               {mutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Délier
+              {t("account.oauth.unlink")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -466,6 +515,7 @@ function OAuthRow({
 /*  Export                                                                  */
 /* ──────────────────────────────────────────────────────────────────────── */
 function ExportSection() {
+  const { t } = useT();
   const [error, setError] = useState<string | null>(null);
   const download = useMutation({
     mutationFn: exportEverything,
@@ -478,14 +528,11 @@ function ExportSection() {
       a.click();
       URL.revokeObjectURL(url);
     },
-    onError: (e) => setError(e instanceof Error ? e.message : "Export impossible"),
+    onError: (e) => setError(e instanceof Error ? e.message : t("account.export.failed")),
   });
 
   return (
-    <Section
-      title="Exporter mes données"
-      description="Tout ce que Tangent sait et calcule sur ton compte, en un fichier JSON : comptes, lignes, verdicts, stress tests, projection, et les étapes intermédiaires de la méthode. Utile pour signaler un chiffre qui semble faux."
-    >
+    <Section title={t("account.export.title")} description={t("account.export.desc")}>
       <Button
         variant="outline"
         onClick={() => download.mutate()}
@@ -497,7 +544,7 @@ function ExportSection() {
         ) : (
           <Download className="h-4 w-4" />
         )}
-        {download.isPending ? "Préparation…" : "Télécharger l'export"}
+        {download.isPending ? t("account.export.preparing") : t("account.export.download")}
       </Button>
       {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
     </Section>
@@ -505,25 +552,24 @@ function ExportSection() {
 }
 
 function DangerZone() {
+  const { t } = useT();
   const [open, setOpen] = useState(false);
 
   return (
-    <Section title="Zone dangereuse" description="Actions irréversibles.">
+    <Section title={t("account.danger.title")} description={t("account.danger.desc")}>
       <div className="rounded-md border border-[hsl(var(--loss))]/40 bg-[hsl(var(--loss))]/5 p-4">
         <div className="flex items-start gap-3">
           <AlertTriangle className="h-5 w-5 text-[hsl(var(--loss))] shrink-0 mt-0.5" />
           <div className="flex-1 space-y-3">
             <div>
-              <p className="text-sm font-medium">Supprimer mon compte</p>
+              <p className="text-sm font-medium">{t("account.danger.delete")}</p>
               <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                Efface définitivement ton compte Tangent et toutes les données associées
-                (portfolios, comptes bancaires, transactions, jetons OAuth). Cette action est
-                irréversible et conforme au droit à l&apos;effacement (RGPD).
+                {t("account.danger.deleteDesc")}
               </p>
             </div>
             <Button variant="destructive" size="sm" onClick={() => setOpen(true)} className="gap-2">
               <Trash2 className="h-4 w-4" />
-              Supprimer mon compte
+              {t("account.danger.delete")}
             </Button>
           </div>
         </div>
@@ -541,6 +587,7 @@ function DeleteAccountDialog({
   onOpenChange: (v: boolean) => void;
 }) {
   const { data: user } = useCurrentUser();
+  const { t } = useT();
   const [confirmation, setConfirmation] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -561,7 +608,7 @@ function DeleteAccountDialog({
       if (e instanceof ApiError) {
         setError(e.message);
       } else {
-        setError(e instanceof Error ? e.message : "Erreur inconnue");
+        setError(e instanceof Error ? e.message : t("common.unknownError"));
       }
     },
   });
@@ -584,11 +631,12 @@ function DeleteAccountDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="text-[hsl(var(--loss))]">
-            Supprimer définitivement mon compte
+            {t("account.danger.dialogTitle")}
           </DialogTitle>
           <DialogDescription>
-            Cette action est <strong>irréversible</strong>. Tous tes portfolios, comptes bancaires,
-            transactions et jetons OAuth seront effacés. Aucune sauvegarde n&apos;est conservée.
+            {t("account.danger.dialogBefore")}
+            <strong>{t("account.danger.irreversible")}</strong>
+            {t("account.danger.dialogAfter")}
           </DialogDescription>
         </DialogHeader>
 
@@ -596,7 +644,7 @@ function DeleteAccountDialog({
           {hasPassword && (
             <div className="space-y-1.5">
               <Label htmlFor="delete_pwd" className="text-xs">
-                Mot de passe actuel
+                {t("account.danger.currentPassword")}
               </Label>
               <Input
                 id="delete_pwd"
@@ -610,7 +658,9 @@ function DeleteAccountDialog({
           )}
           <div className="space-y-1.5">
             <Label htmlFor="delete_confirm" className="text-xs">
-              Tape <code className="font-mono font-semibold">DELETE</code> pour confirmer
+              {t("account.danger.typeToConfirm")}{" "}
+              <code className="font-mono font-semibold">DELETE</code>{" "}
+              {t("account.danger.toConfirm")}
             </Label>
             <Input
               id="delete_confirm"
@@ -635,11 +685,11 @@ function DeleteAccountDialog({
             onClick={() => onOpenChange(false)}
             disabled={mutation.isPending}
           >
-            Annuler
+            {t("common.cancel")}
           </Button>
           <Button variant="destructive" onClick={() => mutation.mutate()} disabled={!canSubmit}>
             {mutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Supprimer définitivement
+            {t("account.danger.deleteForever")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -653,6 +703,7 @@ function DeleteAccountDialog({
 
 function AutoReviewSection() {
   const { data: user } = useCurrentUser();
+  const { t } = useT();
   const [profile, setProfile] = useProfile();
   // The nightly run costs an LLM call: only an administrator sees the switch.
   if (!profile || !user?.is_superuser) return null;
@@ -664,8 +715,8 @@ function AutoReviewSection() {
 
   return (
     <Section
-      title="Briefing du matin"
-      description={`Chaque matin (${BRIEFING_TIME}), un court texte sur ce qui a bougé dans ton patrimoine, ce que ça veut dire et s'il y a quelque chose à faire. Écrit par une IA à partir de tes comptes ; activable et désactivable à tout moment.`}
+      title={t("account.briefing.title")}
+      description={t("account.briefing.desc", { time: BRIEFING_TIME })}
     >
       <div className="flex items-start gap-3 rounded-md border bg-muted/30 px-3 py-3 hover:bg-muted/50 transition">
         <input
@@ -676,11 +727,9 @@ function AutoReviewSection() {
           className="mt-0.5 h-4 w-4 rounded border-input accent-primary cursor-pointer"
         />
         <label htmlFor="auto-review-toggle" className="flex-1 cursor-pointer">
-          <p className="text-sm font-medium">Recevoir le briefing du matin</p>
+          <p className="text-sm font-medium">{t("account.briefing.receive")}</p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {enabled
-              ? "Activé — ton briefing t'attend chaque matin sur l'Aperçu."
-              : "Désactivé — active pour recevoir ton premier briefing demain matin."}
+            {enabled ? t("account.briefing.on") : t("account.briefing.off")}
           </p>
         </label>
       </div>

@@ -1,6 +1,7 @@
 import { useState, FormEvent } from "react";
 
 import { ApiError, useLogin } from "@/api";
+import { useT } from "@/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +15,7 @@ export function LoginForm({ onSwitchToRegister, onForgotPassword }: LoginFormPro
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const login = useLogin();
+  const { t } = useT();
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -23,21 +25,21 @@ export function LoginForm({ onSwitchToRegister, onForgotPassword }: LoginFormPro
   const errorMessage = login.error
     ? login.error instanceof ApiError
       ? login.error.status === 400 || login.error.status === 401
-        ? "Email ou mot de passe incorrect."
+        ? t("auth.badCredentials")
         : login.error.status === 429
-          ? "Trop de tentatives. Réessaie dans un instant."
+          ? t("auth.tooManyAttempts")
           : login.error.message
-      : "Erreur inconnue."
+      : t("common.unknownError")
     : null;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       <div className="space-y-2">
-        <Label htmlFor="login-email">Email</Label>
+        <Label htmlFor="login-email">{t("auth.email")}</Label>
         <Input
           id="login-email"
           type="email"
-          placeholder="toi@example.com"
+          placeholder={t("auth.emailPlaceholder")}
           autoComplete="email"
           required
           value={email}
@@ -48,14 +50,14 @@ export function LoginForm({ onSwitchToRegister, onForgotPassword }: LoginFormPro
 
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <Label htmlFor="login-password">Mot de passe</Label>
+          <Label htmlFor="login-password">{t("auth.password")}</Label>
           {onForgotPassword && (
             <button
               type="button"
               onClick={onForgotPassword}
               className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline transition"
             >
-              Mot de passe oublié ?
+              {t("auth.forgotPassword")}
             </button>
           )}
         </div>
@@ -78,17 +80,17 @@ export function LoginForm({ onSwitchToRegister, onForgotPassword }: LoginFormPro
       )}
 
       <Button type="submit" className="w-full" disabled={login.isPending}>
-        {login.isPending ? "Connexion…" : "Se connecter"}
+        {login.isPending ? t("auth.signingIn") : t("auth.signIn")}
       </Button>
 
       <div className="text-center text-sm text-muted-foreground">
-        Pas encore de compte ?{" "}
+        {t("auth.noAccountYet")}{" "}
         <button
           type="button"
           onClick={onSwitchToRegister}
           className="text-foreground underline hover:no-underline"
         >
-          Inscris-toi
+          {t("auth.signUp")}
         </button>
       </div>
     </form>

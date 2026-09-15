@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
 import { fetchTermsVersion, useCurrentUser } from "@/api";
+import { t, useLocale } from "@/i18n";
 import { useProfileSync } from "@/lib/profile-sync";
 import { NativeGate } from "@/native/NativeGate";
 import { listenForAppReturn } from "@/native/session";
@@ -39,6 +40,9 @@ export default function App() {
 function Gate() {
   const auth = useCurrentUser();
   const qc = useQueryClient();
+  // A language change remounts the tree below: every label, number and date
+  // is re-read, including the ones computed outside hooks. The URL keeps the place.
+  const locale = useLocale();
   useProfileSync(!!auth.data);
 
   // The phone: a sign-in finished in the system browser comes back as a tangent:// URL.
@@ -54,21 +58,21 @@ function Gate() {
   if (auth.isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
-        <p className="text-sm text-muted-foreground">Chargement…</p>
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
       </div>
     );
   }
 
   if (!auth.data) {
-    return <AuthScreen />;
+    return <AuthScreen key={locale} />;
   }
 
   const currentTermsVersion = termsVersionQuery.data?.version;
   if (currentTermsVersion && auth.data.terms_version_accepted !== currentTermsVersion) {
-    return <TermsGate user={auth.data} />;
+    return <TermsGate key={locale} user={auth.data} />;
   }
 
-  return <Shell />;
+  return <Shell key={locale} />;
 }
 
 function Shell() {
@@ -135,46 +139,24 @@ function getViewConfig(pathname: string, inputs: ViewConfigInputs): ViewConfig {
 
   switch (pathname) {
     case NAV_PATHS.accounts:
-      return {
-        title: "Comptes",
-        subtitle: "Tous tes comptes, mis à jour automatiquement",
-        headerActions,
-      };
+      return { title: t("nav.accounts"), subtitle: t("view.accounts.subtitle"), headerActions };
     case NAV_PATHS.spending:
-      return {
-        title: "Dépenses",
-        subtitle: "Ce qui entre et sort de tes comptes courants, mois par mois",
-      };
+      return { title: t("nav.spending"), subtitle: t("view.spending.subtitle") };
     case NAV_PATHS.projection:
-      return {
-        title: "Projection",
-        subtitle: "Où tu en seras, en euros d'aujourd'hui",
-      };
+      return { title: t("nav.projection"), subtitle: t("view.projection.subtitle") };
     case NAV_PATHS.investments:
-      return {
-        title: "Placements",
-        subtitle: "Ce que tu détiens, le risque que tu prends, des pistes",
-      };
+      return { title: t("nav.investments"), subtitle: t("view.investments.subtitle") };
     case NAV_PATHS.picks:
-      return {
-        title: "La liste de l'année",
-        subtitle: "Une règle publiée, pas une opinion : ce qu'elle dit d'acheter et de vendre",
-      };
+      return { title: t("nav.picks"), subtitle: t("view.picks.subtitle") };
     case NAV_PATHS.leads:
-      return {
-        title: "Pistes de marché",
-        subtitle: "Ce que déclarent ceux qui engagent leur argent, brut, avant le tri du briefing",
-      };
+      return { title: t("nav.leads"), subtitle: t("view.leads.subtitle") };
     case NAV_PATHS.method:
-      return {
-        title: "Méthode",
-        subtitle: "Ce que la méthode dit de ton patrimoine, verdict par verdict",
-      };
+      return { title: t("nav.method"), subtitle: t("view.method.subtitle") };
     case NAV_PATHS.profile:
-      return { title: "Mon profil", subtitle: "Ce que Tangent doit savoir pour calculer juste" };
+      return { title: t("nav.profile"), subtitle: t("view.profile.subtitle") };
     case NAV_PATHS.account:
-      return { title: "Mon compte", subtitle: "Connexion, sécurité, banques et briefing" };
+      return { title: t("nav.account"), subtitle: t("view.account.subtitle") };
     default:
-      return { title: "Aperçu", subtitle: "Ton patrimoine en un coup d'œil" };
+      return { title: t("nav.overview"), subtitle: t("view.overview.subtitle") };
   }
 }

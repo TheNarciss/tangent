@@ -1,6 +1,7 @@
 import { Check } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 
+import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 import {
   BottomSheet,
@@ -19,6 +20,7 @@ import { NAV_PATHS, isActivePath, type NavGroup } from "./Sidebar";
  * plain links, so the URL stays the source of truth.
  */
 export function SubNavStrip({ group, pathname }: { group: NavGroup; pathname: string }) {
+  const { t } = useT();
   if (group.children.length < 2) return null;
   return (
     <div className="flex gap-1 overflow-x-auto border-b border-border bg-background px-4 py-2 md:hidden">
@@ -35,7 +37,7 @@ export function SubNavStrip({ group, pathname }: { group: NavGroup; pathname: st
                 : "bg-muted text-muted-foreground hover:text-foreground",
             )}
           >
-            {child.label}
+            {t(child.labelKey)}
           </NavLink>
         );
       })}
@@ -51,11 +53,12 @@ interface SubNavSheetProps {
 
 export function SubNavSheet({ group, pathname, onOpenChange }: SubNavSheetProps) {
   const navigate = useNavigate();
+  const { t } = useT();
   return (
     <BottomSheet open={group !== null} onOpenChange={onOpenChange}>
       <BottomSheetContent>
         <BottomSheetHeader>
-          <BottomSheetTitle>{group?.label}</BottomSheetTitle>
+          <BottomSheetTitle>{group && t(group.labelKey)}</BottomSheetTitle>
         </BottomSheetHeader>
         <div className="space-y-1 p-4">
           {group?.children.map((child) => {
@@ -76,7 +79,7 @@ export function SubNavSheet({ group, pathname, onOpenChange }: SubNavSheetProps)
               >
                 <span className="flex items-center gap-3">
                   <Icon className="h-4 w-4" />
-                  {child.label}
+                  {t(child.labelKey)}
                 </span>
                 {active && <Check className="h-4 w-4 text-primary" aria-hidden />}
               </button>

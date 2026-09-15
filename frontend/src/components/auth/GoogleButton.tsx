@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { startGoogleAssociate } from "@/api";
+import { useT } from "@/i18n";
 import { signInWithGoogle } from "@/native/flows";
 
 interface GoogleButtonProps {
@@ -45,10 +46,11 @@ function GoogleIcon() {
 
 export function GoogleButton({ mode, label, disabled }: GoogleButtonProps) {
   const qc = useQueryClient();
+  const { t } = useT();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const defaultLabel = mode === "login" ? "Continuer avec Google" : "Lier mon compte Google";
+  const defaultLabel = mode === "login" ? t("auth.continueGoogle") : t("menu.linkGoogle");
   const displayLabel = label ?? defaultLabel;
 
   const handleClick = async () => {
@@ -64,7 +66,7 @@ export function GoogleButton({ mode, label, disabled }: GoogleButtonProps) {
       setBusy(false);
     } catch (e) {
       setBusy(false);
-      setError(e instanceof Error ? e.message : "Erreur inconnue.");
+      setError(e instanceof Error ? e.message : t("common.unknownError"));
     }
   };
 
@@ -78,7 +80,7 @@ export function GoogleButton({ mode, label, disabled }: GoogleButtonProps) {
         disabled={disabled || busy}
       >
         <GoogleIcon />
-        <span className="ml-2">{busy ? "Redirection…" : displayLabel}</span>
+        <span className="ml-2">{busy ? t("auth.redirecting") : displayLabel}</span>
       </Button>
       {error && <p className="text-xs text-[hsl(var(--loss))]">{error}</p>}
     </div>
