@@ -69,8 +69,13 @@ def test_get_client_returns_singleton(monkeypatch):
 
 def test_constants_exposed():
     """Public constants are accessible without instantiating the client."""
-    assert anthropic_client.MODEL == "claude-sonnet-4-6"
-    assert anthropic_client.MAX_TOKENS == 4096
+    assert anthropic_client.BRIEFING_MODEL == "claude-opus-5"
+    assert anthropic_client.BRIEFING_THINKING == {"type": "adaptive"}
+    assert anthropic_client.BRIEFING_EFFORT == "high"
+    assert anthropic_client.BRIEFING_MAX_TOKENS == 16_000
+    assert anthropic_client.CATEGORY_MODEL == "claude-haiku-4-5"
+    assert anthropic_client.SOURCING_MODEL == "claude-sonnet-5"
+    assert anthropic_client.web_search_tool()["type"] == "web_search_20260209"
     assert anthropic_client.WEB_SEARCH_MAX_USES == 5
 
 
@@ -102,8 +107,8 @@ async def test_anthropic_sdk_is_mockable_for_non_streaming(monkeypatch):
 
         client = anthropic_client.get_client()
         response = await client.messages.create(
-            model=anthropic_client.MODEL,
-            max_tokens=anthropic_client.MAX_TOKENS,
+            model=anthropic_client.BRIEFING_MODEL,
+            max_tokens=anthropic_client.BRIEFING_MAX_TOKENS,
             messages=[{"role": "user", "content": "test"}],
         )
 
@@ -115,8 +120,8 @@ async def test_anthropic_sdk_is_mockable_for_non_streaming(monkeypatch):
     # Verify the SDK was called with our constants
     mock_instance.messages.create.assert_awaited_once()
     call_kwargs = mock_instance.messages.create.await_args.kwargs
-    assert call_kwargs["model"] == "claude-sonnet-4-6"
-    assert call_kwargs["max_tokens"] == 4096
+    assert call_kwargs["model"] == anthropic_client.BRIEFING_MODEL
+    assert call_kwargs["max_tokens"] == anthropic_client.BRIEFING_MAX_TOKENS
 
 
 async def test_anthropic_sdk_is_mockable_for_streaming(monkeypatch):
@@ -152,8 +157,8 @@ async def test_anthropic_sdk_is_mockable_for_streaming(monkeypatch):
         client = anthropic_client.get_client()
         collected: list[str] = []
         async with client.messages.stream(
-            model=anthropic_client.MODEL,
-            max_tokens=anthropic_client.MAX_TOKENS,
+            model=anthropic_client.BRIEFING_MODEL,
+            max_tokens=anthropic_client.BRIEFING_MAX_TOKENS,
             messages=[{"role": "user", "content": "test"}],
         ) as stream:
             async for chunk in stream.text_stream:

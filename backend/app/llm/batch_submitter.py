@@ -51,7 +51,7 @@ logger = logging.getLogger(__name__)
 # Pre-submit estimation parameters (used for the kill-switch only —
 # actual cost comes from message.usage in the poller).
 _ESTIMATED_INPUT_TOKENS_PER_REVIEW = 16_000
-_ESTIMATED_OUTPUT_TOKENS_PER_REVIEW = 3_000
+_ESTIMATED_OUTPUT_TOKENS_PER_REVIEW = 6_000  # ~3k of text, and the thinking before it
 _ESTIMATED_WEB_SEARCHES_PER_REVIEW = 4
 _BATCH_DISCOUNT = 0.5
 
@@ -67,11 +67,13 @@ def estimate_cost_per_gap_fill(field: GappableField | None = None) -> float:
     from each message's actual usage. ADR-021.
     """
     rows = field.batch_size if field is not None else 1
-    searches = 1 if field is None or field.requires_web_search else 0
+    sourcing = field is None or field.requires_web_search
     api_cost = cost_tracker.compute_cost_usd(
         input_tokens=250 + 60 * (rows - 1),
-        output_tokens=100 + 30 * (rows - 1),
-        web_searches_count=searches,
+        # A sourcing answer thinks a little before it copies a figure.
+        output_tokens=(400 if sourcing else 100) + 30 * (rows - 1),
+        web_searches_count=1 if sourcing else 0,
+        model=anthropic_client.SOURCING_MODEL if sourcing else anthropic_client.CATEGORY_MODEL,
     )
     return api_cost * _BATCH_DISCOUNT
 
@@ -88,6 +90,7 @@ def estimate_cost_per_review() -> float:
         _ESTIMATED_INPUT_TOKENS_PER_REVIEW,
         _ESTIMATED_OUTPUT_TOKENS_PER_REVIEW,
         _ESTIMATED_WEB_SEARCHES_PER_REVIEW,
+        model=anthropic_client.BRIEFING_MODEL,
     )
     return api_cost * _BATCH_DISCOUNT
 
@@ -168,17 +171,13 @@ async def submit_nightly_batch(
                 Request(
                     custom_id=str(user_id),
                     params=MessageCreateParamsNonStreaming(
-                        model=anthropic_client.MODEL,
-                        max_tokens=anthropic_client.MAX_TOKENS,
+                        model=anthropic_client.BRIEFING_MODEL,
+                        max_tokens=anthropic_client.BRIEFING_MAX_TOKENS,
+                        thinking=anthropic_client.BRIEFING_THINKING,  # type: ignore[typeddict-item]
+                        output_config={"effort": anthropic_client.BRIEFING_EFFORT},  # type: ignore[typeddict-item]
                         system=SYSTEM_PROMPT,
                         messages=[{"role": "user", "content": user_prompt}],
-                        tools=[
-                            {
-                                "type": "web_search_20250305",
-                                "name": "web_search",
-                                "max_uses": anthropic_client.WEB_SEARCH_MAX_USES,
-                            }
-                        ],
+                        tools=[anthropic_client.web_search_tool()],  # type: ignore[list-item]
                     ),
                 )
             )

@@ -23,16 +23,31 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db.models import LLMDailyCost
+from . import anthropic_client
 
 logger = logging.getLogger(__name__)
 
 
-# -- Pricing (Sonnet 4.6, snapshot June 2026) -------------------------------
-# Source: https://www.anthropic.com/pricing
-# Update these constants if Anthropic adjusts the published rates.
-PRICE_INPUT_PER_MTOK_USD = 3.0
-PRICE_OUTPUT_PER_MTOK_USD = 15.0
+# -- Pricing (snapshot September 2026, USD per million tokens) --------------
+# Source: https://www.anthropic.com/pricing — update if the rate card moves.
+# Keyed by model id prefix; an unknown model is priced like the dearest one
+# we use, the safe side of a kill-switch.
+PRICES_PER_MTOK_USD: dict[str, tuple[float, float]] = {
+    "claude-opus-5": (5.0, 25.0),
+    "claude-sonnet-5": (2.0, 10.0),
+    "claude-sonnet-4-6": (3.0, 15.0),
+    "claude-haiku-4-5": (1.0, 5.0),
+}
 PRICE_WEB_SEARCH_USD = 0.01  # per individual search invocation
+
+
+def prices_for(model: str | None) -> tuple[float, float]:
+    """(input, output) USD per million tokens for the model, dearest known if unknown."""
+    if model:
+        for prefix, rates in PRICES_PER_MTOK_USD.items():
+            if model.startswith(prefix):
+                return rates
+    return max(PRICES_PER_MTOK_USD.values())
 
 
 # -- Daily cap --------------------------------------------------------------
@@ -63,14 +78,17 @@ def compute_cost_usd(
     input_tokens: int,
     output_tokens: int,
     web_searches_count: int = 0,
+    model: str | None = None,
 ) -> float:
-    """USD cost of a single LLM call.
+    """USD cost of a single LLM call on that model (the briefing's when unnamed).
 
     Pure function — no I/O, easy to verify against the published rate card.
+    Thinking tokens are billed as output and arrive inside `output_tokens`.
     """
+    price_in, price_out = prices_for(model or anthropic_client.BRIEFING_MODEL)
     return (
-        input_tokens / 1_000_000 * PRICE_INPUT_PER_MTOK_USD
-        + output_tokens / 1_000_000 * PRICE_OUTPUT_PER_MTOK_USD
+        input_tokens / 1_000_000 * price_in
+        + output_tokens / 1_000_000 * price_out
         + web_searches_count * PRICE_WEB_SEARCH_USD
     )
 

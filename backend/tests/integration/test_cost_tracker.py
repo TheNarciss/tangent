@@ -36,12 +36,20 @@ def test_compute_cost_zero_everything_is_zero():
 
 def test_compute_cost_input_only_matches_published_rate():
     """1M input tokens × $3/M == $3.00"""
-    assert cost_tracker.compute_cost_usd(1_000_000, 0, 0) == pytest.approx(3.0)
+    assert cost_tracker.compute_cost_usd(1_000_000, 0, 0) == pytest.approx(
+        5.0
+    )  # Opus 5, the briefing
+    assert cost_tracker.compute_cost_usd(1_000_000, 0, 0, "claude-haiku-4-5") == pytest.approx(1.0)
+    assert cost_tracker.compute_cost_usd(1_000_000, 0, 0, "claude-sonnet-5") == pytest.approx(2.0)
 
 
 def test_compute_cost_output_only_matches_published_rate():
     """1M output tokens × $15/M == $15.00"""
-    assert cost_tracker.compute_cost_usd(0, 1_000_000, 0) == pytest.approx(15.0)
+    assert cost_tracker.compute_cost_usd(0, 1_000_000, 0) == pytest.approx(25.0)
+    assert cost_tracker.compute_cost_usd(0, 1_000_000, 0, "claude-haiku-4-5") == pytest.approx(5.0)
+    assert cost_tracker.compute_cost_usd(0, 1_000_000, 0, "unknown-model") == pytest.approx(
+        25.0
+    )  # dearest known
 
 
 def test_compute_cost_web_search_only():
@@ -50,17 +58,17 @@ def test_compute_cost_web_search_only():
 
 
 def test_compute_cost_typical_review():
-    """Typical review: 6k in + 3k out + 5 searches.
+    """Typical review on Opus 5: 6k in + 3k out + 5 searches.
 
     Hand calc:
-      6_000  / 1M * $3  = $0.018
-      3_000  / 1M * $15 = $0.045
+      6_000  / 1M * $5  = $0.030
+      3_000  / 1M * $25 = $0.075
       5      * $0.01    = $0.050
       ---------------------------
-      total              = $0.113
+      total              = $0.155
     """
     cost = cost_tracker.compute_cost_usd(6_000, 3_000, 5)
-    assert cost == pytest.approx(0.113, abs=1e-4)
+    assert cost == pytest.approx(0.155, abs=1e-4)
 
 
 def test_today_paris_returns_a_date_not_datetime():
