@@ -5,6 +5,7 @@ import {
   Download,
   KeyRound,
   Loader2,
+  Sparkles,
   Tags,
   Trash2,
   Unlink,
@@ -14,6 +15,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ApiError,
   adminCategorizeNow,
+  generateReviewNow,
   changePassword,
   deleteMyAccount,
   exportEverything,
@@ -70,22 +72,47 @@ function AdminSection() {
       qc.invalidateQueries({ queryKey: ["transactions"] });
     },
   });
+  const brief = useMutation({
+    mutationFn: generateReviewNow,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["reviews"] }),
+  });
   if (!user?.is_superuser) return null;
 
   return (
     <Section
       title="Administration"
-      description="Rattraper les catégories manquantes sans attendre la nuit : ce qu'une décision passée sur le même commerçant règle est appliqué tout de suite, le reste part au LLM et revient dans l'heure."
+      description="Tout ce qui appelle le LLM à la demande, pour vérifier sans attendre la nuit. Chaque appel compte dans le budget du jour."
     >
-      <Button
-        variant="outline"
-        onClick={() => run.mutate()}
-        disabled={run.isPending}
-        className="gap-2"
-      >
-        <Tags className="h-4 w-4" />
-        {run.isPending ? "Catégorisation…" : "Catégoriser maintenant"}
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant="outline"
+          onClick={() => brief.mutate()}
+          disabled={brief.isPending}
+          className="gap-2"
+        >
+          <Sparkles className="h-4 w-4" />
+          {brief.isPending ? "Génération, une à deux minutes…" : "Générer mon briefing maintenant"}
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => run.mutate()}
+          disabled={run.isPending}
+          className="gap-2"
+        >
+          <Tags className="h-4 w-4" />
+          {run.isPending ? "Catégorisation…" : "Catégoriser maintenant"}
+        </Button>
+      </div>
+      {brief.isSuccess && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Briefing généré : il t'attend sur l'Aperçu.
+        </p>
+      )}
+      {brief.error && (
+        <p className="mt-2 text-xs text-[hsl(var(--loss))]">
+          {brief.error instanceof Error ? brief.error.message : "Erreur inconnue"}
+        </p>
+      )}
       {run.data && (
         <p className="mt-2 text-xs text-muted-foreground">
           {run.data.learned} opération{run.data.learned > 1 ? "s" : ""} catégorisée
@@ -625,8 +652,10 @@ function DeleteAccountDialog({
 /* ──────────────────────────────────────────────────────────────────────── */
 
 function AutoReviewSection() {
+  const { data: user } = useCurrentUser();
   const [profile, setProfile] = useProfile();
-  if (!profile) return null;
+  // The nightly run costs an LLM call: only an administrator sees the switch.
+  if (!profile || !user?.is_superuser) return null;
 
   const enabled = profile.auto_review_enabled ?? false;
   const toggle = () => {

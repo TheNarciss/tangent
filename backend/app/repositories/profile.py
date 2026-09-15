@@ -6,6 +6,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..auth.models import User
 from ..db.models import Profile
 
 logger = logging.getLogger(__name__)
@@ -55,11 +56,17 @@ async def update(session: AsyncSession, user_id: uuid.UUID, updates: dict) -> Pr
 
 
 async def list_opted_in_users(session: AsyncSession) -> list[Profile]:
-    """Return all profiles with auto_review_enabled=True.
+    """Profiles opted in to the nightly briefing — administrators only, for now.
 
-    Used by the nightly batch submitter (PR #B) to know which users
-    should be included in tonight's batch.
+    Used by the nightly batch submitter to know which users should be
+    included in tonight's batch. The route refuses the opt-in to anyone
+    else; this is the second lock, for a flag set before that rule.
     """
-    stmt = select(Profile).where(Profile.auto_review_enabled.is_(True))
+    users = User.__table__.c  # the fastapi-users base types its columns as plain attributes
+    stmt = (
+        select(Profile)
+        .join(User, users.id == Profile.user_id)
+        .where(Profile.auto_review_enabled.is_(True), users.is_superuser.is_(True))
+    )
     result = await session.execute(stmt)
     return list(result.scalars().all())

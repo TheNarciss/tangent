@@ -7,7 +7,7 @@ profile. The frontend syncs both ways: pull from DB at login, push on every edit
 from datetime import date
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -83,8 +83,17 @@ async def update_profile(
     user: User = Depends(current_active_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """Patch the profile. Only fields explicitly set in body are touched."""
+    """Patch the profile. Only fields explicitly set in body are touched.
+
+    The morning briefing runs the LLM every night for whoever is opted in:
+    for now only an administrator may switch it on (or off).
+    """
     updates = body.model_dump(exclude_unset=True)
+    if "auto_review_enabled" in updates and not user.is_superuser:
+        raise HTTPException(
+            status_code=403,
+            detail="Le briefing du matin est réservé aux administrateurs pour l'instant.",
+        )
     if updates.get("risk_level") is not None:
         lv = risk_profile.resolve(updates["risk_level"])
         updates["target_annual_return"] = lv.target_annual_return
