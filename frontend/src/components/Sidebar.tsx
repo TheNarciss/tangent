@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   ListOrdered,
   PieChart,
+  Radar,
   Receipt,
   TrendingUp,
   Wallet,
@@ -18,6 +19,7 @@ export type NavView =
   | "spending"
   | "investments"
   | "picks"
+  | "leads"
   | "projection"
   | "method"
   | "profile"
@@ -30,6 +32,7 @@ export const NAV_PATHS: Record<NavView, string> = {
   spending: "/depenses",
   investments: "/placements",
   picks: "/placements/liste",
+  leads: "/placements/pistes",
   projection: "/projection",
   method: "/methode",
   profile: "/profil",
@@ -82,6 +85,7 @@ export const NAV_GROUPS: NavGroup[] = [
     children: [
       { view: "investments", label: "Placements", icon: PieChart },
       { view: "picks", label: "La liste de l'année", icon: ListOrdered },
+      { view: "leads", label: "Pistes de marché", icon: Radar },
     ],
   },
   {

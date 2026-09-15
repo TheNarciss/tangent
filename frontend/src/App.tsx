@@ -17,6 +17,7 @@ import { EnableBankingCallbackHandler } from "@/components/EnableBankingCallback
 import { Methode } from "@/components/Methode";
 import { OAuthCallbackHandler } from "@/components/OAuthCallback";
 import { Picks } from "@/components/Picks";
+import { MarketLeads } from "@/components/MarketLeads";
 import { Placements } from "@/components/Placements";
 import { PowensCallbackHandler } from "@/components/PowensCallback";
 import { ProfilePage } from "@/components/Profile";
@@ -84,6 +85,7 @@ function Shell() {
           <Route path={NAV_PATHS.spending} element={<Spending />} />
           <Route path={NAV_PATHS.investments} element={<Placements />} />
           <Route path={NAV_PATHS.picks} element={<Picks />} />
+          <Route path={NAV_PATHS.leads} element={<MarketLeads />} />
           <Route path={NAV_PATHS.projection} element={<Projection />} />
           <Route path={NAV_PATHS.method} element={<Methode />} />
           <Route path={NAV_PATHS.profile} element={<ProfilePage />} />
@@ -142,6 +144,11 @@ function getViewConfig(pathname: string, inputs: ViewConfigInputs): ViewConfig {
       return {
         title: "La liste de l'année",
         subtitle: "Une règle publiée, pas une opinion : ce qu'elle dit d'acheter et de vendre",
+      };
+    case NAV_PATHS.leads:
+      return {
+        title: "Pistes de marché",
+        subtitle: "Ce que déclarent ceux qui engagent leur argent, brut, avant le tri du briefing",
       };
     case NAV_PATHS.method:
       return {
