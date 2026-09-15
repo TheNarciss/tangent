@@ -62,3 +62,4 @@ Template : [`TEMPLATE.md`](./TEMPLATE.md).
 - [ADR-032](032-enablebanking-second-aggregator.md) — Enable Banking : un second agrégateur pour les banques hors Powens
 - [ADR-033](033-market-leads-cast-wide-let-the-briefing-sort.md) — « Pistes de marché » : ratisser large, laisser le briefing trier
 - [ADR-034](034-the-archive-twice-a-day.md) — L'archive : tout ce que l'app sait, écrit deux fois par jour
+- [ADR-035](035-the-iphone-app-shares-the-backend.md) — L'app iPhone est le site, dans une coque native, sur le même backend

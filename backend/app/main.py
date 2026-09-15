@@ -10,13 +10,25 @@ from collections import defaultdict
 from contextlib import asynccontextmanager
 from time import time as _now
 
-from fastapi import FastAPI, Request
+import jwt
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi_users.jwt import decode_jwt
+from fastapi_users.router.oauth import STATE_TOKEN_AUDIENCE
 
 from . import logging_config
 from .auth import UserCreate, UserRead, UserUpdate, auth_backend, fastapi_users
+from .auth import session as app_session
+from .auth.app_router import (
+    APP_GOOGLE_CALLBACK_PATH,
+    CHALLENGE_KEY,
+    build_app_google_router,
+    build_exchange_router,
+)
+from .auth.backend import COOKIE_NAME, cookie_transport
 from .auth.oauth_router import (
+    OAUTH_STATE_SECRET,
     build_google_associate_router,
     build_google_login_router,
     is_oauth_configured,
@@ -127,6 +139,9 @@ async def apply_auth_rate_limits(request: Request, call_next):
 async def oauth_callback_to_redirect(request: Request, call_next):
     response = await call_next(request)
 
+    if request.url.path == APP_GOOGLE_CALLBACK_PATH:
+        return _app_callback_to_redirect(request, response)
+
     if request.url.path not in {
         "/api/auth/google/callback",
         "/api/auth/associate/google/callback",
@@ -170,6 +185,59 @@ app.add_middleware(
     allow_headers=["*"],
     allow_credentials=True,
 )
+
+
+def _app_callback_to_redirect(request: Request, response: Response) -> Response:
+    """The app's OAuth callback: back into the app with a single-use code, never the cookie.
+
+    The system browser that runs the OAuth flow does not share cookies with
+    the app, so the session it just opened is useless there. The code is
+    bound to the PKCE challenge the app put in the state (ADR-035).
+    """
+    if response.status_code != 204:
+        return RedirectResponse(
+            url=app_session.app_return(error=str(response.status_code)), status_code=303
+        )
+    token = _cookie_from_headers(response.raw_headers)
+    try:
+        state = decode_jwt(
+            request.query_params.get("state", ""), OAUTH_STATE_SECRET, [STATE_TOKEN_AUDIENCE]
+        )
+        session_data = decode_jwt(
+            token or "", app_session.JWT_SECRET, [app_session.SESSION_AUDIENCE]
+        )
+        challenge = state[CHALLENGE_KEY]
+    except (jwt.PyJWTError, KeyError):
+        return RedirectResponse(url=app_session.app_return(error="state"), status_code=303)
+    code = app_session.mint_exchange_code(session_data["sub"], challenge)
+    return RedirectResponse(url=app_session.app_return(code=code), status_code=303)
+
+
+def _cookie_from_headers(raw_headers: list[tuple[bytes, bytes]]) -> str | None:
+    """The session token a Set-Cookie header carries, if one is there."""
+    prefix = f"{COOKIE_NAME}=".encode()
+    for name, value in raw_headers:
+        if name.lower() == b"set-cookie" and value.startswith(prefix):
+            return value[len(prefix) :].split(b";", 1)[0].decode()
+    return None
+
+
+@app.middleware("http")
+async def renew_session_while_in_use(request: Request, call_next):
+    """A session that is used stays open (ADR-035): a token past the age threshold is replaced.
+
+    Only on `/api/users/me` answered 200: that route just validated the
+    token against the user table, so a renewal there extends exactly the
+    session it accepted. The site and the app both call it on every launch.
+    """
+    response = await call_next(request)
+    if request.url.path != "/api/users/me" or response.status_code != 200:
+        return response
+    token = request.cookies.get(COOKIE_NAME)
+    fresh = app_session.renewed_token(token) if token else None
+    if fresh:
+        cookie_transport._set_login_cookie(response, fresh)
+    return response
 
 
 @app.middleware("http")
@@ -231,6 +299,7 @@ app.include_router(
     fastapi_users.get_register_router(UserRead, UserCreate), prefix="/api/auth", tags=["auth"]
 )
 app.include_router(fastapi_users.get_reset_password_router(), prefix="/api/auth", tags=["auth"])
+app.include_router(build_exchange_router(), prefix="/api/auth", tags=["auth"])
 app.include_router(
     fastapi_users.get_users_router(UserRead, UserUpdate), prefix="/api/users", tags=["users"]
 )
@@ -247,7 +316,8 @@ if is_oauth_configured():
         prefix="/api/auth/associate/google",
         tags=["auth"],
     )
-    logger.info("OAuth Google routers mounted (ADR-014)")
+    app.include_router(build_app_google_router(), prefix="/api/auth/app/google", tags=["auth"])
+    logger.info("OAuth Google routers mounted (ADR-014, app flow ADR-035)")
 else:
     logger.warning(
         "OAuth Google not configured — endpoints disabled. "
