@@ -8,4 +8,4 @@ si user.terms_version_accepted != CURRENT_TERMS_VERSION).
 Convention : `YYYY-MM-DD` matchant la "Dernière mise à jour" dans les pages HTML.
 """
 
-CURRENT_TERMS_VERSION = "2026-05-27"
+CURRENT_TERMS_VERSION = "2026-09-16"

@@ -171,13 +171,14 @@
       </header>
 
       <h1>Politique de confidentialité</h1>
-      <p class="subtitle">Dernière mise à jour : 27 mai 2026</p>
+      <p class="subtitle">Dernière mise à jour : 16 septembre 2026</p>
 
       <p>
         Tangent est un agrégateur patrimonial personnel. Cette politique décrit quelles données
         personnelles nous traitons, à quelles fins, sur quelle base légale, et avec qui elles sont
         partagées. Elle s'applique au service accessible à
-        <a href="https://riskybusinesses.uk">https://riskybusinesses.uk</a>.
+        <a href="https://riskybusinesses.uk">https://riskybusinesses.uk</a> et à l'application
+        iPhone « Tangent », qui utilise le même compte et le même serveur.
       </p>
 
       <div class="callout">
@@ -212,10 +213,16 @@
           l'interface.
         </li>
         <li>
-          <strong>Comptes OAuth liés</strong> — si vous vous connectez via Google, nous stockons
-          votre identifiant Google (<code>sub</code>) et votre email Google, ainsi qu'un jeton
-          d'accès chiffré (Fernet) que nous n'utilisons pas à d'autres fins que la vérification
+          <strong>Comptes OAuth liés</strong> — si vous vous connectez via Google ou via Apple,
+          nous stockons l'identifiant stable que le fournisseur nous donne (<code>sub</code>) et
+          l'adresse email qu'il nous transmet (Apple peut vous proposer une adresse relais), ainsi
+          qu'un jeton chiffré (Fernet) que nous n'utilisons pas à d'autres fins que la vérification
           d'identité.
+        </li>
+        <li>
+          <strong>Face ID / Touch ID</strong> (application iPhone) — le déverrouillage biométrique
+          est traité par iOS sur votre téléphone. Aucune donnée biométrique n'est transmise à
+          Tangent ni stockée par lui.
         </li>
       </ul>
 
@@ -223,7 +230,8 @@
       <ul>
         <li>
           Métadonnées de comptes (intitulés, IBAN partiel, type de compte, solde, devise) obtenues
-          via l'agrégateur Powens (DSP2).
+          via un agrégateur agréé DSP2 : Powens, ou Enable Banking pour les banques que Powens ne
+          couvre pas.
         </li>
         <li>
           Lignes d'opérations bancaires (date, libellé, montant, catégorie).
@@ -233,8 +241,8 @@
           Détails de prêts en cours (capital restant, taux, mensualité, échéances).
         </li>
         <li>
-          Jetons d'authentification Powens chiffrés au repos (Fernet) — utilisés uniquement pour
-          rafraîchir les données depuis votre banque.
+          Jetons d'authentification Powens et identifiants de session Enable Banking chiffrés au
+          repos (Fernet) — utilisés uniquement pour rafraîchir les données depuis votre banque.
         </li>
       </ul>
 
@@ -244,8 +252,17 @@
         saisissez librement dans l'interface. Vous en êtes l'unique auteur et l'unique propriétaire.
       </p>
 
-      <h3>2.4 Cookies techniques</h3>
-      <p>Deux cookies strictement nécessaires sont utilisés. Aucun cookie publicitaire ou analytique.</p>
+      <h3>2.4 Historique de vos données (archive)</h3>
+      <p>
+        Deux fois par jour, Tangent enregistre une photographie de ce qu'il sait de votre
+        patrimoine (comptes, positions, dépenses, résultats de la méthode) afin de pouvoir vous
+        montrer plus tard son évolution. Ces enregistrements sont chiffrés au repos (Fernet) avec
+        une clé qui n'est pas stockée dans la base de données ; ils sont inclus dans l'export de
+        vos données et supprimés avec votre compte.
+      </p>
+
+      <h3>2.5 Cookies techniques</h3>
+      <p>Trois cookies strictement nécessaires sont utilisés. Aucun cookie publicitaire ou analytique.</p>
       <table>
         <thead>
           <tr>
@@ -257,18 +274,23 @@
         <tbody>
           <tr>
             <td><code>tangent_auth</code></td>
-            <td>Maintien de la session connectée (JWT HTTP-only, signé).</td>
-            <td>Session</td>
+            <td>Maintien de la session connectée (JWT HTTP-only, signé), renouvelé tant que vous utilisez Tangent.</td>
+            <td>7 jours</td>
           </tr>
           <tr>
             <td><code>fastapiusersoauthcsrf</code></td>
-            <td>Protection contre les attaques CSRF pendant le flux OAuth.</td>
+            <td>Protection contre les attaques CSRF pendant le flux OAuth Google.</td>
             <td>1 heure</td>
+          </tr>
+          <tr>
+            <td><code>tangent_apple_csrf</code></td>
+            <td>Protection contre les attaques CSRF pendant le flux Sign in with Apple.</td>
+            <td>10 minutes</td>
           </tr>
         </tbody>
       </table>
 
-      <h3>2.5 Logs serveur</h3>
+      <h3>2.6 Logs serveur</h3>
       <p>
         À des fins de diagnostic, nous conservons des logs techniques (IP, horodatage, route HTTP,
         code de retour) pendant <strong>30 jours glissants</strong>.
@@ -290,14 +312,14 @@
             <td>Exécution du contrat (CGU)</td>
           </tr>
           <tr>
-            <td>Connexion via Google</td>
-            <td>Email Google, sub Google</td>
-            <td>Consentement explicite (bouton "Continuer avec Google")</td>
+            <td>Connexion via Google ou Apple</td>
+            <td>Email et identifiant transmis par le fournisseur</td>
+            <td>Consentement explicite (bouton "Continuer avec Google" / "Continuer avec Apple")</td>
           </tr>
           <tr>
             <td>Agrégation bancaire DSP2</td>
             <td>Comptes, opérations, placements, prêts</td>
-            <td>Consentement explicite (connexion banque via Powens)</td>
+            <td>Consentement explicite (connexion banque via Powens ou Enable Banking)</td>
           </tr>
           <tr>
             <td>Analyses de portefeuille</td>
@@ -339,10 +361,22 @@
             <td>France</td>
           </tr>
           <tr>
+            <td><a href="https://enablebanking.com/" target="_blank" rel="noopener">Enable Banking</a></td>
+            <td>Agrégateur bancaire DSP2 agréé, pour les banques que Powens ne couvre pas</td>
+            <td>Identifiants bancaires (saisis chez la banque, jamais vus par Tangent), retour : données de comptes</td>
+            <td>Finlande (Union européenne)</td>
+          </tr>
+          <tr>
             <td><a href="https://google.com/" target="_blank" rel="noopener">Google LLC</a></td>
             <td>OAuth (uniquement si vous choisissez "Continuer avec Google")</td>
             <td>Email, profil de base (nom, photo) — selon votre consentement Google</td>
             <td>États-Unis (Privacy Shield invalidé, transfert sous Clauses Contractuelles Types)</td>
+          </tr>
+          <tr>
+            <td><a href="https://www.apple.com/" target="_blank" rel="noopener">Apple Inc.</a></td>
+            <td>Sign in with Apple (uniquement si vous choisissez "Continuer avec Apple") et distribution de l'application iPhone via l'App Store</td>
+            <td>Email (ou adresse relais), identifiant Apple stable</td>
+            <td>États-Unis (Clauses Contractuelles Types)</td>
           </tr>
           <tr>
             <td><a href="https://cloudflare.com/" target="_blank" rel="noopener">Cloudflare</a></td>
@@ -377,8 +411,12 @@
             <td>Tant que le compte existe ; suppression immédiate sur demande</td>
           </tr>
           <tr>
-            <td>Jetons Powens / Google chiffrés</td>
-            <td>Effacés à la déconnexion de la banque ou suppression du compte</td>
+            <td>Jetons Powens / Enable Banking / Google / Apple chiffrés</td>
+            <td>Effacés à la déconnexion de la banque ou du fournisseur, ou à la suppression du compte</td>
+          </tr>
+          <tr>
+            <td>Archive (deux photographies par jour, chiffrées)</td>
+            <td>Tant que le compte existe ; supprimée avec lui</td>
           </tr>
           <tr>
             <td>Logs techniques</td>
@@ -398,7 +436,8 @@
       <h2>6. Sécurité</h2>
       <ul>
         <li>Mots de passe hashés avec <strong>Argon2id</strong> (recommandation OWASP).</li>
-        <li>Jetons OAuth (Powens, Google) chiffrés au repos avec <strong>Fernet (AES-128-CBC + HMAC-SHA256)</strong> via des clés distinctes par fournisseur.</li>
+        <li>Jetons OAuth et de session bancaire (Powens, Enable Banking, Google, Apple) et archive chiffrés au repos avec <strong>Fernet (AES-128-CBC + HMAC-SHA256)</strong> via des clés distinctes.</li>
+        <li>Application iPhone : verrouillage par Face ID / Touch ID, écran masqué dans le sélecteur d'applications, connexions aux tiers dans le navigateur sécurisé du système.</li>
         <li>Communications chiffrées en <strong>TLS 1.3</strong> (terminé par Cloudflare).</li>
         <li>Headers de sécurité actifs : HSTS, CSP, X-Frame-Options, X-Content-Type-Options.</li>
         <li>Cookies de session HTTP-only, SameSite=Lax, Secure en production.</li>
@@ -435,7 +474,7 @@
 
       <h2>8. Transferts hors Union européenne</h2>
       <p>
-        Certains sous-traitants (Google, Resend) sont basés aux États-Unis. Les transferts de
+        Certains sous-traitants (Google, Apple, Resend) sont basés aux États-Unis. Les transferts de
         données vers ces destinataires sont encadrés par les
         <strong>Clauses Contractuelles Types</strong> de la Commission européenne (décision
         2021/914), garantissant un niveau de protection équivalent.
