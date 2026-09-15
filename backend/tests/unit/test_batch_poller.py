@@ -94,3 +94,26 @@ def test_parse_message_url_none_skipped() -> None:
     )
     _, sources, _, _, _ = batch_poller._parse_message(message)
     assert sources == [{"url": "https://valid.com", "title": "Valid"}]
+
+
+def test_gap_fill_answer_cost_comes_from_its_own_usage_and_model() -> None:
+    """The cap counts every call: a categorisation answer is priced on the model that gave it."""
+    from types import SimpleNamespace
+
+    from app.llm import batch_poller
+
+    message = SimpleNamespace(
+        model="claude-haiku-4-5",
+        usage=SimpleNamespace(input_tokens=2_000, output_tokens=800),
+        content=[SimpleNamespace(type="tool_use")],
+    )
+    expected = cost_tracker.compute_cost_usd(2_000, 800, 0, "claude-haiku-4-5") * 0.5
+    assert batch_poller._cost_of(message) == pytest.approx(expected)
+
+    searched = SimpleNamespace(
+        model="claude-sonnet-5",
+        usage=SimpleNamespace(input_tokens=1_000, output_tokens=300),
+        content=[SimpleNamespace(type="server_tool_use"), SimpleNamespace(type="tool_use")],
+    )
+    expected = cost_tracker.compute_cost_usd(1_000, 300, 0, "claude-sonnet-5") * 0.5 + 0.01
+    assert batch_poller._cost_of(searched) == pytest.approx(expected)

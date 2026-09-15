@@ -18,10 +18,15 @@ stitching into a single human-readable narrative.
 
 ## Decision
 
-- **Model**: Claude Sonnet 4.6 (`claude-sonnet-4-6`) via the Anthropic Python
-  SDK. Chosen over Opus 4.7 (5× more expensive, marginal quality gain for this
-  task) and Haiku 4.5 (loses nuance on French fiscal advice).
-- **Web grounding**: Anthropic's native `web_search_20250305` tool, capped at
+- **Model** (amended 2026-09-15): one model per job, because the jobs are
+  not alike. The briefing — the one text that judges and sorts — runs on
+  Claude Opus 5 (`claude-opus-5`) with adaptive thinking at effort `high`,
+  about $0.15 a night in the batch. Transaction categories, a closed list
+  of 22 with twenty-five rows per call, run on Claude Haiku 4.5 without
+  thinking. Fields read from a document on the web (TER, ISIN) run on
+  Claude Sonnet 5 with adaptive thinking at effort `medium`. Originally
+  Claude Sonnet 4.6 everywhere, without thinking.
+- **Web grounding**: Anthropic's native `web_search_20260209` tool, capped at
   5 searches per review, used to fetch current market context and verify
   fiscal rules.
 - **Trigger**: manual button only (no auto-trigger). The user clicks "Générer

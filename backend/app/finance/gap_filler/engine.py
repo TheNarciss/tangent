@@ -180,34 +180,42 @@ def _request(gf: GappableField, user_prompt: str, custom_id: str) -> Request:
         "input_schema": gf.response_schema,
     }
 
-    # Conditionally include web_search for fields that need sourcing
-    # from official documents (e.g. ETF KIDs, factsheets).
+    # A field read from a document on the web (TER, ISIN) goes to the model
+    # that searches and reasons a little; a closed classification (category)
+    # to the small one, forced onto its tool. Forced tool use and thinking do
+    # not go together: the sourcing model is asked, not forced.
+    sourcing = gf.requires_web_search
     tools_list: list[dict[str, Any]] = [resolve_tool]
-    if gf.requires_web_search:
-        tools_list.append(
-            {
-                "type": "web_search_20250305",
-                "name": "web_search",
-                "max_uses": 2,
-            }
-        )
+    if sourcing:
+        tools_list.append(anthropic_client.web_search_tool(max_uses=2))
 
-    params = MessageCreateParamsNonStreaming(
-        model=anthropic_client.MODEL,
-        max_tokens=4096 if gf.batch_size > 1 else 1024,
-        system=(
-            "Tu es un assistant qui résout des valeurs manquantes dans "
-            "une base de données financière. Tu réponds UNIQUEMENT en "
-            f"appelant l'outil {gf.tool_name!r}. Si tu n'as pas de "
-            "donnée fiable, utilise la valeur null appropriée plutôt "
-            "que d'inventer."
-        ),
-        messages=[{"role": "user", "content": user_prompt}],
-        tools=tools_list,  # type: ignore[typeddict-item]
-        tool_choice={"type": "any"}
-        if gf.requires_web_search
-        else {"type": "tool", "name": gf.tool_name},
+    system = (
+        "Tu es un assistant qui résout des valeurs manquantes dans "
+        "une base de données financière. Tu réponds UNIQUEMENT en "
+        f"appelant l'outil {gf.tool_name!r}. Si tu n'as pas de "
+        "donnée fiable, utilise la valeur null appropriée plutôt "
+        "que d'inventer."
     )
+    if sourcing:
+        params = MessageCreateParamsNonStreaming(
+            model=anthropic_client.SOURCING_MODEL,
+            max_tokens=4096,
+            thinking={"type": "adaptive"},
+            output_config={"effort": anthropic_client.SOURCING_EFFORT},  # type: ignore[typeddict-item]
+            system=system,
+            messages=[{"role": "user", "content": user_prompt}],
+            tools=tools_list,  # type: ignore[typeddict-item]
+            tool_choice={"type": "auto"},
+        )
+    else:
+        params = MessageCreateParamsNonStreaming(
+            model=anthropic_client.CATEGORY_MODEL,
+            max_tokens=4096 if gf.batch_size > 1 else 1024,
+            system=system,
+            messages=[{"role": "user", "content": user_prompt}],
+            tools=tools_list,  # type: ignore[typeddict-item]
+            tool_choice={"type": "tool", "name": gf.tool_name},
+        )
 
     return Request(custom_id=custom_id, params=params)
 

@@ -23,19 +23,40 @@ from anthropic import AsyncAnthropic
 logger = logging.getLogger(__name__)
 
 # ── Public constants ────────────────────────────────────────────────────────
-# Single source of truth for model + token budget. Changing these here
-# propagates to every caller (review_generator, future agents, etc.).
+# Single source of truth for models, thinking and token budgets: one model per
+# job, because the jobs are not alike. Changing these here propagates to
+# every caller (review_generator, batch_submitter, gap-filler).
 
-MODEL: str = "claude-sonnet-4-6"
-"""The Claude model used for portfolio reviews (cf ADR-015)."""
+BRIEFING_MODEL: str = "claude-opus-5"
+"""The morning briefing: the one text that judges and sorts (ADR-015, amended
+2026-09-15). One a day per administrator, so the strongest model with real
+reasoning costs a few cents."""
 
-MAX_TOKENS: int = 4096
-"""Hard cap on output tokens per LLM call. A full review fits in ~2-3k tokens;
-4096 leaves headroom for verbose generations without runaway cost."""
+BRIEFING_THINKING: dict[str, str] = {"type": "adaptive"}
+BRIEFING_EFFORT: str = "high"
+
+BRIEFING_MAX_TOKENS: int = 16_000
+"""Output cap per briefing call, thinking tokens included: a briefing is
+~2-3k tokens of text, the reasoning before it a few thousand more."""
+
+CATEGORY_MODEL: str = "claude-haiku-4-5"
+"""Transaction categories: a closed list of 22, twenty-five rows per call. A
+classification, no reasoning needed, and the volume is here."""
+
+SOURCING_MODEL: str = "claude-sonnet-5"
+"""Fields read from a document on the web (TER, ISIN): a web search, then a
+figure copied from a KID or a factsheet."""
+
+SOURCING_EFFORT: str = "medium"
 
 WEB_SEARCH_MAX_USES: int = 5
-"""Maximum number of `web_search_20250305` tool invocations per review.
+"""Maximum number of web_search invocations per briefing.
 Caps cost: 5 × $0.01 = $0.05 worst case for the search component."""
+
+
+def web_search_tool(max_uses: int = WEB_SEARCH_MAX_USES) -> dict[str, object]:
+    """Anthropic's server-side web search, the variant current models take."""
+    return {"type": "web_search_20260209", "name": "web_search", "max_uses": max_uses}
 
 
 # ── Singleton instance ──────────────────────────────────────────────────────
@@ -64,7 +85,7 @@ def get_client() -> AsyncAnthropic:
                 "Set it in backend/.env (or export it) before starting the server. "
                 "See ADR-015 for context."
             )
-        logger.info("Initializing AsyncAnthropic client (model=%s)", MODEL)
+        logger.info("Initializing AsyncAnthropic client (briefing model=%s)", BRIEFING_MODEL)
         _client = AsyncAnthropic(api_key=api_key)
     return _client
 

@@ -77,27 +77,46 @@ def _compute_actual_cost(
     input_tokens: int,
     output_tokens: int,
     web_searches_count: int,
+    model: str | None = None,
 ) -> float:
-    """Actual USD cost using batch pricing.
+    """Actual USD cost using batch pricing, on the model that answered.
 
     Batch discount applies to input+output ($/Mtok × 0.5) but NOT to
     web_search invocations (per Anthropic billing rules).
     """
     api_cost = (
-        cost_tracker.compute_cost_usd(input_tokens, output_tokens, 0) * _INPUT_OUTPUT_BATCH_DISCOUNT
+        cost_tracker.compute_cost_usd(input_tokens, output_tokens, 0, model)
+        * _INPUT_OUTPUT_BATCH_DISCOUNT
     )
     search_cost = cost_tracker.compute_cost_usd(0, 0, web_searches_count)
     return api_cost + search_cost
 
 
+def _cost_of(message: Any) -> float:
+    """What one batch answer cost, from its own usage: the cap counts every call."""
+    usage = getattr(message, "usage", None)
+    in_tok = int(getattr(usage, "input_tokens", 0) or 0)
+    out_tok = int(getattr(usage, "output_tokens", 0) or 0)
+    searches = sum(
+        1
+        for block in getattr(message, "content", []) or []
+        if getattr(block, "type", None) == "server_tool_use"
+    )
+    served = getattr(message, "model", None)
+    return _compute_actual_cost(
+        in_tok, out_tok, searches, served if isinstance(served, str) else None
+    )
+
+
 async def _process_gap_fill_result(
     session: AsyncSession,
     result: Any,
-) -> tuple[int, int]:
+) -> tuple[int, int, float]:
     """Process a single gap-fill result from a batch (ADR-021).
 
     Returns:
-        (n_succeeded, n_errored) for this single result.
+        (n_succeeded, n_errored, cost_usd) for this single result. The cost
+        is what Anthropic billed for the answer, whatever was written from it.
     """
     custom_id = result.custom_id
     result_type = getattr(result.result, "type", None)
@@ -115,24 +134,25 @@ async def _process_gap_fill_result(
                 custom_id,
                 result_type,
             )
-        return 0, 1
+        return 0, 1, 0.0
 
+    message = result.result.message
+    cost = _cost_of(message)
     try:
-        message = result.result.message
         ok = await gap_filler_engine.apply_gap_fill_response(session, custom_id, message)
         if ok:
             await session.commit()
-            return 1, 0
+            return 1, 0, cost
         # ok=False just means the LLM returned null or invalid — not an error
-        return 0, 0
+        return 0, 0, cost
     except IntegrityError:
         await session.rollback()
         logger.warning("Gap-fill %s IntegrityError on commit", custom_id)
-        return 0, 1
+        return 0, 1, cost
     except Exception:
         logger.exception("Gap-fill apply_response failed for %s", custom_id)
         await session.rollback()
-        return 0, 1
+        return 0, 1, cost
 
 
 async def _process_one_batch(
@@ -175,9 +195,12 @@ async def _process_one_batch(
         # custom_id format `gap_<field>_<uuid>` → handled separately from reviews.
         if custom_id.startswith("gap_"):
             try:
-                gf_ok, gf_err = await _process_gap_fill_result(session, result)
+                gf_ok, gf_err, gf_cost = await _process_gap_fill_result(session, result)
                 n_succeeded += gf_ok
                 n_errored += gf_err
+                if gf_cost > 0:
+                    await cost_tracker.record_cost(session, gf_cost, today)
+                    total_cost += gf_cost
             except Exception:
                 logger.exception(
                     "Gap-fill dispatch failed for custom_id=%s (batch %s)",
@@ -204,7 +227,9 @@ async def _process_one_batch(
             message = result.result.message  # type: ignore[union-attr]
             try:
                 content, sources, in_tok, out_tok, ws_count = _parse_message(message)
-                cost = _compute_actual_cost(in_tok, out_tok, ws_count)
+                served = getattr(message, "model", None)
+                model = served if isinstance(served, str) else anthropic_client.BRIEFING_MODEL
+                cost = _compute_actual_cost(in_tok, out_tok, ws_count, model)
 
                 try:
                     await reviews_repo.create_review(
@@ -212,7 +237,7 @@ async def _process_one_batch(
                         user_id=user_id,
                         review_date=today,
                         content=content,
-                        model_used=anthropic_client.MODEL,
+                        model_used=model,
                         input_tokens=in_tok,
                         output_tokens=out_tok,
                         web_searches_count=ws_count,

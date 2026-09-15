@@ -121,8 +121,10 @@ async def test_generate_review_yields_chunks_and_persists(
         assert row.input_tokens == 6000
         assert row.output_tokens == 2500
         assert row.web_searches_count == 3
-        # 6000/1M*3 + 2500/1M*15 + 3*0.01 = 0.018 + 0.0375 + 0.03 = 0.0855
-        assert row.cost_usd == pytest.approx(0.0855, abs=1e-4)
+        # Priced on the briefing model, Opus 5: 6000/1M*5 + 2500/1M*25 + 3*0.01
+        expected = cost_tracker.compute_cost_usd(6000, 2500, 3, anthropic_client.BRIEFING_MODEL)
+        assert row.cost_usd == pytest.approx(expected, abs=1e-4)
+        assert row.model_used == anthropic_client.BRIEFING_MODEL
 
 
 @pytest.mark.integration

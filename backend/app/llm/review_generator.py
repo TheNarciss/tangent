@@ -53,11 +53,7 @@ class ReviewBlocked(Exception):
 
 # ── Anthropic tools spec ────────────────────────────────────────────────────
 
-_WEB_SEARCH_TOOL: dict[str, Any] = {
-    "type": "web_search_20250305",
-    "name": "web_search",
-    "max_uses": anthropic_client.WEB_SEARCH_MAX_USES,
-}
+_WEB_SEARCH_TOOL: dict[str, Any] = anthropic_client.web_search_tool()
 
 
 async def generate_review_stream(
@@ -112,8 +108,10 @@ async def generate_review_stream(
     sources: list[dict[str, Any]] = []
 
     async with client.messages.stream(
-        model=anthropic_client.MODEL,
-        max_tokens=anthropic_client.MAX_TOKENS,
+        model=anthropic_client.BRIEFING_MODEL,
+        max_tokens=anthropic_client.BRIEFING_MAX_TOKENS,
+        thinking=anthropic_client.BRIEFING_THINKING,  # type: ignore[arg-type]
+        output_config={"effort": anthropic_client.BRIEFING_EFFORT},  # type: ignore[arg-type]
         system=prompt_builder.SYSTEM_PROMPT,
         messages=[{"role": "user", "content": user_prompt}],
         tools=[_WEB_SEARCH_TOOL],  # type: ignore[list-item]  # SDK strict TypedDict vs our dict
@@ -148,7 +146,11 @@ async def generate_review_stream(
     # still record_cost to keep the kill-switch consistent).
     input_tokens = final.usage.input_tokens
     output_tokens = final.usage.output_tokens
-    cost_usd = cost_tracker.compute_cost_usd(input_tokens, output_tokens, web_searches_count)
+    served = getattr(final, "model", None)
+    model_used = served if isinstance(served, str) else anthropic_client.BRIEFING_MODEL
+    cost_usd = cost_tracker.compute_cost_usd(
+        input_tokens, output_tokens, web_searches_count, model_used
+    )
 
     await cost_tracker.record_cost(session, cost_usd, today)
 
@@ -158,7 +160,7 @@ async def generate_review_stream(
             user_id=user_id,
             review_date=today,
             content=full_content,
-            model_used=anthropic_client.MODEL,
+            model_used=model_used,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             web_searches_count=web_searches_count,
