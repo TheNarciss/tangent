@@ -3,7 +3,7 @@
 Combinaison choisie :
 - Cookie HTTP-only (immune au XSS) + Secure (HTTPS only en prod) + SameSite=lax (anti-CSRF)
 - JWT (stateless, pas de table sessions à maintenir, simple à scale)
-- Lifetime 7 jours (suffisant pour usage perso, à raccourcir en prod)
+- Lifetime 7 jours, renouvelé tant que la session sert (ADR-035, app/auth/session.py)
 """
 
 import os
@@ -18,7 +18,7 @@ COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"  # false e
 
 cookie_transport = CookieTransport(
     cookie_name=COOKIE_NAME,
-    cookie_max_age=None,  # session cookie: cleared when browser closes (JWT lifetime is the hard ceiling)
+    cookie_max_age=COOKIE_LIFETIME,  # persistent: the phone's cookie store keeps it (ADR-035); the JWT lifetime is the ceiling
     cookie_secure=COOKIE_SECURE,  # HTTPS only quand true
     cookie_httponly=True,  # PAS accessible via JS → XSS-proof
     cookie_samesite="lax",  # CSRF protection (lax permet les liens cross-site simples, suffisant)
