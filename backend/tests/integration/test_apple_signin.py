@@ -238,3 +238,30 @@ async def test_providers_says_which_buttons_to_show(client):
     resp = await client.get("/api/auth/providers")
     assert resp.status_code == 200
     assert resp.json() == {"google": True, "apple": True}
+
+
+@pytest.mark.integration
+async def test_an_apple_only_account_has_no_password_and_can_be_deleted(client):
+    email = f"apple-delete-{uuid.uuid4().hex[:8]}@test.com"
+    client.cookies.clear()
+    resp = await client.post(
+        "/api/auth/apple/native", json={"identity_token": _id_token(email, aud=apple.BUNDLE_ID)}
+    )
+    assert resp.status_code == 204
+    me = (await client.get("/api/users/me")).json()
+    assert me["has_password"] is False
+
+    # A password form for this address is refused, never a 500.
+    client.cookies.clear()
+    login = await client.post("/api/auth/login", data={"username": email, "password": "anything1"})
+    assert login.status_code == 400
+
+    # Back in through Apple, the account deletes with the confirmation alone (Apple 5.1.1).
+    resp = await client.post(
+        "/api/auth/apple/native", json={"identity_token": _id_token(email, aud=apple.BUNDLE_ID)}
+    )
+    assert resp.status_code == 204
+    resp = await client.post("/api/users/me/delete-account", json={"confirmation": "DELETE"})
+    assert resp.status_code == 204, resp.text
+    assert (await client.get("/api/users/me")).status_code == 401
+    client.cookies.clear()

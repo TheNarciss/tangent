@@ -11,6 +11,7 @@ import os
 import uuid
 
 from fastapi import Depends, Request
+from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_users import BaseUserManager, UUIDIDMixin, exceptions
 from fastapi_users.password import PasswordHelper
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
@@ -98,6 +99,17 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):  # type: ignor
         # Token sent via email only — never logged.
         pass
 
+    async def authenticate(self, credentials: OAuth2PasswordRequestForm) -> User | None:
+        """A Google- or Apple-only account has no password: the form is refused, not crashed."""
+        try:
+            user = await self.get_by_email(credentials.username)
+        except exceptions.UserNotExists:
+            user = None
+        if user is not None and user.hashed_password is None:
+            self.password_helper.hash(credentials.password)  # same timing as a real check
+            return None
+        return await super().authenticate(credentials)
+
     # ── OAuth hooks (cf ADR-014) ──
 
     async def oauth_callback(
@@ -136,6 +148,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):  # type: ignor
             associate_by_email=associate_by_email,
             is_verified_by_default=is_verified_by_default,
         )
+
+        if is_new_user and user.hashed_password is not None:
+            # The library gives a new OAuth user a random password nobody knows;
+            # without it the account is what it looks like: Google or Apple only
+            # (ADR-014), and nothing asks for a password that does not exist.
+            user = await self.user_db.update(user, {"hashed_password": None})
 
         ip = request.client.host if request and request.client else None
         event = "OAUTH_REGISTER" if is_new_user else "OAUTH_LOGIN_SUCCESS"
