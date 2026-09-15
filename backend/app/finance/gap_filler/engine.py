@@ -13,8 +13,16 @@ Three public coroutines orchestrate the whole gap-fill flow:
    custom_id back into (field, row_id), validates the LLM response, and
    writes the resolved value with source="llm" + resolved_at=now().
 
-The custom_id format is `gap_<field>_<row_uuid>` for unambiguous parsing
-(field names cannot contain underscores, enforced by registry).
+The custom_id format is `gap_<field>_<uuid>` for unambiguous parsing (field
+names cannot contain underscores, enforced by registry). For a batched field
+the uuid names the group, and the rows come back inside the answer, each
+with its own id.
+
+`*_resolved_at` is the last time the LLM looked at the row, set when the
+request is submitted and again when the answer is written. A row it looked
+at recently is not a gap, whatever it answered: a request still in flight
+is not sent twice, and a row it could not fill is not asked again every
+night — only after `RETRY_AFTER_DAYS`.
 """
 
 from __future__ import annotations
@@ -22,12 +30,13 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from anthropic.types.beta.message_create_params import MessageCreateParamsNonStreaming
 from anthropic.types.beta.messages.batch_create_params import Request
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...db.models import AccountHolding, BankTransaction
@@ -52,6 +61,10 @@ _TABLE_TO_MODEL: dict[str, Any] = {
 
 
 # encode_custom_id and decode_custom_id live in registry.py (no anthropic dep)
+
+# A row the LLM already looked at is asked again only after this long: the
+# answer may still be on its way, or there was nothing to find.
+RETRY_AFTER_DAYS = 30
 
 # ── collect_gaps ────────────────────────────────────────────────────────────
 
@@ -90,10 +103,13 @@ async def collect_gaps(
 
         value_col = getattr(model, gf.value_column)
         source_col = getattr(model, gf.source_column)
+        looked_at = getattr(model, gf.resolved_at_column)
+        retry_before = datetime.now(UTC) - timedelta(days=RETRY_AFTER_DAYS)
 
         stmt = select(model).where(
             value_col.is_(None),
             source_col.is_distinct_from("user"),
+            or_(looked_at.is_(None), looked_at < retry_before),
         )
         if user_id is not None and hasattr(model, "user_id"):
             stmt = stmt.where(model.user_id == user_id)
@@ -116,71 +132,100 @@ async def collect_gaps(
 # ── build_gap_fill_requests ─────────────────────────────────────────────────
 
 
+@dataclass(frozen=True)
+class PlannedRequest:
+    """One Anthropic request and the gaps it carries: one, or a group of them."""
+
+    request: Request
+    gaps: tuple[Gap, ...]
+
+
 def build_gap_fill_requests(gaps: Sequence[Gap]) -> list[Request]:
-    """Convert each Gap into an Anthropic Batch Request with tool_use forcing.
+    """The requests alone; `plan_gap_fill` keeps which gaps each one carries."""
+    return [planned.request for planned in plan_gap_fill(gaps)]
+
+
+def plan_gap_fill(gaps: Sequence[Gap]) -> list[PlannedRequest]:
+    """Convert the gaps into Anthropic Batch Requests with tool_use forcing.
 
     The LLM is forced to call the field's declared tool, returning structured
     JSON validated by the field's response_schema. This eliminates free-form
-    hallucinations.
-
-    Args:
-        gaps: list of detected gaps.
-
-    Returns:
-        Anthropic batch Request list, ready for `batches.create()`.
+    hallucinations. A batched field takes `batch_size` rows per request.
     """
-    requests: list[Request] = []
-
+    out: list[PlannedRequest] = []
+    by_field: dict[str, list[Gap]] = {}
     for gap in gaps:
-        gf = gap.field
-        row = gap.context["row"]
-        user_prompt = gf.build_prompt(row)
+        by_field.setdefault(gap.field.name, []).append(gap)
 
-        resolve_tool: dict[str, Any] = {
-            "name": gf.tool_name,
-            "description": gf.response_schema.get(
-                "description", f"Resolve {gf.name} for this row."
-            ),
-            "input_schema": gf.response_schema,
-        }
+    for field_gaps in by_field.values():
+        gf = field_gaps[0].field
+        size = max(1, gf.batch_size) if gf.build_batch_prompt else 1
+        for start in range(0, len(field_gaps), size):
+            group = tuple(field_gaps[start : start + size])
+            if size > 1 and gf.build_batch_prompt is not None:
+                prompt = gf.build_batch_prompt([g.context["row"] for g in group])
+                custom_id = encode_custom_id(gf.name, uuid.uuid4())
+            else:
+                prompt = gf.build_prompt(group[0].context["row"])
+                custom_id = encode_custom_id(gf.name, group[0].row_id)
+            out.append(PlannedRequest(_request(gf, prompt, custom_id), group))
+    return out
 
-        # Conditionally include web_search for fields that need sourcing
-        # from official documents (e.g. ETF KIDs, factsheets).
-        tools_list: list[dict[str, Any]] = [resolve_tool]
-        if gf.requires_web_search:
-            tools_list.append(
-                {
-                    "type": "web_search_20250305",
-                    "name": "web_search",
-                    "max_uses": 2,
-                }
-            )
 
-        params = MessageCreateParamsNonStreaming(
-            model=anthropic_client.MODEL,
-            max_tokens=1024,
-            system=(
-                "Tu es un assistant qui résout des valeurs manquantes dans "
-                "une base de données financière. Tu réponds UNIQUEMENT en "
-                f"appelant l'outil {gf.tool_name!r}. Si tu n'as pas de "
-                "donnée fiable, utilise la valeur null appropriée plutôt "
-                "que d'inventer."
-            ),
-            messages=[{"role": "user", "content": user_prompt}],
-            tools=tools_list,  # type: ignore[typeddict-item]
-            tool_choice={"type": "any"}
-            if gf.requires_web_search
-            else {"type": "tool", "name": gf.tool_name},
+def _request(gf: GappableField, user_prompt: str, custom_id: str) -> Request:
+
+    resolve_tool: dict[str, Any] = {
+        "name": gf.tool_name,
+        "description": gf.response_schema.get("description", f"Resolve {gf.name} for this row."),
+        "input_schema": gf.response_schema,
+    }
+
+    # Conditionally include web_search for fields that need sourcing
+    # from official documents (e.g. ETF KIDs, factsheets).
+    tools_list: list[dict[str, Any]] = [resolve_tool]
+    if gf.requires_web_search:
+        tools_list.append(
+            {
+                "type": "web_search_20250305",
+                "name": "web_search",
+                "max_uses": 2,
+            }
         )
 
-        requests.append(
-            Request(
-                custom_id=encode_custom_id(gf.name, gap.row_id),
-                params=params,
-            )
-        )
+    params = MessageCreateParamsNonStreaming(
+        model=anthropic_client.MODEL,
+        max_tokens=4096 if gf.batch_size > 1 else 1024,
+        system=(
+            "Tu es un assistant qui résout des valeurs manquantes dans "
+            "une base de données financière. Tu réponds UNIQUEMENT en "
+            f"appelant l'outil {gf.tool_name!r}. Si tu n'as pas de "
+            "donnée fiable, utilise la valeur null appropriée plutôt "
+            "que d'inventer."
+        ),
+        messages=[{"role": "user", "content": user_prompt}],
+        tools=tools_list,  # type: ignore[typeddict-item]
+        tool_choice={"type": "any"}
+        if gf.requires_web_search
+        else {"type": "tool", "name": gf.tool_name},
+    )
 
-    return requests
+    return Request(custom_id=custom_id, params=params)
+
+
+async def mark_submitted(session: AsyncSession, gaps: Sequence[Gap]) -> None:
+    """Stamp the rows just sent: the LLM is looking at them, do not ask again."""
+    now = datetime.now(UTC)
+    by_field: dict[str, list[Any]] = {}
+    for gap in gaps:
+        by_field.setdefault(gap.field.name, []).append(gap.row_id)
+    for name, ids in by_field.items():
+        gf = get_field(name)
+        if gf is None:
+            continue
+        model = _TABLE_TO_MODEL[gf.table]
+        await session.execute(
+            update(model).where(model.id.in_(ids)).values({gf.resolved_at_column: now})
+        )
 
 
 # ── apply_gap_fill_response ─────────────────────────────────────────────────
@@ -229,6 +274,9 @@ async def apply_gap_fill_response(
         )
         return False
 
+    if gf.batch_size > 1:
+        return await _apply_batched(session, gf, tool_input)
+
     # The LLM's value lives under the schema's key — assume it's the field name itself
     # (this is the convention: schema has a top-level property matching gf.name)
     raw_value = tool_input.get(gf.name)
@@ -274,6 +322,52 @@ async def apply_gap_fill_response(
         coerced,
     )
     return True
+
+
+def batched_values(gf: GappableField, tool_input: dict[str, Any]) -> dict[Any, list[uuid.UUID]]:
+    """Value → row ids, from a batched answer. Pure: bad ids and bad values are dropped."""
+    out: dict[Any, list[uuid.UUID]] = {}
+    items = tool_input.get("items")
+    if not isinstance(items, list):
+        return out
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        try:
+            row_id = uuid.UUID(str(item.get("id")))
+        except ValueError:
+            continue
+        raw = item.get(gf.name)
+        if raw is None or not gf.validate_value(raw):
+            continue
+        out.setdefault(gf.coerce_value(raw), []).append(row_id)
+    return out
+
+
+async def _apply_batched(
+    session: AsyncSession, gf: GappableField, tool_input: dict[str, Any]
+) -> bool:
+    """Write a batched answer: one update per value, only on rows still empty.
+
+    An id the model made up, or a row the user decided meanwhile, matches
+    nothing: the WHERE clause is the guard.
+    """
+    model = _TABLE_TO_MODEL[gf.table]
+    value_col = getattr(model, gf.value_column)
+    source_col = getattr(model, gf.source_column)
+    now = datetime.now(UTC)
+    written = 0
+    for value, ids in batched_values(gf, tool_input).items():
+        result = await session.execute(
+            update(model)
+            .where(model.id.in_(ids), value_col.is_(None), source_col.is_distinct_from("user"))
+            .values({gf.value_column: value, gf.source_column: "llm", gf.resolved_at_column: now})
+        )
+        written += int(getattr(result, "rowcount", 0) or 0)
+    logger.info(
+        "apply_gap_fill_response: field=%s, %d rows written from one answer", gf.name, written
+    )
+    return written > 0
 
 
 # ── get_source_audit ────────────────────────────────────────────────────────
