@@ -1,8 +1,11 @@
-import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
 import { fetchTermsVersion, useCurrentUser } from "@/api";
 import { useProfileSync } from "@/lib/profile-sync";
+import { NativeGate } from "@/native/NativeGate";
+import { listenForAppReturn } from "@/native/session";
 
 import { AppShell } from "@/components/AppShell";
 import { NAV_PATHS } from "@/components/Sidebar";
@@ -26,8 +29,20 @@ import { Spending } from "@/components/Spending";
 import { TermsGate } from "@/components/TermsGate";
 
 export default function App() {
+  return (
+    <NativeGate>
+      <Gate />
+    </NativeGate>
+  );
+}
+
+function Gate() {
   const auth = useCurrentUser();
+  const qc = useQueryClient();
   useProfileSync(!!auth.data);
+
+  // The phone: a sign-in finished in the system browser comes back as a tangent:// URL.
+  useEffect(() => listenForAppReturn(qc, (e) => window.alert(e.message)), [qc]);
 
   const termsVersionQuery = useQuery({
     queryKey: ["terms-version"],

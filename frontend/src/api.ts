@@ -871,6 +871,14 @@ export interface OAuthAccountPublic {
   account_email: string;
 }
 
+/** The iPhone app trades the code the system browser brought back for the session (ADR-035). */
+export function exchangeAppCode(code: string, verifier: string): Promise<void> {
+  return http<void>("/auth/exchange", {
+    method: "POST",
+    body: JSON.stringify({ code, verifier }),
+  });
+}
+
 /** Which sign-in providers the backend can honour (buttons show only for those). */
 export interface AuthProviders {
   google: boolean;
