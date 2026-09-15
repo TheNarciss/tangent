@@ -8,6 +8,7 @@ useful buckets for a French personal-finance dashboard.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 from ..registry import GappableField, register_field
@@ -74,7 +75,62 @@ def build_prompt_category(row: Any) -> str:
     )
 
 
+BATCH_PROMPT_TEMPLATE = """\
+Catégorise chacune de ces transactions bancaires françaises. Chaque ligne \
+porte un identifiant, une description, un montant et une date :
+{lines}
+
+Choisis UNE catégorie par transaction parmi :
+{categories}
+
+Réponds en appelant resolve_category une seule fois, avec un élément par \
+transaction, en recopiant son identifiant tel quel. Une description trop \
+vague pour raisonner avec certitude reçoit category='autre'.
+
+Conseils :
+- Montant positif sur "Carte X CB 1234" → 'remboursement' ou 'salaire' selon le montant
+- Chaînes de magasins (Carrefour, Monoprix…) → 'alimentation'
+- Restaurants, McDonald's, Uber Eats → 'restaurant'
+- SNCF, RATP, BlaBlaCar → 'transport'
+- Netflix, Spotify, Apple → 'abonnements'
+"""
+
+# Rows per request. Twenty-five short lines fit comfortably in one answer and
+# divide the cost of the instructions and the schema by as much.
+BATCH_SIZE = 25
+
+
+def build_batch_prompt_category(rows: Sequence[Any]) -> str:
+    lines = "\n".join(
+        f"- id={row.id} | {row.description} | {row.amount:.2f} {row.currency} | {row.transaction_date}"
+        for row in rows
+    )
+    cats = "\n".join(f"  - {c}" for c in CATEGORIES)
+    return BATCH_PROMPT_TEMPLATE.format(lines=lines, categories=cats)
+
+
 RESPONSE_SCHEMA_CATEGORY: dict[str, Any] = {
+    "type": "object",
+    "description": "One category per transaction, from the closed taxonomy, keyed by the id given.",
+    "properties": {
+        "items": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "category": {"type": "string", "enum": CATEGORIES},
+                    "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+                },
+                "required": ["id", "category"],
+            },
+        }
+    },
+    "required": ["items"],
+}
+
+
+RESPONSE_SCHEMA_CATEGORY_SINGLE: dict[str, Any] = {
     "type": "object",
     "description": "Pick the single best-fitting category from the closed taxonomy.",
     "properties": {
@@ -106,5 +162,7 @@ FIELD_CATEGORY = register_field(
         response_schema=RESPONSE_SCHEMA_CATEGORY,
         tool_name="resolve_category",
         validate_value=validate_category,
+        batch_size=BATCH_SIZE,
+        build_batch_prompt=build_batch_prompt_category,
     )
 )

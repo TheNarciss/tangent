@@ -28,6 +28,7 @@ from typing import Any
 
 from anthropic.types.beta.message_create_params import MessageCreateParamsNonStreaming
 from anthropic.types.beta.messages.batch_create_params import Request
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import User
@@ -36,6 +37,7 @@ from ..deps import get_user_wealth
 from ..finance import market_leads
 from ..finance import verdicts as verdicts_engine
 from ..finance.gap_filler import engine as gap_filler_engine
+from ..finance.gap_filler.registry import GappableField
 from ..repositories import bank_transactions as tx_repo
 from ..repositories import profile as profile_repo
 from ..repositories import review_batches as batches_repo
@@ -54,20 +56,22 @@ _ESTIMATED_WEB_SEARCHES_PER_REVIEW = 4
 _BATCH_DISCOUNT = 0.5
 
 
-def estimate_cost_per_gap_fill() -> float:
+def estimate_cost_per_gap_fill(field: GappableField | None = None) -> float:
     """Estimate one gap-fill request's batched cost in USD (conservative).
 
-    Typical gap-fill request: ~250 input tokens (compact context + tool schema),
-    ~100 output tokens (tool_use structured response). Most TER/ISIN resolutions
-    will trigger a web_search (which is NOT discounted by the batch API).
-
-    Conservatively assumes 1 web_search per request. Real cost is recorded by
-    the poller from each message's actual usage. ADR-021.
+    A single-row request: ~250 input tokens (compact context + tool schema),
+    ~100 output tokens, and one web_search when the field sources documents
+    (TER, ISIN) — not discounted by the batch API. A batched request carries
+    `batch_size` rows: ~60 input and ~30 output tokens each on top of the
+    instructions, and no web_search. Real cost is recorded by the poller
+    from each message's actual usage. ADR-021.
     """
+    rows = field.batch_size if field is not None else 1
+    searches = 1 if field is None or field.requires_web_search else 0
     api_cost = cost_tracker.compute_cost_usd(
-        input_tokens=250,
-        output_tokens=100,
-        web_searches_count=1,
+        input_tokens=250 + 60 * (rows - 1),
+        output_tokens=100 + 30 * (rows - 1),
+        web_searches_count=searches,
     )
     return api_cost * _BATCH_DISCOUNT
 
@@ -124,8 +128,9 @@ async def submit_nightly_batch(
         estimated_total,
     )
 
-    # 2. Kill-switch on global daily cost
-    if not await cost_tracker.is_under_cap(session):
+    # 2. Kill-switch on global daily cost, batches still in flight included
+    budget = await cost_tracker.budget_left_usd(session)
+    if budget <= 0:
         logger.warning("Daily cost cap reached — refusing batch submit")
         return None
 
@@ -187,21 +192,31 @@ async def submit_nightly_batch(
     n_reviews = len(requests)
 
     # ── 3.5. Collect gap-fill requests (ADR-021 Universal Gap-Filler) ──────
+    # What a past decision on the same merchant settles is written first,
+    # without the LLM; only what remains goes into the batch, as far as the
+    # day's budget allows, biggest groups first.
+    planned: list[gap_filler_engine.PlannedRequest] = []
     try:
+        learned = await _apply_learned_for_everyone(session)
         gaps = await gap_filler_engine.collect_gaps(session)
-        gap_requests = gap_filler_engine.build_gap_fill_requests(gaps)
-        requests.extend(gap_requests)
+        planned = gap_filler_engine.plan_gap_fill(gaps)
+        budget_for_gaps = budget - n_reviews * estimate_cost_per_review()
+        planned = _within_budget(planned, budget_for_gaps)
+        requests.extend(p.request for p in planned)
         logger.info(
-            "Gap-fill collected: %d gaps across %d field type(s)",
-            len(gap_requests),
+            "Gap-fill: %d learned from history, %d gaps across %d field type(s), %d requests sent",
+            learned,
+            len(gaps),
             len({g.field.name for g in gaps}),
+            len(planned),
         )
     except Exception:
         # Gap-fill must NEVER break the review pipeline. Log and skip.
         logger.exception("Gap-fill collection failed — submitting reviews only")
-        gap_requests = []
+        planned = []
 
-    n_gap_fills = len(gap_requests)
+    n_gap_fills = len(planned)
+    gap_cost = sum(estimate_cost_per_gap_fill(p.gaps[0].field) for p in planned)
 
     if not requests:
         logger.info("Nothing to submit: no review and no gap")
@@ -226,14 +241,36 @@ async def submit_nightly_batch(
         n_gap_fills,
     )
 
-    # 5. Persist
+    # 5. Persist, and stamp the rows sent so the next run does not send them again
     batch = await batches_repo.create(
         session,
         anthropic_batch_id=anthropic_batch.id,
         status="in_progress",
         n_requests=len(requests),
-        estimated_cost_usd=(
-            n_reviews * estimate_cost_per_review() + n_gap_fills * estimate_cost_per_gap_fill()
-        ),
+        estimated_cost_usd=n_reviews * estimate_cost_per_review() + gap_cost,
     )
+    if planned:
+        await gap_filler_engine.mark_submitted(session, [g for p in planned for g in p.gaps])
+        await session.commit()
     return batch
+
+
+async def _apply_learned_for_everyone(session: AsyncSession) -> int:
+    """Categories a past decision on the same merchant decides, for every user."""
+    users = (await session.execute(select(User))).scalars().all()
+    return sum([await tx_repo.apply_learned_categories(session, u.id) for u in users])
+
+
+def _within_budget(
+    planned: list[gap_filler_engine.PlannedRequest], budget_usd: float
+) -> list[gap_filler_engine.PlannedRequest]:
+    """The requests that fit the budget, the ones carrying the most rows first."""
+    kept: list[gap_filler_engine.PlannedRequest] = []
+    left = budget_usd
+    for p in sorted(planned, key=lambda p: -len(p.gaps)):
+        cost = estimate_cost_per_gap_fill(p.gaps[0].field)
+        if cost > left:
+            continue
+        left -= cost
+        kept.append(p)
+    return kept

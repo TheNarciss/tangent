@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from dataclasses import field as _field
 from typing import Any
@@ -65,6 +65,12 @@ class GappableField:
     """If True, the LLM request includes the web_search tool. Costs ~$0.01
     extra per gap (web_search is not batch-discounted) but enables sourcing
     from official documents (KID, factsheets, regulator websites)."""
+    batch_size: int = 1
+    """Rows per LLM request. Above 1 the field is *batched*: `build_batch_prompt`
+    writes one prompt for several rows, each named by its id, and the tool
+    answers with `items`, one per id. The instructions and the schema are
+    then paid once per group instead of once per row."""
+    build_batch_prompt: Callable[[Sequence[Any]], str] | None = None
 
 
 @dataclass(frozen=True)

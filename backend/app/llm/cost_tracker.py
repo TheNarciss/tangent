@@ -88,17 +88,35 @@ async def get_today_cost_usd(
     return float(result.scalar() or 0.0)
 
 
+async def in_flight_estimate_usd(session: AsyncSession) -> float:
+    """What the batches still being processed are expected to cost.
+
+    A batch is recorded only when its answers come back, hours later; until
+    then its cost is an estimate, and it counts — or three submissions in a
+    day would each pass the cap.
+    """
+    from ..repositories import review_batches as batches_repo
+
+    pending = await batches_repo.list_in_progress(session)
+    return float(sum(b.estimated_cost_usd or 0.0 for b in pending))
+
+
+async def budget_left_usd(session: AsyncSession, today: date | None = None) -> float:
+    """What may still be submitted today: the cap, minus spent, minus in flight."""
+    spent = await get_today_cost_usd(session, today)
+    return DAILY_CAP_USD - spent - await in_flight_estimate_usd(session)
+
+
 async def is_under_cap(
     session: AsyncSession,
     today: date | None = None,
 ) -> bool:
-    """True iff today's cumulative spend is still under DAILY_CAP_USD.
+    """True iff today's spend, in flight included, is still under DAILY_CAP_USD.
 
     Call BEFORE starting a new generation. If False, the route layer should
     return HTTP 503 with a "try tomorrow" message (cf ADR-015 §Cost cap).
     """
-    cost = await get_today_cost_usd(session, today)
-    return cost < DAILY_CAP_USD
+    return await budget_left_usd(session, today) > 0
 
 
 async def record_cost(
