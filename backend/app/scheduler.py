@@ -31,6 +31,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 from sqlalchemy import select
 
+from . import archive
 from .aggregator.persist import persist_sync_result
 from .db import async_session_factory
 from .db.models import EnableBankingSession
@@ -95,6 +96,23 @@ async def _job_record_snapshots() -> None:
             await record_all_users(session)
         except Exception:
             logger.exception("Scheduler: portfolio snapshots failed")
+
+
+async def _job_archive(slot: str) -> None:
+    """Write down everything the app knows, for the slot (ADR-034)."""
+    async with async_session_factory() as session:
+        try:
+            await archive.run(session, slot)
+        except Exception:
+            logger.exception("Scheduler: archive %s failed", slot)
+
+
+async def _job_archive_morning() -> None:
+    await _job_archive("morning")
+
+
+async def _job_archive_evening() -> None:
+    await _job_archive("evening")
 
 
 async def _job_warm_sources() -> None:
@@ -195,6 +213,24 @@ def setup_scheduler() -> AsyncIOScheduler:
         _job_record_snapshots,
         CronTrigger(hour=2, minute=0, timezone=_PARIS),
         id="record_portfolio_snapshots",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+
+    # The archive: after the morning bank sync, and at the end of the day.
+    scheduler.add_job(
+        _job_archive_morning,
+        CronTrigger(hour=7, minute=45, timezone=_PARIS),
+        id="archive_morning",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        _job_archive_evening,
+        CronTrigger(hour=19, minute=30, timezone=_PARIS),
+        id="archive_evening",
         replace_existing=True,
         max_instances=1,
         coalesce=True,

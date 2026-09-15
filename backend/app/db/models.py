@@ -526,6 +526,30 @@ class PortfolioSnapshot(Base):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+class DataSnapshot(Base):
+    """The archive (ADR-034): everything the app knew, at one moment, twice a day.
+
+    `scope="user"` rows carry a user's data sealed with the archive key
+    (`sealed`, a Fernet token of the JSON); `scope="market"` rows carry the
+    public data of the moment in the clear (`payload`). One row per
+    (user, day, slot) and one per (day, slot) for the market.
+    """
+
+    __tablename__ = "data_snapshots"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scope: Mapped[str] = mapped_column(String(16), nullable=False)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True
+    )
+    snapshot_date: Mapped[date] = mapped_column(Date, nullable=False)
+    slot: Mapped[str] = mapped_column(String(16), nullable=False)
+    taken_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    sealed: Mapped[str | None] = mapped_column(Text, nullable=True)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
 class PortfolioReview(Base):
     """Generated LLM review of a user's complete patrimony.
 

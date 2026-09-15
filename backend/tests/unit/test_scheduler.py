@@ -23,6 +23,8 @@ def test_setup_scheduler_registers_the_expected_jobs() -> None:
         "sync_enablebanking",
         "record_portfolio_snapshots",
         "collect_market_leads",
+        "archive_morning",
+        "archive_evening",
         "submit_nightly_batch",
         "poll_pending_batches",
     }
