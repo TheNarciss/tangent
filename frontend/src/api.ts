@@ -1012,6 +1012,42 @@ export function usePicks() {
   });
 }
 
+/* ── Market leads (ADR-033) ─────────────────────────────────────────── */
+
+export type MarketLeadSource = "polymarket" | "edgar_form4" | "edgar_13f";
+
+export interface MarketLead {
+  source: MarketLeadSource;
+  kind: string; // prediction_move | prediction_state | insider_cluster | insider_buy | fund_*
+  title: string;
+  detail: string;
+  url: string;
+  observed_at: string; // YYYY-MM-DD
+  symbols: string[];
+  weight: number; // crude order only
+}
+
+export interface MarketLeadsResponse {
+  computed_at: string; // ISO-8601, UTC
+  leads: MarketLead[];
+}
+
+/** What the night collected, raw. 503 until the first collection: polled every minute then. */
+export function useMarketLeads() {
+  return useQuery({
+    queryKey: ["market-leads"],
+    queryFn: () => http<MarketLeadsResponse>("/market-leads"),
+    staleTime: 60 * 60_000,
+    retry: false,
+    refetchInterval: (query) => (query.state.data ? false : 60_000),
+  });
+}
+
+/** Admin: collect now instead of tonight. Answers at once; the list lands minutes later. */
+export async function adminRefreshMarketLeads(): Promise<{ started: boolean }> {
+  return http<{ started: boolean }>("/admin/market-leads/refresh", { method: "POST" });
+}
+
 /* ── Spending ───────────────────────────────────────────────────────── */
 
 export interface MonthSpending {
