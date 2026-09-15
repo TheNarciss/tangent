@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" rx="15" fill="#2a78d6"/>
+  <circle cx="37" cy="42" r="13" fill="none" stroke="#ffffff" stroke-width="8"/>
+  <!-- tangent at the ring's upper-left point (27.8,32.8): a full diagonal, rising -->
+  <path d="M 11 49.6 L 53 7.6" fill="none" stroke="#ffffff" stroke-width="8" stroke-linecap="round"/>
+</svg>
