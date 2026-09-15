@@ -24,14 +24,10 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..finance import market_leads
-from ..finance import verdicts as verdicts_engine
 from ..models import OptimizerResponse, Wealth
-from ..repositories import bank_transactions as tx_repo
 from ..repositories import profile as profile_repo
 from ..repositories import reviews as reviews_repo
-from ..snapshot_job import performance_for
-from . import anthropic_client, cost_tracker, prompt_builder
+from . import anthropic_client, briefing_inputs, cost_tracker, prompt_builder
 
 logger = logging.getLogger(__name__)
 
@@ -86,19 +82,22 @@ async def generate_review_stream(
 
     # 3. Profile + prompt
     profile = await profile_repo.get_or_create(session, user_id)
-    spending = await tx_repo.monthly_outflow(session, user_id)
-    saved = await tx_repo.monthly_inflow_to_savings(session, user_id)
-    perf = await performance_for(session, user_id)
-    verdicts = verdicts_engine.compute_all(
-        wealth, profile, monthly_spending=spending, monthly_saved=saved, perf=perf
-    ).verdicts
-    collected = market_leads.load()
+    mine = await briefing_inputs.collect_user(session, user_id, wealth, profile, today=today)
+    shared = await briefing_inputs.collect_shared_async()
     snapshot = prompt_builder.build_anonymized_snapshot(
         wealth,
         profile,
         optimizer_response,
-        verdicts=verdicts,
-        market_leads=collected.leads if collected else None,
+        verdicts=mine.verdicts,
+        market_leads=shared.market_leads,
+        spending=mine.spending,
+        monthly_saved=mine.monthly_saved,
+        performance=mine.performance,
+        history=mine.history,
+        watchlist=mine.watchlist,
+        previous_review=mine.previous_review,
+        picks=shared.picks,
+        macro=shared.macro,
     )
     user_prompt = prompt_builder.build_user_prompt(snapshot)
 

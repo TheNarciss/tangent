@@ -13,18 +13,20 @@ advice grounded in those numbers.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from ..db.models import Profile
-from ..models import MarketLead, OptimizerResponse, Verdict, Wealth
+from ..finance.performance import Performance, Point
+from ..models import MarketLead, OptimizerResponse, PicksResponse, Verdict, Wealth
+from ..routers.spending import SpendingResponse
 
 # system prompt held in a separate module-level constant; loaded via a sentinel
 # multi-line string. Kept here (not in a .txt file) so it ships with the wheel.
 SYSTEM_PROMPT: str = """Tu écris chaque matin un court briefing pour un épargnant français qui investit régulièrement (versements mensuels sur des fonds indiciels, livrets, parfois un prêt) et qui n'a pas de culture financière. Il ne veut pas devenir trader : il veut savoir si quelque chose le concerne, et sinon être rassuré. Tu tutoies, tu écris en français simple, sans jargon, sans symbole grec, sans ratio.
 
 Ce que tu fais :
-1. Tu regardes ce qui a bougé dans SON patrimoine depuis hier ou cette semaine (ses fonds, ses livrets, ses échéances de prêt), en t'aidant de web_search pour les cours et les actualités récentes (24-72 h). Tu parles de « ton fonds Monde » ou du nom du fonds, jamais du ticker seul.
+1. Tu regardes ce qui a bougé dans SON patrimoine depuis hier ou cette semaine (ses fonds, ses livrets, ses échéances de prêt). Les relevés quotidiens fournis dans les données (valeur du portefeuille hier, il y a 7 jours, il y a 30 jours, versements déduits) sont ta première source pour les chiffres ; web_search sert à expliquer le mouvement avec les cours et les actualités récentes (24-72 h), pas à deviner le chiffre. Tu parles de « ton fonds Monde » ou du nom du fonds, jamais du ticker seul.
 2. Tu expliques ce que ça veut dire pour lui, en une ou deux phrases par point, avec un ordre de grandeur en euros plutôt qu'en pourcentage quand c'est parlant.
 3. Tu dis clairement s'il y a quelque chose à faire. Presque toujours, la réponse est « rien » : continuer ses versements. Tu ne recommandes jamais d'acheter ou de vendre une ligne à cause d'une news du jour. Une action n'est proposée que pour une raison structurelle (un livret qui arrive à son plafond, une échéance de prêt inhabituelle, un versement manqué, une règle fiscale qui change) et tu la présentes comme une piste, pas un ordre.
 
@@ -33,6 +35,9 @@ Contraintes :
 - Pas de tour d'horizon des indices, devises et taux : tu ne mentionnes un marché que s'il explique un mouvement de SES fonds.
 - Pas de rendement attendu, volatilité, Sharpe, corrélation, frontière efficiente. Pas de liste de recommandations par ligne.
 - Si tu n'es pas sûr d'un chiffre, tu le dis.
+- Le briefing d'hier est fourni pour la continuité : tu ne le répètes pas, tu dis ce qui a changé depuis.
+- « La liste de l'année » et sa liste de suivi sont fournies pour information : tu n'en fais jamais un ordre d'achat ou de vente ; tu signales seulement, comme un fait, si une ligne qu'il détient vient d'y entrer ou d'en sortir.
+- Les dépenses et l'épargne mensuelle servent à situer ses versements ; pas de leçon de budget, pas de détail par catégorie sauf s'il explique un versement manqué.
 - 250 à 500 mots, Markdown propre.
 
 Structure OBLIGATOIRE (utilise exactement ces titres) :
@@ -79,12 +84,22 @@ def build_anonymized_snapshot(
     optimizer_response: OptimizerResponse | None = None,
     verdicts: list[Verdict] | None = None,
     market_leads: list[MarketLead] | None = None,
+    *,
+    spending: SpendingResponse | None = None,
+    monthly_saved: float | None = None,
+    performance: Performance | None = None,
+    history: list[Point] | None = None,
+    watchlist: list[str] | None = None,
+    previous_review: str | None = None,
+    picks: PicksResponse | None = None,
+    macro: dict[str, float] | None = None,
 ) -> dict[str, Any]:
-    """Project Wealth + Profile + optimizer + verdicts + leads into a JSON-safe dict for the LLM.
+    """Project everything the app knows into a JSON-safe dict for the LLM.
 
     Stripped of: provider_account_id, institution_name. Kept: tickers,
     amounts, dates, all profile fields (age computed from birth_date). The
-    market leads are the same for everyone: raw, the briefing sorts them.
+    market leads, the list of the year and the observed rates are the same
+    for everyone: raw, the briefing sorts them.
     """
     return {
         "snapshot_at": wealth.snapshot_at.isoformat(),
@@ -172,6 +187,73 @@ def build_anonymized_snapshot(
             }
             for lead in (market_leads or [])
         ],
+        "macro": ({f"{name}_pct": _pct(value) for name, value in macro.items()} if macro else None),
+        "history": [
+            {
+                "day": pt.day.isoformat(),
+                "value_eur": round(pt.value, 2),
+                "net_flow_eur": round(pt.net_flow, 2),
+            }
+            for pt in (history or [])
+        ],
+        "performance": (
+            {
+                "since": performance.start.isoformat(),
+                "days": performance.days,
+                "twr_pct": _pct(performance.twr),
+                "twr_annualized_pct": _pct(performance.twr_annualized),
+                "irr_pct": _pct(performance.irr),
+                "behaviour_gap_pct": _pct(performance.behaviour_gap),
+                "drawdown_pct": _pct(performance.drawdown),
+                "max_drawdown_pct": _pct(performance.max_drawdown),
+                "peak_day": performance.peak_day.isoformat() if performance.peak_day else None,
+                "net_flows_eur": round(performance.net_flows, 2),
+            }
+            if performance is not None
+            else None
+        ),
+        "spending": (
+            {
+                "monthly_average_eur": spending.monthly_average,
+                "monthly_income_average_eur": spending.monthly_income_average,
+                "current_month_total_eur": round(spending.current_month_total, 2),
+                "unlabelled_share_pct": _pct(spending.unlabelled_share),
+                "categories": [
+                    {
+                        "category": c.category,
+                        "total_eur": round(c.total, 2),
+                        "share_pct": _pct(c.share),
+                    }
+                    for c in spending.categories[:8]
+                ],
+                "months": [
+                    {
+                        "month": m.month,
+                        "spent_eur": round(m.total, 2),
+                        "income_eur": round(m.income, 2),
+                    }
+                    for m in spending.months
+                ],
+            }
+            if spending is not None
+            else None
+        ),
+        "monthly_saved_eur": round(monthly_saved, 2) if monthly_saved is not None else None,
+        "watchlist": list(watchlist or []),
+        "picks": (
+            {
+                "as_of": picks.as_of,
+                "next_review": picks.next_review,
+                "review": picks.review,
+                "guard_on": picks.guard_on,
+                "held": list(picks.held),
+                "bought": list(picks.bought),
+                "sold": list(picks.sold),
+            }
+            if picks is not None
+            else None
+        ),
+        "previous_review": previous_review or None,
     }
 
 
@@ -326,6 +408,16 @@ def build_user_prompt(snapshot: dict[str, Any]) -> str:
             lines.append(f"- **{v['title']}** [{status}]{impact_txt} : {v['headline']}{action}")
         lines.append("")
 
+    _render_history(lines, snapshot.get("history") or [])
+    _render_performance(lines, snapshot.get("performance"))
+    _render_spending(lines, snapshot.get("spending"), snapshot.get("monthly_saved_eur"))
+    _render_macro(lines, snapshot.get("macro"))
+    if snapshot.get("watchlist"):
+        lines.append("## Liste de suivi (lignes qu'il surveille sans les détenir)")
+        lines.append("- " + ", ".join(f"`{t}`" for t in snapshot["watchlist"]))
+        lines.append("")
+    _render_picks(lines, snapshot.get("picks"))
+
     if snapshot.get("market_leads"):
         lines.append(
             "## Pistes de marché (brutes, collectées cette nuit — la plupart sont du bruit)"
@@ -335,6 +427,14 @@ def build_user_prompt(snapshot: dict[str, Any]) -> str:
                 f"- [{lead['source']}] {lead['title']} — {lead['detail']} "
                 f"({lead['observed_at']}, {lead['url']})"
             )
+        lines.append("")
+
+    if snapshot.get("previous_review"):
+        lines.append(
+            "## Briefing d'hier (pour la continuité : ne le répète pas, dis ce qui a changé)"
+        )
+        lines.append("")
+        lines.append(snapshot["previous_review"].strip())
         lines.append("")
 
     lines.append("---")
@@ -347,3 +447,111 @@ def build_user_prompt(snapshot: dict[str, Any]) -> str:
     )
 
     return "\n".join(lines)
+
+
+def _reading_before(history: list[dict[str, Any]], days_back: int) -> dict[str, Any] | None:
+    """The latest reading at least `days_back` days before the last one."""
+    last = date.fromisoformat(history[-1]["day"])
+    target = last - timedelta(days=days_back)
+    earlier = [h for h in history if date.fromisoformat(h["day"]) <= target]
+    return earlier[-1] if earlier else None
+
+
+def _render_history(lines: list[str], history: list[dict[str, Any]]) -> None:
+    if len(history) < 2:
+        return
+    last = history[-1]
+    lines.append(
+        "## Relevés quotidiens du portefeuille (valeur des placements, versements déduits)"
+    )
+    lines.append(f"- Valeur au {last['day']} : {last['value_eur']:,.2f} €")
+    for label, days_back in (("hier", 1), ("7 jours", 7), ("30 jours", 30)):
+        then = _reading_before(history, days_back)
+        if then is None or then is last:
+            continue
+        flows = sum(h["net_flow_eur"] for h in history if then["day"] < h["day"] <= last["day"])
+        move = last["value_eur"] - then["value_eur"] - flows
+        flows_txt = f", versements sur la période {flows:,.2f} €" if flows else ""
+        lines.append(f"- Depuis {label} ({then['day']}) : {move:+,.2f} €{flows_txt}")
+    lines.append("")
+
+
+def _render_performance(lines: list[str], perf: dict[str, Any] | None) -> None:
+    if not perf:
+        return
+    lines.append(f"## Performance mesurée depuis le {perf['since']} ({perf['days']} jours)")
+    for label, key in (
+        ("Rendement du portefeuille (pondéré par le temps)", "twr_pct"),
+        ("Le même, annualisé", "twr_annualized_pct"),
+        ("Son résultat à lui, versements compris (TRI annualisé)", "irr_pct"),
+        ("Écart dû au calendrier de ses versements", "behaviour_gap_pct"),
+    ):
+        if perf.get(key) is not None:
+            lines.append(f"- {label} : {perf[key]:+.2f} %")
+    peak = f" (plus haut le {perf['peak_day']})" if perf.get("peak_day") else ""
+    lines.append(
+        f"- Recul depuis le plus haut : {perf['drawdown_pct']:.2f} %{peak}, "
+        f"pire recul sur la période : {perf['max_drawdown_pct']:.2f} %"
+    )
+    lines.append(f"- Versé au total sur la période : {perf['net_flows_eur']:,.2f} €")
+    lines.append("")
+
+
+def _render_spending(
+    lines: list[str], spending: dict[str, Any] | None, monthly_saved: float | None
+) -> None:
+    if not spending and monthly_saved is None:
+        return
+    lines.append("## Dépenses et épargne (comptes courants, trois derniers mois)")
+    if spending:
+        if spending["monthly_average_eur"] is not None:
+            lines.append(f"- Dépenses moyennes par mois : {spending['monthly_average_eur']:,.0f} €")
+        if spending["monthly_income_average_eur"] is not None:
+            lines.append(
+                f"- Revenus moyens par mois : {spending['monthly_income_average_eur']:,.0f} €"
+            )
+        lines.append(f"- Mois en cours : {spending['current_month_total_eur']:,.0f} € dépensés")
+        if spending["categories"]:
+            cats = ", ".join(
+                f"{c['category']} {c['total_eur']:,.0f} €" for c in spending["categories"][:5]
+            )
+            lines.append(f"- Principales catégories sur la fenêtre : {cats}")
+        if spending["unlabelled_share_pct"]:
+            lines.append(f"- Part encore sans catégorie : {spending['unlabelled_share_pct']:.0f} %")
+    if monthly_saved is not None:
+        lines.append(
+            f"- Mis de côté en moyenne par mois (livrets et placements) : {monthly_saved:,.0f} €"
+        )
+    lines.append("")
+
+
+def _render_macro(lines: list[str], macro: dict[str, Any] | None) -> None:
+    if not macro:
+        return
+    lines.append("## Contexte observé (sources publiques, déjà lues par l'app)")
+    if macro.get("policy_rate_pct") is not None:
+        lines.append(f"- Taux directeur : {macro['policy_rate_pct']:.2f} %")
+    if macro.get("inflation_pct") is not None:
+        lines.append(f"- Inflation : {macro['inflation_pct']:.2f} %")
+    lines.append("")
+
+
+def _render_picks(lines: list[str], picks: dict[str, Any] | None) -> None:
+    if not picks:
+        return
+    lines.append(
+        f"## « La liste de l'année » (règle publiée, revue {picks['review']}, "
+        f"arrêtée au {picks['as_of']}, prochaine revue {picks['next_review']} — information, pas une consigne)"
+    )
+    lines.append("- Tenues : " + (", ".join(f"`{t}`" for t in picks["held"]) or "aucune"))
+    if picks["bought"]:
+        lines.append(
+            "- Entrées à la dernière revue : " + ", ".join(f"`{t}`" for t in picks["bought"])
+        )
+    if picks["sold"]:
+        lines.append(
+            "- Sorties à la dernière revue : " + ", ".join(f"`{t}`" for t in picks["sold"])
+        )
+    if picks["guard_on"]:
+        lines.append("- Garde-fou actif : le marché baissait à la revue, la règle ne tient rien.")
+    lines.append("")
