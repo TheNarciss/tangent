@@ -35,6 +35,13 @@ const signedEur = new Intl.NumberFormat("fr-FR", {
   signDisplay: "exceptZero",
 });
 
+const signedEur0 = new Intl.NumberFormat("fr-FR", {
+  style: "currency",
+  currency: "EUR",
+  maximumFractionDigits: 0,
+  signDisplay: "exceptZero",
+});
+
 const dec = new Intl.NumberFormat("fr-FR", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
@@ -59,6 +66,8 @@ export const fmt = {
   approxEur,
   kEur,
   signedEur: (v: number) => signedEur.format(v),
+  /** Whole euros with a sign — a move against a habit: « +110 € ». */
+  signedEur0: (v: number) => signedEur0.format(v),
   pct: (v: number) => pct.format(v),
   /** Whole percent: « 80 % ». For shares of a portfolio, where decimals are noise. */
   pct0: (v: number) => pct0.format(v),
