@@ -26,6 +26,8 @@ fastapi_users = FastAPIUsers[User, uuid.UUID](get_user_manager, [auth_backend]) 
 current_user = fastapi_users.current_user()
 current_active_user = fastapi_users.current_user(active=True)
 current_superuser = fastapi_users.current_user(active=True, superuser=True)
+# None instead of 401 when no cookie came: callbacks the system browser reaches without one (ADR-035)
+current_active_user_optional = fastapi_users.current_user(active=True, optional=True)
 
 
 __all__ = [
@@ -37,6 +39,7 @@ __all__ = [
     "UserUpdate",
     "auth_backend",
     "current_active_user",
+    "current_active_user_optional",
     "current_superuser",
     "current_user",
     "fastapi_users",

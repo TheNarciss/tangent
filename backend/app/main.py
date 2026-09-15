@@ -197,7 +197,7 @@ def _app_callback_to_redirect(request: Request, response: Response) -> Response:
     """
     if response.status_code != 204:
         return RedirectResponse(
-            url=app_session.app_return(error=str(response.status_code)), status_code=303
+            url=app_session.app_return("auth", error=str(response.status_code)), status_code=303
         )
     token = _cookie_from_headers(response.raw_headers)
     try:
@@ -209,9 +209,9 @@ def _app_callback_to_redirect(request: Request, response: Response) -> Response:
         )
         challenge = state[CHALLENGE_KEY]
     except (jwt.PyJWTError, KeyError):
-        return RedirectResponse(url=app_session.app_return(error="state"), status_code=303)
+        return RedirectResponse(url=app_session.app_return("auth", error="state"), status_code=303)
     code = app_session.mint_exchange_code(session_data["sub"], challenge)
-    return RedirectResponse(url=app_session.app_return(code=code), status_code=303)
+    return RedirectResponse(url=app_session.app_return("auth", code=code), status_code=303)
 
 
 def _cookie_from_headers(raw_headers: list[tuple[bytes, bytes]]) -> str | None:

@@ -134,10 +134,10 @@ async def test_app_callback_turns_the_cookie_into_a_code_bound_to_the_challenge(
     redirect = _app_callback_to_redirect(request, upstream)
     assert redirect.status_code == 303
     location = redirect.headers["location"]
-    assert location.startswith(app_session.APP_RETURN_URL)
+    assert location.startswith(f"{app_session.APP_RETURN_BASE}auth?")
     assert COOKIE_NAME not in location and token not in location
     code = parse_qs(urlparse(location).query)["code"][0]
     assert app_session.redeem_exchange_code(code, verifier) == user_id
 
     failed = _app_callback_to_redirect(request, Response(status_code=400))
-    assert failed.headers["location"] == app_session.app_return(error="400")
+    assert failed.headers["location"] == app_session.app_return("auth", error="400")

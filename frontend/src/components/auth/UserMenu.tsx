@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { startGoogleAssociate } from "@/api";
+import { isNative } from "@/native/bridge";
 import { NAV_PATHS } from "@/components/Sidebar";
 
 export function UserMenu() {
@@ -66,10 +67,12 @@ export function UserMenu() {
           <span className="text-muted-foreground">{user.id.slice(0, 8)}…</span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        {hasGoogle ? (
+        {hasGoogle || isNative() ? (
           <DropdownMenuItem disabled className="text-xs">
             <Link2 className="mr-2 h-3.5 w-3.5" />
-            <span className="text-muted-foreground">Google lié ✓</span>
+            <span className="text-muted-foreground">
+              {hasGoogle ? "Google lié ✓" : "Lier Google : depuis le site"}
+            </span>
           </DropdownMenuItem>
         ) : (
           <DropdownMenuItem onClick={handleLinkGoogle}>

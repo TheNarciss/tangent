@@ -37,8 +37,8 @@ RENEW_AFTER_SECONDS = int(os.getenv("SESSION_RENEW_AFTER_SECONDS", str(24 * 3600
 EXCHANGE_LIFETIME_SECONDS = 60
 EXCHANGE_AUDIENCE = "tangent:app-exchange"
 SESSION_AUDIENCE = "fastapi-users:auth"  # JWTStrategy's default token audience
-APP_RETURN_URL = os.getenv("APP_RETURN_URL", "tangent://auth")
-"""Where the system browser sends the app back after OAuth, code or error attached."""
+APP_RETURN_BASE = os.getenv("APP_RETURN_BASE", "tangent://")
+"""Where the system browser sends the app back: `tangent://auth?code=…`, `tangent://banks?…`."""
 
 _CHALLENGE = re.compile(r"^[A-Za-z0-9_-]{43,128}$")  # base64url of a SHA-256, PKCE-style
 _redeemed: dict[str, float] = {}  # jti → expiry, so a code opens one session, not two
@@ -114,9 +114,9 @@ def redeem_exchange_code(code: str, verifier: str) -> uuid.UUID:
     return uuid.UUID(str(data["sub"]))
 
 
-def app_return(**params: str) -> str:
-    """The URL that brings the user back into the app, with the given query."""
-    return f"{APP_RETURN_URL}?{urlencode(params)}"
+def app_return(host: str, **params: str) -> str:
+    """The URL that brings the user back into the app: `tangent://<host>?<query>`."""
+    return f"{APP_RETURN_BASE}{host}?{urlencode(params)}"
 
 
 def now_utc() -> datetime:
@@ -124,7 +124,7 @@ def now_utc() -> datetime:
 
 
 __all__ = [
-    "APP_RETURN_URL",
+    "APP_RETURN_BASE",
     "EXCHANGE_LIFETIME_SECONDS",
     "RENEW_AFTER_SECONDS",
     "app_return",
