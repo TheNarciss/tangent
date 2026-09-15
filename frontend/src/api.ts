@@ -867,8 +867,41 @@ export interface OAuthAuthorizeResponse {
 
 export interface OAuthAccountPublic {
   id: string;
-  oauth_name: "google";
+  oauth_name: "google" | "apple";
   account_email: string;
+}
+
+/** Which sign-in providers the backend can honour (buttons show only for those). */
+export interface AuthProviders {
+  google: boolean;
+  apple: boolean;
+}
+
+export function useAuthProviders() {
+  return useQuery({
+    queryKey: ["auth", "providers"],
+    queryFn: () => http<AuthProviders>("/auth/providers"),
+    staleTime: 60 * 60 * 1000,
+    // Until the answer arrives, offer what the site has always offered.
+    placeholderData: { google: true, apple: false },
+  });
+}
+
+/**
+ * Sign in with Apple, on the site (ADR-035): Apple answers by a POST to the
+ * backend, which opens the session and redirects to /?oauth=success.
+ */
+export async function startAppleLogin(): Promise<void> {
+  const res = await fetch(`${API_URL}/auth/apple/authorize`, { credentials: "include" });
+  if (!res.ok) {
+    throw new ApiError(
+      res.status,
+      "OAuthStartFailed",
+      "Impossible de démarrer la connexion Apple.",
+    );
+  }
+  const data = (await res.json()) as OAuthAuthorizeResponse;
+  window.location.href = data.authorization_url;
 }
 
 /**

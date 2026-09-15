@@ -30,6 +30,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import distinct, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.inspection import inspect as sa_inspect
+from sqlalchemy.orm import noload
 
 from .auth import User
 from .data.probe import YAHOO_INDICES
@@ -242,7 +243,13 @@ async def run(
         logger.error("archive: %s", exc)
         return 0, market_ok
 
-    users = (await session.execute(select(User))).unique().scalars().all()
+    # The linked OAuth accounts are not archived and their tokens need not be readable here.
+    users = (
+        (await session.execute(select(User).options(noload(User.oauth_accounts))))
+        .unique()
+        .scalars()
+        .all()
+    )
     written = 0
     for user in users:
         try:

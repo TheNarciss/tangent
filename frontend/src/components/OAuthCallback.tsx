@@ -31,7 +31,7 @@ export function OAuthCallbackHandler() {
       // (codes : 400 = email non vérifié / state invalide, 409 = sub déjà pris,
       //  401 = pas loggé pour /associate, etc.)
       window.alert(
-        `Connexion Google échouée (code ${errorCode}). ` +
+        `Connexion échouée (${errorCode}). ` +
           "Réessaie, ou contacte le support si le problème persiste.",
       );
     }

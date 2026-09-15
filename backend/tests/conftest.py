@@ -24,6 +24,20 @@ os.environ.setdefault("COOKIE_SECURE", "false")
 from cryptography.fernet import Fernet as _Fernet
 
 os.environ.setdefault("OAUTH_TOKEN_ENCRYPTION_KEY", _Fernet.generate_key().decode())
+# Sign in with Apple (ADR-035): a throwaway developer key, so the routes mount.
+from base64 import b64encode as _b64
+
+from cryptography.hazmat.primitives import serialization as _ser
+from cryptography.hazmat.primitives.asymmetric import ec as _ec
+
+_apple_key = _ec.generate_private_key(_ec.SECP256R1()).private_bytes(
+    _ser.Encoding.PEM, _ser.PrivateFormat.PKCS8, _ser.NoEncryption()
+)
+os.environ.setdefault("APPLE_TEAM_ID", "TEAMID1234")
+os.environ.setdefault("APPLE_KEY_ID", "KEYID12345")
+os.environ.setdefault("APPLE_PRIVATE_KEY_B64", _b64(_apple_key).decode())
+os.environ.setdefault("APPLE_CLIENT_ID", "uk.test.tangent.web")
+os.environ.setdefault("APPLE_BUNDLE_ID", "uk.test.tangent")
 os.environ.setdefault("ARCHIVE_ENCRYPTION_KEY", _Fernet.generate_key().decode())
 os.environ.setdefault("OAUTH_STATE_SECRET", "test-oauth-state-secret-not-for-production")
 os.environ.setdefault("FRONTEND_URL", "http://localhost:5173")
@@ -31,9 +45,9 @@ os.environ.setdefault("GOOGLE_OAUTH_CLIENT_ID", "test-google-client-id")
 os.environ.setdefault("GOOGLE_OAUTH_CLIENT_SECRET", "test-google-client-secret")
 os.environ.setdefault("CORS_ORIGINS", "http://localhost:3000")
 
-import pytest
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
+import pytest  # noqa: E402
+import pytest_asyncio  # noqa: E402
+from httpx import ASGITransport, AsyncClient  # noqa: E402
 
 
 @pytest_asyncio.fixture(loop_scope="session", scope="session")
