@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { useTimeseries } from "@/api";
+import { useT } from "@/i18n";
 import { Timeline } from "@/components/Timeline";
 import {
   BottomSheet,
@@ -30,6 +31,7 @@ const SVG_HEIGHT = 60;
  * also include cash + loans changes we do not historicize).
  */
 export function ChartTile({ className }: ChartTileProps) {
+  const { t, tn } = useT();
   const { data: timeseries, isLoading } = useTimeseries();
   const [open, setOpen] = useState(false);
   // The three-panel chart mounts once the sheet has finished sliding in:
@@ -53,15 +55,12 @@ export function ChartTile({ className }: ChartTileProps) {
         )}
       >
         <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-          Évolution
+          {t("dashboard.chart.title")}
         </div>
         {isLoading ? (
           <div className="mt-2 h-16 animate-pulse rounded bg-muted/30 md:h-20" />
         ) : (
-          <p className="text-sm text-muted-foreground">
-            Pas encore d'historique — il apparaîtra dès qu'un compte d'investissement sera
-            synchronisé.
-          </p>
+          <p className="text-sm text-muted-foreground">{t("dashboard.chart.noHistory")}</p>
         )}
       </div>
     );
@@ -98,11 +97,10 @@ export function ChartTile({ className }: ChartTileProps) {
       >
         <div className="flex items-baseline justify-between">
           <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            Évolution · {points.length} jours
+            {tn("dashboard.chart.titleDays", points.length)}
           </div>
           <div className={cn("text-xs font-medium", colorClass)}>
-            {isPositive ? "+" : ""}
-            {delta.toFixed(1)} %
+            {t("dashboard.chart.percent", { value: `${isPositive ? "+" : ""}${delta.toFixed(1)}` })}
           </div>
         </div>
         <svg
@@ -119,13 +117,13 @@ export function ChartTile({ className }: ChartTileProps) {
             className={colorClass}
           />
         </svg>
-        <div className="text-[10px] text-muted-foreground">Voir le détail →</div>
+        <div className="text-[10px] text-muted-foreground">{t("dashboard.chart.seeDetail")}</div>
       </button>
 
       <BottomSheet open={open} onOpenChange={setOpen}>
         <BottomSheetContent className="md:max-w-3xl">
           <BottomSheetHeader>
-            <BottomSheetTitle>Évolution du portefeuille</BottomSheetTitle>
+            <BottomSheetTitle>{t("dashboard.chart.sheetTitle")}</BottomSheetTitle>
           </BottomSheetHeader>
           <div className="p-4 md:p-6">
             {settled ? (

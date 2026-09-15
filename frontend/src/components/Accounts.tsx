@@ -16,16 +16,17 @@ import {
   useWealthSummary,
   type BankAccountResponse,
 } from "@/api";
+import { useT } from "@/i18n";
 import {
-  GROUP_LABELS,
   GROUP_ORDER,
-  TYPE_LABELS,
   accountValue,
   cleanName,
+  groupLabel,
   groupOf,
   groupTotal,
   longDate,
   relativeTime,
+  typeLabel,
   type AccountGroup,
 } from "@/lib/accounts";
 import { fmt } from "@/lib/format";
@@ -51,6 +52,7 @@ const GROUP_ICON: Record<AccountGroup, typeof Wallet> = {
  * bottom sheet. Banks are managed at the bottom of the page.
  */
 export function Accounts() {
+  const { t, tn } = useT();
   const accounts = useBankAccounts();
   const wealth = useWealthSummary();
   const refresh = useRefreshBankAccounts();
@@ -119,7 +121,7 @@ export function Accounts() {
       {/* ── Ton patrimoine ─────────────────────────────────────────────── */}
       <section className="rounded-xl border bg-card p-4 md:p-6">
         <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          Ton patrimoine
+          {t("accounts.wealth.title")}
         </div>
         {wealth.data ? (
           <>
@@ -133,14 +135,14 @@ export function Accounts() {
             </div>
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
               <span>
-                Ce que tu as :{" "}
+                {t("accounts.wealth.assets")}{" "}
                 <span className="font-mono tabular text-foreground">
                   {fmt.eur(wealth.data.total_assets)}
                 </span>
               </span>
               {wealth.data.total_liabilities > 0 && (
                 <span>
-                  Ce que tu dois :{" "}
+                  {t("accounts.wealth.liabilities")}{" "}
                   <span className="font-mono tabular text-[hsl(var(--loss))]">
                     {fmt.eur(wealth.data.total_liabilities)}
                   </span>
@@ -155,15 +157,14 @@ export function Accounts() {
         <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 border-t pt-3 text-xs text-muted-foreground">
           <span>
             {isSyncing
-              ? "Mise à jour en cours…"
+              ? t("accounts.sync.inProgress")
               : hasAccounts
-                ? `Mis à jour ${relativeTime(lastSyncedAt)}`
-                : "Aucun compte pour l'instant"}
+                ? t("accounts.sync.updated", { when: relativeTime(lastSyncedAt) })
+                : t("accounts.sync.noAccounts")}
           </span>
           {newMovements > 0 && !isSyncing && (
             <span className="text-foreground">
-              {newMovements} nouveau{newMovements > 1 ? "x" : ""} mouvement
-              {newMovements > 1 ? "s" : ""}
+              {tn("accounts.sync.newMovements", newMovements)}
             </span>
           )}
           {hasAccounts && (
@@ -175,14 +176,15 @@ export function Accounts() {
               className="ml-auto gap-2"
             >
               <RefreshCw className={cn("h-4 w-4", isSyncing && "animate-spin")} />
-              Mettre à jour
+              {t("accounts.sync.refresh")}
             </Button>
           )}
         </div>
         {syncError && !isSyncing && (
           <p className="mt-2 text-sm text-[hsl(var(--loss))]">
-            La mise à jour a échoué : {syncError instanceof Error ? syncError.message : "erreur"}.
-            Réessaie dans un instant.
+            {t("accounts.sync.failed", {
+              error: syncError instanceof Error ? syncError.message : t("accounts.error"),
+            })}
           </p>
         )}
       </section>
@@ -196,16 +198,19 @@ export function Accounts() {
       )}
       {accounts.isError && (
         <p className="text-sm text-[hsl(var(--loss))]">
-          Impossible de charger tes comptes :{" "}
-          {accounts.error instanceof Error ? accounts.error.message : "erreur"}
+          {t("accounts.loadFailed", {
+            error: accounts.error instanceof Error ? accounts.error.message : t("accounts.error"),
+          })}
         </p>
       )}
       {accounts.data && accounts.data.length === 0 && (
         <div className="rounded-xl border border-dashed py-12 text-center">
           <Banknote className="mx-auto h-8 w-8 text-muted-foreground" />
-          <p className="mt-2 text-sm text-muted-foreground">Aucune banque connectée.</p>
+          <p className="mt-2 text-sm text-muted-foreground">{t("accounts.empty.title")}</p>
           <p className="text-xs text-muted-foreground">
-            Utilise <strong>+ Ajouter une banque</strong> en haut de la page pour commencer.
+            {t("accounts.empty.hintBefore")}
+            <strong>{t("accounts.empty.addBank")}</strong>
+            {t("accounts.empty.hintAfter")}
           </p>
         </div>
       )}
@@ -222,7 +227,7 @@ export function Accounts() {
               <div className="flex items-baseline justify-between px-1">
                 <h2 className="flex items-center gap-2 text-sm font-medium uppercase tracking-wider text-muted-foreground">
                   <Icon className="h-4 w-4" />
-                  {GROUP_LABELS[g]}
+                  {groupLabel(g)}
                 </h2>
                 <span
                   className={cn(
@@ -252,6 +257,7 @@ export function Accounts() {
 /* ── Card ─────────────────────────────────────────────────────────────── */
 
 function AccountCard({ account, onOpen }: { account: BankAccountResponse; onOpen: () => void }) {
+  const { t } = useT();
   const group = groupOf(account.type);
   const value = accountValue(account);
   const isLoan = group === "loan";
@@ -266,13 +272,15 @@ function AccountCard({ account, onOpen }: { account: BankAccountResponse; onOpen
       <div className="min-w-0 flex-1">
         <div className="truncate font-medium">{cleanName(account.name)}</div>
         <div className="truncate text-xs text-muted-foreground">
-          {TYPE_LABELS[account.type]}
+          {typeLabel(account.type)}
           {account.institution_name ? ` · ${account.institution_name}` : ""}
         </div>
         {isLoan && account.loan?.next_payment_date && account.loan.next_payment_amount ? (
           <div className="mt-0.5 truncate text-xs text-muted-foreground">
-            Prochaine mensualité {fmt.eur(account.loan.next_payment_amount)} le{" "}
-            {longDate(account.loan.next_payment_date)}
+            {t("accounts.card.nextPayment", {
+              amount: fmt.eur(account.loan.next_payment_amount),
+              date: longDate(account.loan.next_payment_date),
+            })}
           </div>
         ) : null}
       </div>

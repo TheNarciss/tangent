@@ -33,7 +33,7 @@ import {
   useT,
   type LocalePreference,
 } from "@/i18n";
-import { BRIEFING_TIME } from "@/components/dashboard/AiBriefTile";
+import { briefingTime } from "@/components/dashboard/AiBriefTile";
 import { Button } from "@/components/ui/button";
 import { Section } from "@/components/ui/section";
 import {
@@ -716,7 +716,7 @@ function AutoReviewSection() {
   return (
     <Section
       title={t("account.briefing.title")}
-      description={t("account.briefing.desc", { time: BRIEFING_TIME })}
+      description={t("account.briefing.desc", { time: briefingTime() })}
     >
       <div className="flex items-start gap-3 rounded-md border bg-muted/30 px-3 py-3 hover:bg-muted/50 transition">
         <input

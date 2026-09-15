@@ -16,6 +16,7 @@ import {
   BottomSheetTitle,
 } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { openExternalFlow, platform } from "@/native/flows";
 
@@ -24,12 +25,13 @@ const ENABLEBANKING_BANK = "Revolut";
 
 /** Header button: opens the sheet where the user picks how to connect a bank. */
 export function AddBankButton() {
+  const { t } = useT();
   const [open, setOpen] = useState(false);
   return (
     <>
       <Button variant="outline" size="sm" onClick={() => setOpen(true)} className="gap-2">
         <Plus className="h-4 w-4" />
-        Ajouter une banque
+        {t("accounts.addBank.title")}
       </Button>
       <AddBankSheet open={open} onOpenChange={setOpen} />
     </>
@@ -43,6 +45,7 @@ function AddBankSheet({
   open: boolean;
   onOpenChange: (o: boolean) => void;
 }) {
+  const { t } = useT();
   const powens = useSyncStatus();
   const enablebanking = useEnableBankingStatus();
   const [busy, setBusy] = useState<"revolut" | "other" | null>(null);
@@ -61,7 +64,7 @@ function AddBankSheet({
       setBusy(null);
       onOpenChange(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erreur inconnue");
+      setError(e instanceof Error ? e.message : t("accounts.unknownError"));
       setBusy(null);
     }
   };
@@ -73,29 +76,27 @@ function AddBankSheet({
     <BottomSheet open={open} onOpenChange={onOpenChange}>
       <BottomSheetContent className="md:max-w-md">
         <BottomSheetHeader>
-          <BottomSheetTitle>Ajouter une banque</BottomSheetTitle>
-          <BottomSheetDescription>
-            Tangent passe par un service agréé : on ne voit jamais tes identifiants.
-          </BottomSheetDescription>
+          <BottomSheetTitle>{t("accounts.addBank.title")}</BottomSheetTitle>
+          <BottomSheetDescription>{t("accounts.addBank.desc")}</BottomSheetDescription>
         </BottomSheetHeader>
         <div className="space-y-2 p-4 md:p-6">
           <Choice
             title="Revolut"
             detail={
               revolutReady
-                ? "Via Enable Banking. Consentement valable 180 jours, puis à refaire."
-                : "Enable Banking n'est pas configuré côté serveur."
+                ? t("accounts.addBank.revolutDetail")
+                : t("accounts.addBank.revolutUnavailable")
             }
             disabled={!revolutReady || busy !== null}
             busy={busy === "revolut"}
             onClick={() => go("revolut")}
           />
           <Choice
-            title="Une autre banque"
+            title={t("accounts.addBank.otherBank")}
             detail={
               powensReady
-                ? "BNP, Boursorama, Crédit Agricole… via Powens."
-                : "Powens n'est pas configuré côté serveur."
+                ? t("accounts.addBank.otherDetail")
+                : t("accounts.addBank.otherUnavailable")
             }
             disabled={!powensReady || busy !== null}
             busy={busy === "other"}
@@ -121,6 +122,7 @@ function Choice({
   busy: boolean;
   onClick: () => void;
 }) {
+  const { t } = useT();
   return (
     <button
       type="button"
@@ -134,7 +136,9 @@ function Choice({
     >
       <Building2 className="h-5 w-5 shrink-0 text-muted-foreground" />
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-medium">{busy ? "Redirection…" : title}</span>
+        <span className="block text-sm font-medium">
+          {busy ? t("accounts.addBank.redirecting") : title}
+        </span>
         <span className="block text-xs text-muted-foreground">{detail}</span>
       </span>
     </button>

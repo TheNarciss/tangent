@@ -1,4 +1,6 @@
 import { useRecentTransactions } from "@/api";
+import { useT } from "@/i18n";
+import { shortDate } from "@/lib/accounts";
 import { fmt } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -18,17 +20,18 @@ interface RecentTransactionsTileProps {
  * joined with BankAccount, no N+1 fetches.
  */
 export function RecentTransactionsTile({ onSeeAll, limit = 5 }: RecentTransactionsTileProps) {
+  const { t } = useT();
   const { data: txns, isLoading } = useRecentTransactions(limit);
 
   return (
     <div className="rounded-lg border border-border bg-card p-4 md:p-5">
       <div className="mb-3 flex items-center justify-between">
         <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-          Mouvements récents
+          {t("dashboard.recent.title")}
         </div>
         {onSeeAll && (
           <button type="button" onClick={onSeeAll} className="text-xs text-primary hover:underline">
-            Tout voir →
+            {t("dashboard.recent.seeAll")}
           </button>
         )}
       </div>
@@ -40,31 +43,25 @@ export function RecentTransactionsTile({ onSeeAll, limit = 5 }: RecentTransactio
           ))}
         </div>
       ) : !txns || txns.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          Aucun mouvement pour l'instant. Synchronise tes comptes pour voir les transactions.
-        </p>
+        <p className="text-sm text-muted-foreground">{t("dashboard.recent.empty")}</p>
       ) : (
         <div className="space-y-2">
-          {txns.map((t) => (
-            <div key={t.id} className="flex items-center justify-between gap-3 text-sm">
+          {txns.map((txn) => (
+            <div key={txn.id} className="flex items-center justify-between gap-3 text-sm">
               <div className="min-w-0 flex-1">
-                <div className="truncate">{t.description || "—"}</div>
+                <div className="truncate">{txn.description || t("common.none")}</div>
                 <div className="truncate text-[10px] text-muted-foreground">
-                  {t.bank_account_name} ·{" "}
-                  {new Date(t.transaction_date).toLocaleDateString("fr-FR", {
-                    day: "numeric",
-                    month: "short",
-                  })}
+                  {txn.bank_account_name} · {shortDate(txn.transaction_date)}
                 </div>
               </div>
               <div
                 className={cn(
                   "flex-shrink-0 font-mono text-sm tabular",
-                  t.amount >= 0 ? "text-[hsl(var(--gain))]" : "text-[hsl(var(--loss))]",
+                  txn.amount >= 0 ? "text-[hsl(var(--gain))]" : "text-[hsl(var(--loss))]",
                 )}
               >
-                {t.amount >= 0 ? "+" : ""}
-                {fmt.eur(t.amount)}
+                {txn.amount >= 0 ? "+" : ""}
+                {fmt.eur(txn.amount)}
               </div>
             </div>
           ))}

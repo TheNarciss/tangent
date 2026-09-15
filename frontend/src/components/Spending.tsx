@@ -3,6 +3,8 @@ import { useMemo, useState } from "react";
 import { useSpending, type Merchant, type MonthSpending, type SpendingResponse } from "@/api";
 import { BentoTile } from "@/components/ui/bento-tile";
 import { Chart, XAxis, YAxis, type ChartFrame } from "@/components/ui/chart";
+import { t, useT, type MessageKey } from "@/i18n";
+import { formatDate } from "@/lib/accounts";
 import { linearScale, niceTicks } from "@/lib/chart";
 import { fmt } from "@/lib/format";
 import {
@@ -32,6 +34,7 @@ import { cn } from "@/lib/utils";
  * lighter because it is not over.
  */
 export function Spending() {
+  const { t, tn } = useT();
   const [months, setMonths] = useState<3 | 6 | 12>(6);
   const [showTable, setShowTable] = useState(false);
   const { data, isLoading, isFetching } = useSpending(months);
@@ -39,11 +42,7 @@ export function Spending() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <p className="max-w-prose text-sm text-muted-foreground">
-          Un virement vers un autre de tes comptes connectés, ton épargne ou un remboursement de
-          prêt n'est pas une dépense. Un virement vers un compte que Tangent ne connaît pas en est
-          une : l'argent est parti.
-        </p>
+        <p className="max-w-prose text-sm text-muted-foreground">{t("spending.intro")}</p>
         {/* One filter row above everything it scopes. */}
         <div className="flex shrink-0 items-center gap-1 rounded-md border p-0.5 text-xs">
           {([3, 6, 12] as const).map((n) => (
@@ -56,7 +55,7 @@ export function Spending() {
                 months === n ? "bg-primary text-primary-foreground" : "hover:bg-accent",
               )}
             >
-              {n} mois
+              {tn("spending.months", n)}
             </button>
           ))}
         </div>
@@ -73,10 +72,7 @@ export function Spending() {
         </div>
       ) : data.months.every((m) => m.total === 0 && m.income === 0) ? (
         <section className="rounded-xl border bg-card p-4 md:p-6">
-          <p className="text-sm text-muted-foreground">
-            Aucun mouvement synchronisé sur tes comptes courants pour l'instant. Tout apparaîtra ici
-            dès la prochaine synchronisation.
-          </p>
+          <p className="text-sm text-muted-foreground">{t("spending.empty")}</p>
         </section>
       ) : (
         <div className={cn("space-y-6", isFetching && "opacity-70 transition-opacity")}>
@@ -84,14 +80,14 @@ export function Spending() {
           <section className="rounded-xl border bg-card p-4 md:p-6">
             <div className="flex items-start justify-between gap-3">
               <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Entrées et sorties, par mois
+                {t("spending.inOut.title")}
               </div>
               <button
                 type="button"
                 onClick={() => setShowTable((v) => !v)}
                 className="shrink-0 text-xs text-muted-foreground hover:text-foreground hover:underline"
               >
-                {showTable ? "Voir les graphiques" : "Voir le tableau"}
+                {showTable ? t("spending.showCharts") : t("spending.showTable")}
               </button>
             </div>
             {showTable ? (
@@ -104,11 +100,11 @@ export function Spending() {
             <>
               <section className="rounded-xl border bg-card p-4 md:p-6">
                 <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Dans quoi, mois par mois
+                  {t("spending.stack.title")}
                 </div>
                 {data.unlabelled_share > 0.2 && (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {fmt.pct0(data.unlabelled_share)} des dépenses n'ont pas encore de catégorie.
+                    {t("spending.stack.unlabelled", { share: fmt.pct0(data.unlabelled_share) })}
                   </p>
                 )}
                 <CategoryStack months={data.months} />
@@ -116,20 +112,20 @@ export function Spending() {
               <div className="grid gap-6 md:grid-cols-3">
                 <section className="rounded-xl border bg-card p-4 md:p-6">
                   <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Où ça part
+                    {t("spending.where.title")}
                   </div>
-                  <p className="mt-1 text-xs text-muted-foreground">Sur toute la période.</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{t("spending.where.sub")}</p>
                   <CategoryBars categories={data.categories} />
                 </section>
                 <section className="rounded-xl border bg-card p-4 md:p-6">
                   <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Ce qui a bougé
+                    {t("spending.moved.title")}
                   </div>
                   <CategoryDeltas report={categoryDeltas(data.months)} />
                 </section>
                 <section className="rounded-xl border bg-card p-4 md:p-6">
                   <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Chez qui
+                    {t("spending.who.title")}
                   </div>
                   <MerchantBars merchants={data.merchants} />
                 </section>
@@ -146,6 +142,7 @@ export function Spending() {
 /* ── The month's four figures ──────────────────────────────────────────── */
 
 function Kpis({ data }: { data: SpendingResponse }) {
+  const { t } = useT();
   const current = data.months[data.months.length - 1];
   const left = current.income - current.total;
   const delta =
@@ -162,39 +159,42 @@ function Kpis({ data }: { data: SpendingResponse }) {
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
       <BentoTile
-        label="Dépensé ce mois-ci"
+        label={t("spending.kpi.spent")}
         value={fmt.eur0(current.total)}
         sub={
           delta !== null ? (
             <span className={delta > 0.1 ? "text-[hsl(var(--loss))]" : "text-muted-foreground"}>
-              {fmt.signedPct(delta)} vs {fmt.eur0(data.monthly_average ?? 0)} en moyenne
+              {t("spending.kpi.vsAverage", {
+                delta: fmt.signedPct(delta),
+                average: fmt.eur0(data.monthly_average ?? 0),
+              })}
             </span>
           ) : (
-            <span className="text-muted-foreground">pas encore de mois complet</span>
+            <span className="text-muted-foreground">{t("spending.kpi.noCompleteMonth")}</span>
           )
         }
       />
       <BentoTile
-        label="Reçu ce mois-ci"
+        label={t("spending.kpi.received")}
         value={fmt.eur0(current.income)}
         sub={
           data.monthly_income_average !== null ? (
             <span className="text-muted-foreground">
-              {fmt.eur0(data.monthly_income_average)} en moyenne
+              {t("spending.kpi.average", { average: fmt.eur0(data.monthly_income_average) })}
             </span>
           ) : undefined
         }
       />
       <BentoTile
-        label="Reste ce mois-ci"
+        label={t("spending.kpi.left")}
         value={fmt.eur0(left)}
         accent={left < 0 ? "danger" : "neutral"}
-        sub={<span className="text-muted-foreground">reçu moins dépensé</span>}
+        sub={<span className="text-muted-foreground">{t("spending.kpi.leftSub")}</span>}
       />
       <BentoTile
-        label="Épargné, mois complets"
+        label={t("spending.kpi.saved")}
         value={savedRate === null ? "—" : fmt.pct0(savedRate)}
-        sub={<span className="text-muted-foreground">part du reçu non dépensée</span>}
+        sub={<span className="text-muted-foreground">{t("spending.kpi.savedSub")}</span>}
       />
     </div>
   );
@@ -237,6 +237,7 @@ function MonthAxis({ frame, months }: { frame: ChartFrame; months: MonthSpending
 /* ── In and out, month by month ────────────────────────────────────────── */
 
 function InOutColumns({ months }: { months: MonthSpending[] }) {
+  const { t } = useT();
   const [hover, setHover] = useState<number | null>(null);
   const max = Math.max(...months.flatMap((m) => [m.total, m.income])) || 1;
   const last = months.length - 1;
@@ -246,27 +247,27 @@ function InOutColumns({ months }: { months: MonthSpending[] }) {
       <div className="flex items-center gap-4 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-2.5 w-2.5 rounded-sm bg-[#2a78d6] dark:bg-[#3987e5]" />
-          Reçu
+          {t("spending.received")}
         </span>
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-2.5 w-2.5 rounded-sm bg-[#eb6834] dark:bg-[#d95926]" />
-          Dépensé
+          {t("spending.spent")}
         </span>
       </div>
       <Chart
         className="mt-2"
         height={COLUMN_H}
         pad={COLUMN_PAD}
-        ariaLabel="Reçu et dépensé par mois"
+        ariaLabel={t("spending.inOut.aria")}
         onPointer={(p, frame) => setHover(p ? slotAt(p.x, frame, months.length) : null)}
         tooltip={(frame) => {
           if (hover === null) return null;
           const slot = frame.innerW / months.length;
           const m = months[hover];
-          const rows: [string, number][] = [
-            ["Reçu", m.income],
-            ["Dépensé", m.total],
-            ["Reste", m.income - m.total],
+          const rows: { id: string; label: string; value: number }[] = [
+            { id: "income", label: t("spending.received"), value: m.income },
+            { id: "spent", label: t("spending.spent"), value: m.total },
+            { id: "left", label: t("spending.left"), value: m.income - m.total },
           ];
           return {
             x: frame.left + slot * hover + slot / 2,
@@ -274,16 +275,16 @@ function InOutColumns({ months }: { months: MonthSpending[] }) {
             content: (
               <>
                 <div className="text-muted-foreground">{monthLabel(m.month, true)}</div>
-                {rows.map(([label, v]) => (
-                  <div key={label} className="mt-1 flex justify-between gap-2">
-                    <span className="text-muted-foreground">{label}</span>
+                {rows.map((r) => (
+                  <div key={r.id} className="mt-1 flex justify-between gap-2">
+                    <span className="text-muted-foreground">{r.label}</span>
                     <span
                       className={cn(
                         "tabular-nums font-medium",
-                        label === "Reste" && v < 0 && "text-[hsl(var(--loss))]",
+                        r.id === "left" && r.value < 0 && "text-[hsl(var(--loss))]",
                       )}
                     >
-                      {fmt.eur0(v)}
+                      {fmt.eur0(r.value)}
                     </span>
                   </div>
                 ))}
@@ -344,9 +345,7 @@ function InOutColumns({ months }: { months: MonthSpending[] }) {
           );
         }}
       </Chart>
-      <p className="mt-1 text-[10px] text-muted-foreground">
-        Le mois en cours est plus clair : il n'est pas fini.
-      </p>
+      <p className="mt-1 text-[10px] text-muted-foreground">{t("spending.currentMonthNote")}</p>
     </figure>
   );
 }
@@ -389,10 +388,11 @@ function seriesSwatch(key: string, index: number): string {
   return NEUTRAL_SWATCH[key] ?? SLOT_SWATCH[index] ?? "bg-[#898781]";
 }
 function seriesLabel(key: string): string {
-  return key === OTHERS ? "Autres catégories" : categoryLabel(key);
+  return key === OTHERS ? t("spending.otherCategories") : categoryLabel(key);
 }
 
 function CategoryStack({ months }: { months: MonthSpending[] }) {
+  const { t } = useT();
   const [hover, setHover] = useState<number | null>(null);
   const series = useMemo(() => stackSeries(months), [months]);
   const stacks = useMemo(() => months.map((m) => monthStack(m, series)), [months, series]);
@@ -400,7 +400,7 @@ function CategoryStack({ months }: { months: MonthSpending[] }) {
   const last = months.length - 1;
 
   if (series.length === 0) {
-    return <p className="mt-2 text-sm text-muted-foreground">Rien à montrer sur cette période.</p>;
+    return <p className="mt-2 text-sm text-muted-foreground">{t("spending.nothingToShow")}</p>;
   }
 
   return (
@@ -417,7 +417,7 @@ function CategoryStack({ months }: { months: MonthSpending[] }) {
         className="mt-2"
         height={COLUMN_H}
         pad={COLUMN_PAD}
-        ariaLabel="Dépenses par catégorie et par mois"
+        ariaLabel={t("spending.stack.aria")}
         onPointer={(p, frame) => setHover(p ? slotAt(p.x, frame, months.length) : null)}
         tooltip={(frame) => {
           if (hover === null) return null;
@@ -523,8 +523,8 @@ function CategoryStack({ months }: { months: MonthSpending[] }) {
         }}
       </Chart>
       <p className="mt-1 text-[10px] text-muted-foreground">
-        Les {Math.min(series.length, SLOT_FILL.length)} plus grosses catégories de la période ont
-        leur couleur ; le reste est en gris. Le mois en cours est plus clair : il n'est pas fini.
+        {t("spending.stack.note", { count: Math.min(series.length, SLOT_FILL.length) })}{" "}
+        {t("spending.currentMonthNote")}
       </p>
     </figure>
   );
@@ -539,17 +539,14 @@ function CategoryStack({ months }: { months: MonthSpending[] }) {
  * Value at the tip of every bar: nothing is gated behind hover.
  */
 function CategoryDeltas({ report }: { report: DeltaReport | null }) {
+  const { t, tn } = useT();
   if (report === null) {
-    return (
-      <p className="mt-2 text-sm text-muted-foreground">
-        Il faut deux mois complets pour comparer. Reviens le mois prochain.
-      </p>
-    );
+    return <p className="mt-2 text-sm text-muted-foreground">{t("spending.moved.needTwo")}</p>;
   }
   if (report.rows.length === 0) {
     return (
       <p className="mt-2 text-sm text-muted-foreground">
-        Rien de notable en {monthLabel(report.month, true)}.
+        {t("spending.moved.nothing", { month: monthLabel(report.month, true) })}
       </p>
     );
   }
@@ -557,11 +554,9 @@ function CategoryDeltas({ report }: { report: DeltaReport | null }) {
   return (
     <>
       <p className="mt-1 text-xs text-muted-foreground">
-        {capitalize(monthLabel(report.month, true))}, contre la moyenne{" "}
-        {report.baseline > 1
-          ? `des ${report.baseline} mois complets précédents`
-          : "du mois précédent"}
-        .
+        {tn("spending.moved.baseline", report.baseline, {
+          month: capitalize(monthLabel(report.month, true)),
+        })}
       </p>
       <ul className="mt-3 space-y-2.5">
         {report.rows.map((r) => {
@@ -589,15 +584,16 @@ function CategoryDeltas({ report }: { report: DeltaReport | null }) {
                 {fmt.signedEur0(r.delta)}
               </span>
               <span className="col-span-3 -mt-1 text-[10px] text-muted-foreground">
-                {fmt.eur0(r.last)} contre {fmt.eur0(r.average)} d'habitude
+                {t("spending.moved.usual", {
+                  last: fmt.eur0(r.last),
+                  average: fmt.eur0(r.average),
+                })}
               </span>
             </li>
           );
         })}
       </ul>
-      <p className="mt-2 text-[10px] text-muted-foreground">
-        À droite en rouge : plus que d'habitude. À gauche en vert : moins.
-      </p>
+      <p className="mt-2 text-[10px] text-muted-foreground">{t("spending.moved.legend")}</p>
     </>
   );
 }
@@ -611,34 +607,34 @@ function capitalize(s: string): string {
 const SHOWN = 7;
 
 function CategoryBars({ categories }: { categories: SpendingResponse["categories"] }) {
-  const rows = useMemo(() => {
-    const head = categories.slice(0, SHOWN);
-    const tail = categories.slice(SHOWN);
-    const out = head.map((c) => ({
-      label: categoryLabel(c.category),
-      total: c.total,
-      hint: fmt.pct0(c.share),
-    }));
-    const rest = tail.reduce((s, c) => s + c.total, 0);
-    if (rest > 0)
-      out.push({
-        label: "Autres",
-        total: rest,
-        hint: fmt.pct0(tail.reduce((s, c) => s + c.share, 0)),
-      });
-    return out;
-  }, [categories]);
+  const { t } = useT();
+  // Not memoised: a handful of rows, and the labels follow the language.
+  const head = categories.slice(0, SHOWN);
+  const tail = categories.slice(SHOWN);
+  const rows = head.map((c) => ({
+    label: categoryLabel(c.category),
+    total: c.total,
+    hint: fmt.pct0(c.share),
+  }));
+  const rest = tail.reduce((s, c) => s + c.total, 0);
+  if (rest > 0)
+    rows.push({
+      label: t("spending.others"),
+      total: rest,
+      hint: fmt.pct0(tail.reduce((s, c) => s + c.share, 0)),
+    });
   return <BarList rows={rows} />;
 }
 
 function MerchantBars({ merchants }: { merchants: Merchant[] }) {
+  const { t, tn } = useT();
   const rows = merchants.slice(0, 8).map((m) => ({
     label: m.name,
     total: m.total,
-    hint: `${m.count} fois`,
+    hint: tn("spending.times", m.count),
   }));
   if (rows.length === 0) {
-    return <p className="mt-2 text-sm text-muted-foreground">Rien à montrer sur cette période.</p>;
+    return <p className="mt-2 text-sm text-muted-foreground">{t("spending.nothingToShow")}</p>;
   }
   return <BarList rows={rows} />;
 }
@@ -675,15 +671,16 @@ function BarList({ rows }: { rows: { label: string; total: number; hint: string 
 /* ── Table views ───────────────────────────────────────────────────────── */
 
 function MonthTable({ months }: { months: MonthSpending[] }) {
+  const { t } = useT();
   return (
     <div className="mt-3 overflow-x-auto">
       <table className="w-full text-xs">
         <thead>
           <tr className="text-left text-muted-foreground">
-            <th className="py-1 pr-3 font-medium">Mois</th>
-            <th className="py-1 pr-3 text-right font-medium">Reçu</th>
-            <th className="py-1 pr-3 text-right font-medium">Dépensé</th>
-            <th className="py-1 pr-3 text-right font-medium">Reste</th>
+            <th className="py-1 pr-3 font-medium">{t("spending.table.month")}</th>
+            <th className="py-1 pr-3 text-right font-medium">{t("spending.received")}</th>
+            <th className="py-1 pr-3 text-right font-medium">{t("spending.spent")}</th>
+            <th className="py-1 pr-3 text-right font-medium">{t("spending.left")}</th>
           </tr>
         </thead>
         <tbody>
@@ -709,6 +706,7 @@ function MonthTable({ months }: { months: MonthSpending[] }) {
 }
 
 function CategoryTable({ months }: { months: MonthSpending[] }) {
+  const { t } = useT();
   const cats = useMemo(() => {
     const totals: Record<string, number> = {};
     for (const m of months)
@@ -720,13 +718,13 @@ function CategoryTable({ months }: { months: MonthSpending[] }) {
   return (
     <section className="rounded-xl border bg-card p-4 md:p-6">
       <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-        Par catégorie
+        {t("spending.table.byCategory")}
       </div>
       <div className="mt-3 overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
             <tr className="text-left text-muted-foreground">
-              <th className="py-1 pr-3 font-medium">Catégorie</th>
+              <th className="py-1 pr-3 font-medium">{t("spending.table.category")}</th>
               {months.map((m) => (
                 <th key={m.month} className="py-1 pr-3 text-right font-medium">
                   {monthLabel(m.month)}
@@ -754,39 +752,42 @@ function CategoryTable({ months }: { months: MonthSpending[] }) {
 
 /* ── Labels ─────────────────────────────────────────────────────────────── */
 
-const CATEGORY_LABELS: Record<string, string> = {
-  alimentation: "Alimentation",
-  restaurant: "Restaurants",
-  transport: "Transport",
-  carburant: "Carburant",
-  loyer: "Loyer",
-  charges_logement: "Charges du logement",
-  telecom_internet: "Télécom & internet",
-  assurance: "Assurances",
-  sante: "Santé",
-  loisirs: "Loisirs",
-  abonnements: "Abonnements",
-  shopping: "Shopping",
-  voyages: "Voyages",
-  education: "Éducation",
-  impots_taxes: "Impôts & taxes",
-  salaire: "Salaire",
-  remboursement: "Remboursements",
-  virement_interne: "Virements internes",
-  virement_sortant: "Virements sortants",
-  epargne_investissement: "Épargne & investissement",
-  frais_bancaires: "Frais bancaires",
-  cadeaux_dons: "Cadeaux & dons",
-  autre: "Sans catégorie",
+/** This screen's own wording of the backend taxonomy; the fold and « Autres » live in the JSX. */
+const CATEGORY_KEYS: Record<string, MessageKey> = {
+  alimentation: "spending.category.alimentation",
+  restaurant: "spending.category.restaurant",
+  transport: "spending.category.transport",
+  carburant: "spending.category.carburant",
+  loyer: "spending.category.loyer",
+  charges_logement: "spending.category.charges_logement",
+  telecom_internet: "spending.category.telecom_internet",
+  assurance: "spending.category.assurance",
+  sante: "spending.category.sante",
+  loisirs: "spending.category.loisirs",
+  abonnements: "spending.category.abonnements",
+  shopping: "spending.category.shopping",
+  voyages: "spending.category.voyages",
+  education: "spending.category.education",
+  impots_taxes: "spending.category.impots_taxes",
+  salaire: "spending.category.salaire",
+  remboursement: "spending.category.remboursement",
+  virement_interne: "spending.category.virement_interne",
+  virement_sortant: "spending.category.virement_sortant",
+  epargne_investissement: "spending.category.epargne_investissement",
+  frais_bancaires: "spending.category.frais_bancaires",
+  cadeaux_dons: "spending.category.cadeaux_dons",
+  autre: "spending.category.autre",
 };
 
 function categoryLabel(key: string): string {
-  return CATEGORY_LABELS[key] ?? key;
+  const k = CATEGORY_KEYS[key];
+  return k ? t(k) : key;
 }
 
+/** « août » / « août 2026 » — "Aug" / "August 2026". Built as a local date so no timezone shifts the month. */
 function monthLabel(month: string, long = false): string {
   const [y, m] = month.split("-").map(Number);
-  return new Date(y, m - 1, 1).toLocaleDateString("fr-FR", {
+  return formatDate(new Date(y, m - 1, 1).toISOString(), {
     month: long ? "long" : "short",
     ...(long ? { year: "numeric" } : {}),
   });
