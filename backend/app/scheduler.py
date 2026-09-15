@@ -35,7 +35,7 @@ from .aggregator.persist import persist_sync_result
 from .db import async_session_factory
 from .db.models import EnableBankingSession
 from .enablebanking import aggregator as enablebanking_agg
-from .finance import macro, picks, stress
+from .finance import macro, market_leads, picks, stress
 from .llm import batch_poller, batch_submitter
 from .snapshot_job import record_all_users
 
@@ -111,6 +111,18 @@ async def _job_warm_sources() -> None:
         logger.exception("sources non préchargées")
 
 
+async def _job_collect_market_leads() -> None:
+    """Read Polymarket and EDGAR once a night, before the briefing batch (ADR-033).
+
+    Minutes in a thread: a thousand Form 4 filings a day, one request each.
+    A source out of reach costs its leads, never the others'.
+    """
+    try:
+        await asyncio.to_thread(market_leads.refresh)
+    except Exception:
+        logger.exception("Scheduler: market leads failed")
+
+
 async def _job_compute_picks() -> None:
     """Recompute « La liste de l'année » unless the stored copy is fresh.
 
@@ -183,6 +195,15 @@ def setup_scheduler() -> AsyncIOScheduler:
         _job_record_snapshots,
         CronTrigger(hour=2, minute=0, timezone=_PARIS),
         id="record_portfolio_snapshots",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+
+    scheduler.add_job(
+        _job_collect_market_leads,
+        CronTrigger(hour=2, minute=15, timezone=_PARIS),
+        id="collect_market_leads",
         replace_existing=True,
         max_instances=1,
         coalesce=True,

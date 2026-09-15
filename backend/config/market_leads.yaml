@@ -1,0 +1,64 @@
+# « Pistes de marché » (ADR-033) : ce qui est ratissé chaque nuit, et à partir
+# de quel seuil une observation devient une piste. Aucune piste n'est écrite
+# ici : les sources se lisent seules, ce fichier ne porte que les règles.
+# Le tri final revient au briefing du matin, qui en garde zéro à trois.
+
+polymarket:
+  # Les étiquettes Polymarket ratissées. Chaque événement portant l'une
+  # d'elles est lu ; le sport, les élections et la pop culture restent dehors.
+  tags:
+    - fed
+    - fomc
+    - fed-rates
+    - economy
+    - economic-policy
+    - finance
+    - recession
+    - inflation
+    - cpi-release
+    - jobs-report
+    - tariffs
+    - trade-war
+    - oil
+    - gold
+    - stocks
+    - sp500
+    - nasdaq
+    - ecb
+    - eurozone
+    - bitcoin
+  # Un marché trop peu échangé n'est l'avis de personne.
+  min_volume_24h_usd: 25000
+  # Une cote qui bouge d'au moins ça en une semaine, en points de probabilité.
+  min_week_move: 0.15
+  # Les marchés les plus actifs sont donnés tels quels : l'état des attentes.
+  max_state_leads: 8
+
+insiders:
+  # Achats en bourse (code P) par un dirigeant ou un administrateur de sa
+  # propre société. Les attributions, options et cadeaux ne comptent pas.
+  min_purchase_usd: 100000       # en dessous, l'achat n'est pas gardé
+  big_purchase_usd: 1000000      # au-dessus, un achat isolé est une piste
+  cluster_days: 30               # fenêtre pour parler d'achats groupés
+  min_insiders: 2                # dirigeants distincts pour un groupe
+  keep_days: 45                  # mémoire des achats et des dépôts déjà lus
+
+funds:
+  # Gérants suivis dans leurs 13F. Un CIK identifie un déclarant à la SEC.
+  followed:
+    - { name: "Berkshire Hathaway", cik: 1067983 }
+    - { name: "Pershing Square", cik: 1336528 }
+    - { name: "Bridgewater Associates", cik: 1350694 }
+    - { name: "Appaloosa", cik: 1656456 }
+    - { name: "Duquesne Family Office", cik: 1536411 }
+    - { name: "Third Point", cik: 1040273 }
+    - { name: "Baupost Group", cik: 1061768 }
+    - { name: "Tiger Global", cik: 1167483 }
+    - { name: "Renaissance Technologies", cik: 1037389 }
+    - { name: "Soros Fund Management", cik: 1029160 }
+    - { name: "Viking Global", cik: 1103804 }
+    - { name: "Scion Asset Management", cik: 1649339 }
+  min_position_usd: 100000000    # une ligne plus petite ne dit rien d'un tel gérant
+  min_change_pct: 0.25           # variation du nombre de titres pour parler d'un mouvement
+  max_leads_per_filing: 6
+  keep_days: 21                  # une piste 13F reste visible ce temps après le dépôt

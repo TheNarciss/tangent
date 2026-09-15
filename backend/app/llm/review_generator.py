@@ -24,6 +24,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..finance import market_leads
 from ..finance import verdicts as verdicts_engine
 from ..models import OptimizerResponse, Wealth
 from ..repositories import bank_transactions as tx_repo
@@ -95,8 +96,13 @@ async def generate_review_stream(
     verdicts = verdicts_engine.compute_all(
         wealth, profile, monthly_spending=spending, monthly_saved=saved, perf=perf
     ).verdicts
+    collected = market_leads.load()
     snapshot = prompt_builder.build_anonymized_snapshot(
-        wealth, profile, optimizer_response, verdicts=verdicts
+        wealth,
+        profile,
+        optimizer_response,
+        verdicts=verdicts,
+        market_leads=collected.leads if collected else None,
     )
     user_prompt = prompt_builder.build_user_prompt(snapshot)
 

@@ -202,6 +202,7 @@ def test_system_prompt_contains_required_structure():
         "# Ce qui a bougé chez toi",
         "# Ce que ça veut dire",
         "# À faire cette semaine",
+        "# Pistes à regarder",
         "# Sources",
         "# Avertissement",
     ):

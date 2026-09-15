@@ -22,6 +22,7 @@ def test_setup_scheduler_registers_the_expected_jobs() -> None:
         "warm_sources_at_boot",
         "sync_enablebanking",
         "record_portfolio_snapshots",
+        "collect_market_leads",
         "submit_nightly_batch",
         "poll_pending_batches",
     }

@@ -19,7 +19,19 @@ from datetime import date
 
 import pandas as pd
 
-from . import damodaran, ecb, eurostat, fred, ken_french, lbma, openfigi, shiller, xtrackers
+from . import (
+    damodaran,
+    ecb,
+    edgar,
+    eurostat,
+    fred,
+    ken_french,
+    lbma,
+    openfigi,
+    polymarket,
+    shiller,
+    xtrackers,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +135,40 @@ def _yahoo() -> str:
     return f"CW8.PA {len(prices)} séances, dernier {prices.iloc[-1, 0]:.2f}"
 
 
+def _polymarket() -> str:
+    events = polymarket.events("fed")
+    markets = [m for e in events for m in polymarket.markets(e)]
+    if not markets:
+        return "aucun marché ouvert sous l'étiquette fed"
+    top = max(markets, key=lambda m: m.volume_24h_usd)
+    return (
+        f"{len(events)} événements, {len(markets)} marchés ; le plus échangé : "
+        f"« {top.question} » à {top.yes_price:.0%}, {top.week_change * 100:+.0f} pts/semaine"
+    )
+
+
+def _edgar_form4() -> str:
+    from datetime import timedelta
+
+    for back in range(0, 5):
+        day = date.today() - timedelta(days=back)
+        entries = edgar.daily_index(day, "4")
+        if entries:
+            filing = edgar.form4(entries[0])
+            what = f"{filing.issuer} ({filing.symbol})" if filing else "document sans bloc lisible"
+            return f"{day} : {len(entries)} dépôts, premier {what}"
+    return "aucun index quotidien sur cinq jours"
+
+
+def _edgar_13f() -> str:
+    filings = edgar.filings_13f(1067983)  # Berkshire Hathaway
+    if not filings:
+        return "aucun 13F-HR pour Berkshire"
+    holdings = edgar.holdings_13f(filings[0])
+    total = sum(h.value_usd for h in holdings.values())
+    return f"Berkshire au {filings[0].period}: {len(holdings)} lignes, {total / 1e9:,.0f} Md$"
+
+
 # Daily index series would let the stress tests replay a Nasdaq or a Europe
 # fund on the exact dates of each episode, instead of lending it the amplitude
 # of world equities. What matters is how far back each one goes: an index that
@@ -163,6 +209,9 @@ PROBES: tuple[Probe, ...] = (
     *(Probe("xtrackers", fund, _constituents(fund)) for fund in xtrackers.funds()),
     Probe("yahoo", "Cours quotidiens", _yahoo),
     *(Probe("yahoo", label, _yahoo_index(t)) for t, label in YAHOO_INDICES.items()),
+    Probe("polymarket", "Marchés Fed", _polymarket),
+    Probe("edgar", "Form 4 du jour", _edgar_form4),
+    Probe("edgar", "13F Berkshire", _edgar_13f),
 )
 
 

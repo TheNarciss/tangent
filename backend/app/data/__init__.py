@@ -12,6 +12,9 @@ Nothing here knows about a user, a portfolio or a verdict: consumers in
 - `shiller`    : S&P 500, IPC et taux longs mensuels, depuis 1871
 - `lbma`       : fixings or et argent, depuis 1968
 - `openfigi`   : ISIN → ticker / place / nom
+- `xtrackers`  : constituants d'indice, lus dans les positions d'un ETF
+- `polymarket` : cotes des marchés de prédiction (Fed, récession, pétrole…)
+- `edgar`      : déclarations SEC — achats de dirigeants (Form 4), positions des gérants (13F)
 
 None of them needs an account or an API key (ADR-024). `probe.py` checks that
 they still answer and reports their coverage.

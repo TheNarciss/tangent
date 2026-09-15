@@ -609,6 +609,24 @@ class PicksTrackRecord(BaseModel):
     yearly: list[PicksYearRow]
 
 
+class MarketLead(BaseModel):
+    """One thing worth a look, straight from a source; the briefing does the triage."""
+
+    source: str  # polymarket | edgar_form4 | edgar_13f
+    kind: str  # prediction_move | prediction_state | insider_cluster | insider_buy | fund_*
+    title: str
+    detail: str
+    url: str
+    observed_at: str  # YYYY-MM-DD
+    symbols: list[str] = []
+    weight: float = Field(0.5, ge=0, le=1)  # crude order only, never a recommendation
+
+
+class MarketLeadsResponse(BaseModel):
+    computed_at: str  # ISO-8601, UTC
+    leads: list[MarketLead]
+
+
 class PicksResponse(BaseModel):
     computed_at: str  # ISO-8601, UTC — when the scheduler built it
     as_of: str

@@ -33,6 +33,7 @@ from .routers import (
     enablebanking,
     envelopes,
     export,
+    market_leads,
     oauth_accounts,
     password_reset,
     picks,
@@ -262,6 +263,7 @@ app.include_router(dashboard.router, prefix="/api")
 app.include_router(analysis.router, prefix="/api")
 app.include_router(planning.router, prefix="/api")
 app.include_router(picks.router, prefix="/api")
+app.include_router(market_leads.router, prefix="/api")
 app.include_router(spending.router, prefix="/api")
 app.include_router(watchlist.router, prefix="/api")
 app.include_router(envelopes.router, prefix="/api")

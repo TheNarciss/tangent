@@ -87,6 +87,16 @@ class OpenFigiConfig(BaseModel):
     min_seconds_between_requests: float = Field(default=2.5, ge=0)
 
 
+class PolymarketConfig(BaseModel):
+    base_url: str
+
+
+class EdgarConfig(BaseModel):
+    archives_url: str
+    submissions_url: str
+    min_seconds_between_requests: float = Field(default=0.12, ge=0)
+
+
 class DataSourcesConfig(BaseModel):
     http_timeout_seconds: float = Field(default=20.0, gt=0)
     user_agent: str = "tangent/1.0"
@@ -100,6 +110,8 @@ class DataSourcesConfig(BaseModel):
     lbma: LbmaConfig
     openfigi: OpenFigiConfig
     xtrackers: XtrackersConfig
+    polymarket: PolymarketConfig
+    edgar: EdgarConfig
 
 
 @lru_cache(maxsize=1)

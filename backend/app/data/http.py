@@ -46,15 +46,23 @@ def _headers() -> dict[str, str]:
     return {"User-Agent": config().user_agent}
 
 
-def get_text(url: str, *, params: dict[str, str] | None = None, ttl_hours: float) -> str:
-    """GET a text body (CSV, JSON). Cached under url + params."""
+def get_text(
+    url: str, *, params: dict[str, str] | None = None, ttl_hours: float, cache: bool = True
+) -> str:
+    """GET a text body (CSV, JSON). Cached under url + params.
+
+    `cache=False` for a body read once and never again (a filing among a
+    thousand a day): the cache never forgets, so it must not be told.
+    """
     key = f"GET:{url}:{sorted((params or {}).items())}"
-    hit = _cached(key, ttl_hours)
-    if hit is not None:
-        return str(hit)
+    if cache:
+        hit = _cached(key, ttl_hours)
+        if hit is not None:
+            return str(hit)
 
     body = _request("GET", url, params=params).text
-    _store(key, body)
+    if cache:
+        _store(key, body)
     return body
 
 
