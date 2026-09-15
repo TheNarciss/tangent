@@ -29,8 +29,8 @@ stitching into a single human-readable narrative.
 - **Frequency cap**: 1 generated review per (user, calendar day in
   Europe/Paris). Enforced by a UNIQUE constraint on
   `(user_id, review_date)` in `portfolio_reviews`.
-- **Cost cap**: hard daily kill-switch at **€5/day** total spend across all
-  users. When hit → endpoint returns HTTP 503 with a "réessayer demain"
+- **Cost cap**: hard daily kill-switch at **$1/day** (under €1) total spend
+  across all users, batches in flight included (amended 2026-09-15; was €5). When hit → endpoint returns HTTP 503 with a "réessayer demain"
   message. Atomic increment on a `llm_daily_cost` row keyed by date
   (UPSERT in a single SQL statement to dodge races).
 - **Transport**: Server-Sent Events from FastAPI → React. The LLM stream
