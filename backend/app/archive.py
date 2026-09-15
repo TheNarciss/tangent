@@ -21,11 +21,12 @@ import dataclasses
 import json
 import logging
 import os
+import uuid
 from datetime import UTC, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import distinct, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.inspection import inspect as sa_inspect
@@ -42,7 +43,7 @@ from .repositories import bank_transactions as tx_repo
 from .repositories import profile as profile_repo
 from .repositories import reviews as reviews_repo
 from .repositories import watchlist as watchlist_repo
-from .repositories.archive import record_market, record_user
+from .repositories.archive import list_for_user, record_market, record_user
 from .routers.profile import _to_out as profile_out
 from .routers.spending import build_spending
 from .snapshot_job import performance_for
@@ -265,6 +266,30 @@ async def run(
     return written, market_ok
 
 
+async def user_history(session: AsyncSession, user_id: uuid.UUID) -> list[dict[str, Any]]:
+    """Every snapshot of one user, opened: for the export, since the data is theirs.
+
+    Without the key nothing opens and the caller gets the error; a single row
+    that will not open (another key, a damaged token) is reported in place.
+    """
+    rows = await list_for_user(session, user_id)
+    fernet = _fernet()
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        entry: dict[str, Any] = {
+            "snapshot_date": row.snapshot_date.isoformat(),
+            "slot": row.slot,
+            "taken_at": row.taken_at.isoformat(),
+            "size_bytes": row.size_bytes,
+        }
+        try:
+            entry["data"] = json.loads(fernet.decrypt((row.sealed or "").encode()).decode())
+        except (InvalidToken, ValueError) as exc:
+            entry["error"] = f"{type(exc).__name__}: illisible avec la clé actuelle"
+        out.append(entry)
+    return out
+
+
 def slot_for(now: datetime | None = None) -> str:
     """Morning before 14:00 Paris, evening after: what a run started by hand is called."""
     hour = (now or datetime.now(UTC)).astimezone(_PARIS).hour
@@ -279,5 +304,6 @@ __all__ = [
     "seal",
     "slot_for",
     "unseal",
+    "user_history",
     "user_payload",
 ]

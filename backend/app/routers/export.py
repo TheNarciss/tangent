@@ -2,7 +2,9 @@
 
 For debugging: the file replays every screen (patrimoine, dashboard, verdicts,
 projection, briefings) plus the method's intermediate steps (how each line
-was classified, which dates and series each crisis was measured on). Each
+was classified, which dates and series each crisis was measured on), and
+the whole archive (ADR-034): what the app knew morning and evening, every
+day, opened with the archive key since the data is the person's own. Each
 section is computed on its own, so one failing screen appears as an error
 entry instead of blanking the export — a debugging file must never be empty
 because of the bug it was meant to show.
@@ -22,6 +24,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .. import archive
 from ..auth import User, current_active_user
 from ..deps import get_session, get_user_wealth
 from ..finance import (
@@ -116,6 +119,7 @@ async def export_everything(
         "withdrawal_rate": lambda: run_in_threadpool(withdrawal.default_withdrawal_rate),
         "reviews": reviews,
         "method": lambda: run_in_threadpool(_method, wealth),
+        "archive": lambda: archive.user_history(session, user.id),
     }
     for name, build in sections.items():
         try:
