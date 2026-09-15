@@ -1012,6 +1012,44 @@ export function usePicks() {
   });
 }
 
+/* ── Briefing on demand (admin, debug) ──────────────────────────────── */
+
+/**
+ * Generate today's briefing now instead of tonight. The route streams the
+ * text as server-sent events; the stream is read to the end and the
+ * briefing is then in `/reviews/today`. Rejected before the stream starts
+ * with the usual statuses (403 not an admin, 409 already generated, 503
+ * budget reached) and mid-stream with an `error` event.
+ */
+export async function generateReviewNow(): Promise<void> {
+  const res = await fetch(`${API_URL}/reviews/generate`, {
+    method: "POST",
+    credentials: "include",
+    headers: { Accept: "text/event-stream" },
+  });
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`;
+    try {
+      const body = (await res.json()) as { detail?: string };
+      if (body.detail) detail = body.detail;
+    } catch {
+      // not JSON: keep the status line
+    }
+    throw new ApiError(res.status, "HttpError", detail);
+  }
+  const text = await res.text();
+  const failed = text.match(/^event: error\ndata: (.*)$/m);
+  if (failed) {
+    let reason = "internal";
+    try {
+      reason = (JSON.parse(failed[1]) as { reason?: string }).reason ?? reason;
+    } catch {
+      // keep "internal"
+    }
+    throw new ApiError(500, "ReviewError", `La génération a échoué (${reason}).`);
+  }
+}
+
 /* ── Market leads (ADR-033) ─────────────────────────────────────────── */
 
 export type MarketLeadSource = "polymarket" | "edgar_form4" | "edgar_13f";

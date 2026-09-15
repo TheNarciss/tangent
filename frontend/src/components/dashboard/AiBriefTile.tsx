@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Sparkles } from "lucide-react";
 
-import { useReviews, useTodayReview, type PortfolioReviewResponse } from "@/api";
+import { useCurrentUser, useReviews, useTodayReview, type PortfolioReviewResponse } from "@/api";
 import { useProfile } from "@/lib/profile";
 import { ReviewSheet } from "@/components/ReviewSheet";
 import { Button } from "@/components/ui/button";
@@ -49,6 +49,7 @@ const dateFmt = new Intl.DateTimeFormat("fr-FR", {
  */
 export function AiBriefTile() {
   const { data: review, isLoading } = useTodayReview();
+  const { data: user } = useCurrentUser();
   const [profile, setProfile] = useProfile();
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<PortfolioReviewResponse | null>(null);
@@ -87,18 +88,23 @@ export function AiBriefTile() {
               Chaque matin, un court texte sur ce qui a bougé dans ton patrimoine et ce que ça veut
               dire. Rien à lire si rien n'a bougé.
             </p>
-            <Button
-              size="sm"
-              className="self-start"
-              disabled={!profile}
-              onClick={() => profile && setProfile({ ...profile, auto_review_enabled: true })}
-            >
-              Activer le briefing du matin
-            </Button>
-            {!profile && (
-              <p className="text-[10px] text-muted-foreground">
-                Renseigne d'abord ton profil pour l'activer.
-              </p>
+            {/* The nightly run costs an LLM call: only an administrator turns it on. */}
+            {user?.is_superuser && (
+              <>
+                <Button
+                  size="sm"
+                  className="self-start"
+                  disabled={!profile}
+                  onClick={() => profile && setProfile({ ...profile, auto_review_enabled: true })}
+                >
+                  Activer le briefing du matin
+                </Button>
+                {!profile && (
+                  <p className="text-[10px] text-muted-foreground">
+                    Renseigne d'abord ton profil pour l'activer.
+                  </p>
+                )}
+              </>
             )}
           </>
         )}
