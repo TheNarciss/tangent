@@ -5,6 +5,7 @@ import {
   type OptimizerRequest,
   type OptimizerResponse,
 } from "@/api";
+import { useT } from "@/i18n";
 import { fmt } from "@/lib/format";
 import { ageFromBirthDate, ceilingsFromEnvelopes, useProfile } from "@/lib/profile";
 import { cn } from "@/lib/utils";
@@ -22,6 +23,7 @@ const MATERIAL_EUR = 500;
  * changer » (ADR-028).
  */
 export function Proposal() {
+  const { t } = useT();
   const [profile] = useProfile();
   const wealth = useWealthSummary();
 
@@ -46,35 +48,35 @@ export function Proposal() {
   const proposal = useOptimizer(req);
 
   if (proposal.isLoading) {
-    return <p className="text-xs text-muted-foreground">Calcul de la piste…</p>;
+    return <p className="text-xs text-muted-foreground">{t("method.proposal.loading")}</p>;
   }
   if (proposal.error) return <ProposalError error={proposal.error} />;
   if (!proposal.data) return null;
   return (
     <div>
-      <h4 className="text-sm font-medium">Une piste{hasProfile ? ", selon ton profil" : ""}</h4>
+      <h4 className="text-sm font-medium">
+        {hasProfile ? t("method.proposal.titleProfile") : t("method.proposal.title")}
+      </h4>
       <ProposalMoves data={proposal.data} />
       {!hasProfile && (
-        <p className="mt-2 text-xs text-muted-foreground">
-          Renseigne ton profil pour une piste adaptée à ton curseur prudent ↔ dynamique.
-        </p>
+        <p className="mt-2 text-xs text-muted-foreground">{t("method.proposal.fillProfile")}</p>
       )}
     </div>
   );
 }
 
 function ProposalError({ error }: { error: unknown }) {
+  const { t } = useT();
   const infeasible = error instanceof ApiError && /infeasible|impossible/i.test(error.message);
   return (
     <p className="mt-1 text-sm text-muted-foreground">
-      {infeasible
-        ? "Avec tes lignes actuelles, le rendement visé n'est pas atteignable au niveau de risque de ton curseur. Piste : accepter un peu plus de variations, ou viser moins haut."
-        : "La piste n'a pas pu être calculée pour l'instant."}
+      {infeasible ? t("method.proposal.infeasible") : t("method.proposal.error")}
     </p>
   );
 }
 
 function ProposalMoves({ data }: { data: OptimizerResponse }) {
+  const { t } = useT();
   const moves = data.actions
     .map((a, i) => ({ ...a, label: data.asset_labels[i], kind: data.asset_kinds[i] }))
     .filter(
@@ -83,11 +85,7 @@ function ProposalMoves({ data }: { data: OptimizerResponse }) {
     .sort((a, b) => Math.abs(b.delta_value) - Math.abs(a.delta_value));
 
   if (moves.length === 0) {
-    return (
-      <p className="mt-1 text-sm text-muted-foreground">
-        Rien à changer : ta répartition colle déjà à ton profil.
-      </p>
-    );
+    return <p className="mt-1 text-sm text-muted-foreground">{t("method.proposal.nothing")}</p>;
   }
   return (
     <div className="mt-2 space-y-2">
@@ -97,7 +95,11 @@ function ProposalMoves({ data }: { data: OptimizerResponse }) {
           return (
             <li key={a.ticker} className="flex items-center justify-between gap-3 px-3 py-2">
               <span className="min-w-0 truncate">
-                {a.kind === "envelope" ? "Placer sur" : buy ? "Renforcer" : "Alléger"}{" "}
+                {a.kind === "envelope"
+                  ? t("method.proposal.placeOn")
+                  : buy
+                    ? t("method.proposal.buy")
+                    : t("method.proposal.sell")}{" "}
                 <strong>{a.label}</strong>
               </span>
               <span
@@ -113,10 +115,7 @@ function ProposalMoves({ data }: { data: OptimizerResponse }) {
           );
         })}
       </ul>
-      <p className="text-xs text-muted-foreground">
-        Ce n'est qu'une piste : avant de vendre, compte les frais de courtage et l'impôt sur la
-        plus-value. Le plus simple est souvent d'orienter tes prochains versements.
-      </p>
+      <p className="text-xs text-muted-foreground">{t("method.proposal.note")}</p>
     </div>
   );
 }

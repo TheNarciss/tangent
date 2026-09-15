@@ -2,6 +2,7 @@ import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 
+import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 
 /**
@@ -40,34 +41,37 @@ type ContentRef = React.ElementRef<typeof DialogPrimitive.Content>;
 type ContentProps = React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>;
 
 const BottomSheetContent = React.forwardRef<ContentRef, ContentProps>(
-  ({ className, children, ...props }, ref) => (
-    <BottomSheetPortal>
-      <BottomSheetOverlay />
-      <DialogPrimitive.Content
-        ref={ref}
-        className={cn(
-          "fixed z-50 bg-card text-foreground shadow-lg",
-          "inset-x-0 bottom-0 max-h-[90vh] overflow-y-auto rounded-t-2xl border-t border-border",
-          "data-[state=open]:animate-in data-[state=closed]:animate-out",
-          "data-[state=open]:slide-in-from-bottom data-[state=closed]:slide-out-to-bottom",
-          "data-[state=open]:duration-200 data-[state=closed]:duration-150",
-          "md:inset-x-auto md:bottom-auto md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2",
-          "md:max-h-[85vh] md:w-full md:max-w-2xl md:rounded-lg md:border",
-          "md:data-[state=open]:slide-in-from-bottom-0 md:data-[state=closed]:slide-out-to-bottom-0",
-          "md:data-[state=open]:zoom-in-95 md:data-[state=closed]:zoom-out-95",
-          className,
-        )}
-        {...props}
-      >
-        <div className="mx-auto mt-2 h-1 w-12 rounded-full bg-muted md:hidden" aria-hidden />
-        {children}
-        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
-          <X className="h-4 w-4" />
-          <span className="sr-only">Fermer</span>
-        </DialogPrimitive.Close>
-      </DialogPrimitive.Content>
-    </BottomSheetPortal>
-  ),
+  ({ className, children, ...props }, ref) => {
+    const { t } = useT();
+    return (
+      <BottomSheetPortal>
+        <BottomSheetOverlay />
+        <DialogPrimitive.Content
+          ref={ref}
+          className={cn(
+            "fixed z-50 bg-card text-foreground shadow-lg",
+            "inset-x-0 bottom-0 max-h-[90vh] overflow-y-auto rounded-t-2xl border-t border-border",
+            "data-[state=open]:animate-in data-[state=closed]:animate-out",
+            "data-[state=open]:slide-in-from-bottom data-[state=closed]:slide-out-to-bottom",
+            "data-[state=open]:duration-200 data-[state=closed]:duration-150",
+            "md:inset-x-auto md:bottom-auto md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2",
+            "md:max-h-[85vh] md:w-full md:max-w-2xl md:rounded-lg md:border",
+            "md:data-[state=open]:slide-in-from-bottom-0 md:data-[state=closed]:slide-out-to-bottom-0",
+            "md:data-[state=open]:zoom-in-95 md:data-[state=closed]:zoom-out-95",
+            className,
+          )}
+          {...props}
+        >
+          <div className="mx-auto mt-2 h-1 w-12 rounded-full bg-muted md:hidden" aria-hidden />
+          {children}
+          <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
+            <X className="h-4 w-4" />
+            <span className="sr-only">{t("investments.ui.close")}</span>
+          </DialogPrimitive.Close>
+        </DialogPrimitive.Content>
+      </BottomSheetPortal>
+    );
+  },
 );
 BottomSheetContent.displayName = "BottomSheetContent";
 

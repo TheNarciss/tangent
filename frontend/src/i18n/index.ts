@@ -15,7 +15,11 @@ import { accounts } from "./messages/accounts";
 import { auth } from "./messages/auth";
 import { common } from "./messages/common";
 import { dashboard } from "./messages/dashboard";
+import { investments } from "./messages/investments";
+import { market } from "./messages/market";
+import { method } from "./messages/method";
 import { nav } from "./messages/nav";
+import { planning } from "./messages/planning";
 import { spending } from "./messages/spending";
 import { system } from "./messages/system";
 import { getLocale, useLocale, type Locale } from "./locale";
@@ -41,6 +45,10 @@ const FR = {
   ...system.fr,
   ...accounts.fr,
   ...spending.fr,
+  ...investments.fr,
+  ...market.fr,
+  ...method.fr,
+  ...planning.fr,
 };
 const EN: Record<MessageKey, string> = {
   ...common.en,
@@ -51,6 +59,10 @@ const EN: Record<MessageKey, string> = {
   ...system.en,
   ...accounts.en,
   ...spending.en,
+  ...investments.en,
+  ...market.en,
+  ...method.en,
+  ...planning.en,
 };
 
 export type MessageKey = keyof typeof FR;

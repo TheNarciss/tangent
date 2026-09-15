@@ -2,6 +2,8 @@ import ReactMarkdown from "react-markdown";
 import { Clock, ExternalLink } from "lucide-react";
 
 import type { PortfolioReviewResponse } from "@/api";
+import { useT } from "@/i18n";
+import { formatDate } from "@/lib/accounts";
 
 interface ReviewSheetProps {
   review: PortfolioReviewResponse;
@@ -17,24 +19,19 @@ interface Source {
  * tokens and cost are audit data, not something the reader needs.
  */
 export function ReviewSheet({ review }: ReviewSheetProps) {
+  const { t, tn } = useT();
   const sources = (review.sources ?? []) as Source[];
   return (
     <div className="p-4 md:p-6">
       <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border pb-4 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-1">
           <Clock className="h-3 w-3" />
-          {new Date(review.created_at).toLocaleString("fr-FR", {
-            dateStyle: "long",
-            timeStyle: "short",
-          })}
+          {formatDate(review.created_at, { dateStyle: "long", timeStyle: "short" })}
         </span>
         {review.web_searches_count > 0 && (
           <>
             <span>·</span>
-            <span>
-              {review.web_searches_count} source{review.web_searches_count > 1 ? "s" : ""} consultée
-              {review.web_searches_count > 1 ? "s" : ""}
-            </span>
+            <span>{tn("market.review.sourcesConsulted", review.web_searches_count)}</span>
           </>
         )}
       </div>
@@ -73,7 +70,7 @@ export function ReviewSheet({ review }: ReviewSheetProps) {
       {sources.length > 0 && (
         <div className="mt-6 border-t border-border pt-4">
           <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Sources consultées
+            {t("market.review.sourcesTitle")}
           </h4>
           <ul className="space-y-1">
             {sources.map((s, i) => (

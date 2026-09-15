@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { useRiskLevels, useWealthSummary, type RiskLevel } from "@/api";
+import { LOCALE_TAGS, getLocale, useT } from "@/i18n";
 import { fmt } from "@/lib/format";
 import {
   ageFromBirthDate,
@@ -24,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+/** Product names, the same in every language. */
 const LIVRETS: [keyof CeilingsUsed, string][] = [
   ["livret_a", "Livret A"],
   ["ldds", "LDDS"],
@@ -38,6 +40,7 @@ const LIVRETS: [keyof CeilingsUsed, string][] = [
  * bas propose Annuler / Enregistrer. Le titre de page est porté par AppShell.
  */
 export function ProfilePage() {
+  const { t, tn } = useT();
   const [profile, setProfile] = useProfile();
   const [draft, setDraft] = useState<UserProfile>(profile ?? EMPTY_PROFILE);
   const riskLevels = useRiskLevels();
@@ -78,13 +81,17 @@ export function ProfilePage() {
     <div>
       <div className="mx-auto max-w-2xl space-y-8 pb-24">
         <Section
-          title="1 · Ta date de naissance"
-          description="Ton âge conditionne les livrets auxquels tu as droit et l'horizon de tes placements."
+          title={t("planning.profile.birth.title")}
+          description={t("planning.profile.birth.description")}
         >
           <Field
-            label="Date de naissance"
+            label={t("planning.profile.birth.label")}
             htmlFor="birth_date"
-            hint={age !== null ? `${age} ans` : "Obligatoire pour enregistrer"}
+            hint={
+              age !== null
+                ? tn("planning.profile.birth.age", age)
+                : t("planning.profile.birth.required")
+            }
           >
             <Input
               id="birth_date"
@@ -97,11 +104,11 @@ export function ProfilePage() {
         </Section>
 
         <Section
-          title="2 · Ton foyer"
-          description="Sert à calculer tes parts fiscales, et donc les plafonds de revenu des livrets (LEP)."
+          title={t("planning.profile.household.title")}
+          description={t("planning.profile.household.description")}
         >
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Situation" htmlFor="household">
+            <Field label={t("planning.profile.household.status")} htmlFor="household">
               <Select
                 value={draft.household_status}
                 onValueChange={(v: HouseholdStatus) => setHousehold(v, draft.children)}
@@ -110,15 +117,17 @@ export function ProfilePage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="single">Célibataire</SelectItem>
-                  <SelectItem value="couple">En couple (marié·e ou pacsé·e)</SelectItem>
+                  <SelectItem value="single">{t("planning.profile.household.single")}</SelectItem>
+                  <SelectItem value="couple">{t("planning.profile.household.couple")}</SelectItem>
                 </SelectContent>
               </Select>
             </Field>
             <Field
-              label="Enfants à charge"
+              label={t("planning.profile.household.children")}
               htmlFor="children"
-              hint={`= ${fmtShares(draft.fiscal_shares)} fiscale${draft.fiscal_shares > 1 ? "s" : ""}`}
+              hint={tn("planning.profile.household.shares", draft.fiscal_shares, {
+                shares: fmtShares(draft.fiscal_shares),
+              })}
             >
               <Input
                 id="children"
@@ -136,10 +145,10 @@ export function ProfilePage() {
         </Section>
 
         <Section
-          title="3 · Ton revenu fiscal de référence"
-          description="Il est écrit sur la première page de ton avis d'imposition (« Revenu fiscal de référence »). Prends celui d'il y a deux ans."
+          title={t("planning.profile.rfr.title")}
+          description={t("planning.profile.rfr.description")}
         >
-          <Field label="Revenu fiscal de référence (€)" htmlFor="rfr">
+          <Field label={t("planning.profile.rfr.label")} htmlFor="rfr">
             <Input
               id="rfr"
               type="number"
@@ -153,10 +162,10 @@ export function ProfilePage() {
         </Section>
 
         <Section
-          title="4 · Ce que tu mets de côté chaque mois"
-          description="Le versement que Tangent utilise pour projeter ton épargne."
+          title={t("planning.profile.dca.title")}
+          description={t("planning.profile.dca.description")}
         >
-          <Field label="Épargne mensuelle (€ / mois)" htmlFor="dca">
+          <Field label={t("planning.profile.dca.label")} htmlFor="dca">
             <Input
               id="dca"
               type="number"
@@ -170,8 +179,8 @@ export function ProfilePage() {
         </Section>
 
         <Section
-          title="5 · Prudent ou dynamique ?"
-          description="Plus tu vas vers « dynamique », plus Tangent accepte que ton épargne varie d'une année à l'autre, en échange d'un rendement visé plus élevé."
+          title={t("planning.profile.risk.title")}
+          description={t("planning.profile.risk.description")}
         >
           <RiskSlider
             value={draft.risk_level}
@@ -193,15 +202,15 @@ export function ProfilePage() {
           <div className="mx-auto flex max-w-2xl items-center justify-between gap-3 px-4 py-3">
             <p className="text-sm text-muted-foreground">
               {isProfileComplete(draft)
-                ? "Modifications non enregistrées"
-                : "Renseigne ta date de naissance pour enregistrer"}
+                ? t("planning.profile.unsaved")
+                : t("planning.profile.needBirthDate")}
             </p>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={handleReset}>
-                Annuler
+                {t("common.cancel")}
               </Button>
               <Button size="sm" onClick={handleSave} disabled={!isProfileComplete(draft)}>
-                Enregistrer
+                {t("common.save")}
               </Button>
             </div>
           </div>
@@ -226,6 +235,7 @@ function RiskSlider({
   fallback: { target_annual_return: number; max_annual_volatility: number };
   onChange: (level: number) => void;
 }) {
+  const { t } = useT();
   const max = levels?.length ?? 5;
   const current = levels?.find((l) => l.level === value);
   const target = current?.target_annual_return ?? fallback.target_annual_return;
@@ -241,18 +251,22 @@ function RiskSlider({
         step={1}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        aria-label="Niveau de risque"
+        aria-label={t("planning.profile.risk.aria")}
         className="h-2 w-full cursor-pointer accent-primary"
       />
       <div className="flex justify-between text-xs text-muted-foreground">
-        <span>Prudent</span>
-        <span className="font-medium text-foreground">{current?.label ?? `Niveau ${value}`}</span>
-        <span>Dynamique</span>
+        <span>{t("planning.profile.risk.cautious")}</span>
+        <span className="font-medium text-foreground">
+          {current?.label ?? t("planning.profile.risk.level", { level: value })}
+        </span>
+        <span>{t("planning.profile.risk.dynamic")}</span>
       </div>
       <p className="text-sm text-muted-foreground">
-        Tangent vise environ <strong className="text-foreground">{wholePct(target)}</strong> par an
-        et accepte des variations jusqu'à{" "}
-        <strong className="text-foreground">±{wholePct(vol)}</strong> sur une année.
+        {t("planning.profile.risk.aimsBefore")}
+        <strong className="text-foreground">{fmt.pct0(target)}</strong>
+        {t("planning.profile.risk.aimsMiddle")}
+        <strong className="text-foreground">±{fmt.pct0(vol)}</strong>
+        {t("planning.profile.risk.aimsAfter")}
       </p>
     </div>
   );
@@ -269,14 +283,15 @@ function LivretsSection({
   draft: UserProfile;
   setDraft: (p: UserProfile) => void;
 }) {
+  const { t } = useT();
   const wealth = useWealthSummary();
   const synced = wealth.data?.envelopes ?? [];
 
   if (synced.length > 0) {
     return (
       <Section
-        title="Tes livrets"
-        description="Lus automatiquement depuis tes comptes connectés : rien à saisir."
+        title={t("planning.profile.livrets.title")}
+        description={t("planning.profile.livrets.synced")}
       >
         <ul className="divide-y rounded-md border text-sm">
           {synced.map((e, i) => (
@@ -292,12 +307,12 @@ function LivretsSection({
 
   return (
     <Section
-      title="Tes livrets"
-      description="Aucun livret synchronisé pour l'instant. Si tu en as ailleurs, indique leurs soldes pour que Tangent connaisse ta marge disponible. Laisse à 0 sinon."
+      title={t("planning.profile.livrets.title")}
+      description={t("planning.profile.livrets.manual")}
     >
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-        {LIVRETS.map(([key, label]) => (
-          <Field key={key} label={`${label} (€)`} htmlFor={key}>
+        {LIVRETS.map(([key, name]) => (
+          <Field key={key} label={t("planning.profile.livrets.field", { name })} htmlFor={key}>
             <Input
               id={key}
               type="number"
@@ -322,12 +337,9 @@ function LivretsSection({
 /*  Atoms                                                                     */
 /* ────────────────────────────────────────────────────────────────────────── */
 
-function wholePct(fraction: number): string {
-  return `${Math.round(fraction * 100)} %`;
-}
-
+/** 1.5 → « 1,5 » / « 1.5 » : fiscal shares, in the language in effect. */
 function fmtShares(n: number): string {
-  return `${n.toLocaleString("fr-FR")} part${n > 1 ? "s" : ""}`;
+  return n.toLocaleString(LOCALE_TAGS[getLocale()]);
 }
 
 function Field({

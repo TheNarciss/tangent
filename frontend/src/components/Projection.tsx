@@ -7,6 +7,7 @@ import {
   useWithdrawalRate,
   type ProjectionResponse,
 } from "@/api";
+import { LOCALE_TAGS, getLocale, t, tn, useT } from "@/i18n";
 import { useDebouncedValue } from "@/lib/hooks";
 import { fmt } from "@/lib/format";
 import { useProfile } from "@/lib/profile";
@@ -28,6 +29,20 @@ import {
 const WITHDRAWAL_RATE_FALLBACK = 0.035;
 const MONTHLY_MAX = 2000;
 
+/** « 200 € » / « €200 » — the input's whole euros without the empty cents, decimals kept. */
+function wholeEur(v: number): string {
+  return fmt.eur(v).replace(/[.,]00(?=\D*$)/, "");
+}
+
+/** 0.035 → « 3,5 % » / « 3.5% » : the withdrawal rate, one decimal. */
+function pct1(v: number): string {
+  return new Intl.NumberFormat(LOCALE_TAGS[getLocale()], {
+    style: "percent",
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(v);
+}
+
 /**
  * Projection — one question (« si je continue à verser X € par mois, j'aurai
  * combien dans N ans ? »), pre-filled from the profile, answered with three
@@ -35,6 +50,7 @@ const MONTHLY_MAX = 2000;
  * The maths (Monte-Carlo, quantiles, fee model) sit behind « Comment c'est calculé ? ».
  */
 export function Projection() {
+  const { t, tn } = useT();
   const [profile, setProfile] = useProfile();
   const [monthly, setMonthly] = useState(profile?.monthly_dca ?? 200);
   const [years, setYears] = useState(profile?.horizon_years ?? 10);
@@ -95,15 +111,15 @@ export function Projection() {
       <VerdictLine id="goal" to={NAV_PATHS.method} />
       <section className="rounded-xl border bg-card p-4 md:p-6">
         <h2 className="text-base font-semibold">
-          Si je continue à verser{" "}
-          <span className="font-mono tabular">{fmt.eur(monthly).replace(",00", "")}</span> par mois
-          pendant {years} an{years > 1 ? "s" : ""}…
+          {t("planning.question.before")}
+          <span className="font-mono tabular">{wholeEur(monthly)}</span>
+          {tn("planning.question.after", years)}
         </h2>
 
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="monthly" className="text-xs text-muted-foreground">
-              Et si je versais… (€ par mois)
+              {t("planning.monthly.label")}
             </Label>
             <div className="flex items-center gap-3">
               <input
@@ -115,7 +131,7 @@ export function Projection() {
                 value={Math.min(monthly, MONTHLY_MAX)}
                 onChange={(e) => onMonthly(Number(e.target.value))}
                 className="h-2 flex-1 cursor-pointer accent-primary"
-                aria-label="Versement mensuel"
+                aria-label={t("planning.monthly.aria")}
               />
               <Input
                 type="number"
@@ -128,7 +144,7 @@ export function Projection() {
             </div>
           </div>
           <NumberField
-            label="Pendant combien d'années"
+            label={t("planning.years.label")}
             value={years}
             onChange={(v) => onYears(Math.min(50, Math.max(1, typeof v === "number" ? v : 1)))}
             min={1}
@@ -205,59 +221,66 @@ function Headline({
     reachedIdx >= 0 ? new Date().getFullYear() + Math.round(data.months[reachedIdx] / 12) : null;
   const chances = data.goal_prob_at_end !== null ? Math.round(data.goal_prob_at_end * 10) : null;
   const hasGoal = data.goal !== null && data.goal > 0 && chances !== null;
+  const { t, tn } = useT();
 
   return (
     <section
       className={cn("grid gap-3", hasGoal ? "sm:grid-cols-2 xl:grid-cols-4" : "sm:grid-cols-3")}
     >
       <Figure
-        label={`Dans ${years} an${years > 1 ? "s" : ""}, environ`}
+        label={tn("planning.figure.inYears", years)}
         value={fmt.approxEur(median)}
-        sub={`entre ${fmt.kEur(lo)} et ${fmt.kEur(hi)}, 8 fois sur 10`}
+        sub={t("planning.figure.range", { lo: fmt.kEur(lo), hi: fmt.kEur(hi) })}
       />
       <Figure
-        label="Capital de départ + versements"
+        label={t("planning.figure.invested")}
         value={fmt.approxEur(invested)}
-        sub="ce que tu auras mis, sans gain ni perte"
+        sub={t("planning.figure.investedSub")}
       />
       {hasGoal ? (
         <>
           <Figure
             label={
               goalMode === "income"
-                ? `Pour ${fmt.eur(income).replace(",00", "")} par mois à vie`
-                : `Objectif ${fmt.approxEur(data.goal!)}`
+                ? t("planning.figure.forIncome", { income: wholeEur(income) })
+                : t("planning.figure.goalAmount", { amount: fmt.approxEur(data.goal!) })
             }
-            value={reachedYear !== null ? `vers ${reachedYear}` : "pas dans l'horizon"}
+            value={
+              reachedYear !== null
+                ? t("planning.figure.around", { year: reachedYear })
+                : t("planning.figure.notInHorizon")
+            }
             sub={
               reachedYear !== null
-                ? `${chances} chance${chances! > 1 ? "s" : ""} sur 10 à la fin`
-                : `${chances} chance${chances! > 1 ? "s" : ""} sur 10 d'y être dans ${years} ans`
+                ? tn("planning.figure.chancesAtEnd", chances!)
+                : tn("planning.figure.chancesIn", chances!, { years })
             }
           />
           <Figure
             label={
               data.target_probability
-                ? `Pour ${chancesLabel(data.target_probability)}`
-                : "Versement requis"
+                ? t("planning.figure.forChances", {
+                    chances: chancesLabel(data.target_probability),
+                  })
+                : t("planning.figure.required")
             }
             value={
               data.required_monthly !== null
-                ? `${fmt.approxEur(data.required_monthly)}/mois`
-                : "hors de portée"
+                ? t("planning.figure.perMonth", { amount: fmt.approxEur(data.required_monthly) })
+                : t("planning.figure.outOfReach")
             }
             sub={
               data.required_monthly !== null
-                ? "le versement qu'il faudrait, frais compris"
-                : "vise moins haut, ou plus loin"
+                ? t("planning.figure.requiredSub")
+                : t("planning.figure.outOfReachSub")
             }
           />
         </>
       ) : (
         <Figure
-          label="Objectif"
-          value="—"
-          sub="Indique un objectif pour savoir quand tu l'atteins"
+          label={t("planning.figure.goal")}
+          value={t("common.none")}
+          sub={t("planning.figure.noGoalSub")}
         />
       )}
     </section>
@@ -269,11 +292,10 @@ function chancesLabel(p: number): string {
   for (const d of [2, 3, 4, 5, 10]) {
     const n = p * d;
     if (Math.abs(n - Math.round(n)) < 1e-9) {
-      const r = Math.round(n);
-      return `${r} chance${r > 1 ? "s" : ""} sur ${d}`;
+      return tn("planning.chances.of", Math.round(n), { d });
     }
   }
-  return `${Math.round(p * 100)} % de chances`;
+  return t("planning.chances.pct", { pct: fmt.pct0(p) });
 }
 
 function Figure({ label, value, sub }: { label: string; value: string; sub: string }) {
@@ -298,27 +320,28 @@ function FeesLine({
   const last = data.months.length - 1;
   const fees = data.cumulative_fees[last];
   const altFees = alt ? alt.cumulative_fees[alt.months.length - 1] : null;
+  const { t } = useT();
   return (
     <section className="rounded-xl border bg-card p-4 text-sm md:p-6">
       <p>
-        Chez <strong>{data.broker}</strong>, les frais te coûtent environ{" "}
-        <strong className="font-mono tabular">{fmt.approxEur(fees)}</strong> sur la période
+        {t("planning.fees.at")}
+        <strong>{data.broker}</strong>
+        {t("planning.fees.costAbout")}
+        <strong className="font-mono tabular">{fmt.approxEur(fees)}</strong>
+        {t("planning.fees.overPeriod")}
         {alt && altFees !== null && alt.broker !== data.broker && (
           <>
-            {" "}
-            · chez <strong>{alt.broker}</strong>, environ{" "}
+            {t("planning.fees.altAt")}
+            <strong>{alt.broker}</strong>
+            {t("planning.fees.altAbout")}
             <strong className="font-mono tabular">{fmt.approxEur(altFees)}</strong>
           </>
         )}
         .
       </p>
       <p className="mt-1 text-xs text-muted-foreground">
-        Frais de courtage et de tenue de compte, plus ce qu'ils t'auraient rapporté s'ils étaient
-        restés investis
-        {data.weighted_ter
-          ? `, frais des fonds (${(data.weighted_ter * 100).toFixed(2)} %/an) déjà dans les cours`
-          : ""}
-        .
+        {t("planning.fees.note")}
+        {data.weighted_ter ? t("planning.fees.noteTer", { ter: fmt.pct(data.weighted_ter) }) : ""}.
       </p>
       {data.multi_broker_warning && (
         <p className="mt-2 text-xs text-muted-foreground">{data.multi_broker_warning}</p>
@@ -376,12 +399,13 @@ function BrokerField({
   onChange: (v: string) => void;
   brokers: { default: string; brokers: { id: string; name: string }[] } | undefined;
 }) {
+  const { t } = useT();
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs text-muted-foreground">Chez qui tu investis</Label>
+      <Label className="text-xs text-muted-foreground">{t("planning.broker.label")}</Label>
       <Select value={value} onValueChange={onChange} disabled={!brokers}>
         <SelectTrigger>
-          <SelectValue placeholder="Chargement…" />
+          <SelectValue placeholder={t("common.loading")} />
         </SelectTrigger>
         <SelectContent>
           {brokers?.brokers.map((b) => (
@@ -412,16 +436,17 @@ function GoalField({
   onIncomeChange: (v: number) => void;
   withdrawalRate: number;
 }) {
+  const { t } = useT();
   return (
     <div className="space-y-1.5 sm:col-span-2">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <Label className="text-xs text-muted-foreground">Mon objectif (optionnel)</Label>
+        <Label className="text-xs text-muted-foreground">{t("planning.goal.label")}</Label>
         <div className="flex gap-1 text-xs">
           <ModeButton active={mode === "capital"} onClick={() => onModeChange("capital")}>
-            une somme
+            {t("planning.goal.modeCapital")}
           </ModeButton>
           <ModeButton active={mode === "income"} onClick={() => onModeChange("income")}>
-            un revenu mensuel à vie
+            {t("planning.goal.modeIncome")}
           </ModeButton>
         </div>
       </div>
@@ -432,7 +457,7 @@ function GoalField({
           step={5000}
           value={capital}
           onChange={(e) => onCapitalChange(e.target.value === "" ? "" : Number(e.target.value))}
-          placeholder="ex. 25 000"
+          placeholder={t("planning.goal.capitalPlaceholder")}
           className="font-mono tabular sm:max-w-xs"
         />
       ) : (
@@ -446,10 +471,11 @@ function GoalField({
             className="font-mono tabular sm:max-w-xs"
           />
           <p className="text-[11px] text-muted-foreground">
-            Il faut environ {fmt.approxEur((income * 12) / withdrawalRate)} de capital pour en
-            retirer {fmt.eur(income).replace(",00", "")} par mois sans l'épuiser, en retirant{" "}
-            {(withdrawalRate * 100).toFixed(1).replace(".", ",")} % par an : la règle américaine des
-            4 % ne tient pas sur l'histoire européenne.
+            {t("planning.goal.incomeNote", {
+              capital: fmt.approxEur((income * 12) / withdrawalRate),
+              income: wholeEur(income),
+              rate: pct1(withdrawalRate),
+            })}
           </p>
         </div>
       )}
@@ -482,17 +508,18 @@ function ModeButton({
 
 function ErrorState({ error }: { error: unknown }) {
   const empty = error instanceof ApiError && error.type === "portfolio_empty";
+  const { t } = useT();
   return (
     <div className="rounded-xl border border-dashed p-8 text-center">
       <p className="text-sm font-medium">
-        {empty ? "Pas encore de placements à projeter" : "Projection indisponible"}
+        {empty ? t("planning.error.emptyTitle") : t("planning.error.title")}
       </p>
       <p className="mt-1 text-sm text-muted-foreground">
         {empty
-          ? "Connecte un compte-titres, un PEA ou une assurance vie : la projection part de ce que tu détiens."
+          ? t("planning.error.emptyBody")
           : error instanceof Error
             ? error.message
-            : "Réessaie dans un instant."}
+            : t("planning.error.retry")}
       </p>
     </div>
   );
@@ -503,38 +530,38 @@ function ErrorState({ error }: { error: unknown }) {
 function HowItWorks({ data }: { data: ProjectionResponse }) {
   const years = Math.round(data.months[data.months.length - 1] / 12);
   const last = data.months.length - 1;
+  const { t } = useT();
   return (
     <details className="rounded-xl border bg-muted/20 text-sm">
       <summary className="cursor-pointer select-none px-4 py-3 font-medium">
-        Comment c'est calculé ?
+        {t("planning.how.title")}
       </summary>
       <div className="space-y-2 border-t px-4 py-3 text-muted-foreground">
         <p>
-          Le rendement et l'amplitude des variations viennent de l'historique de tes fonds sur 5 ans
-          : rendement annuel estimé {fmt.pct(data.annual_return)}, variations annuelles de{" "}
-          {fmt.pct(data.annual_vol)}.
+          {t("planning.how.returns", {
+            ret: fmt.pct(data.annual_return),
+            vol: fmt.pct(data.annual_vol),
+          })}
+        </p>
+        <p>{t("planning.how.monteCarlo")}</p>
+        <p>
+          {t("planning.how.fees", {
+            gross: fmt.approxEur(data.gross_p50[last]),
+            net: fmt.approxEur(data.bands.p50[last]),
+          })}
         </p>
         <p>
-          On simule 1 000 trajectoires possibles (Monte-Carlo), en tenant compte de l'incertitude
-          sur le rendement estimé lui-même : 5 ans d'historique, c'est peu. « Le plus probable » est
-          la médiane ; la « zone probable » va du 10ᵉ au 90ᵉ centile, donc 8 trajectoires sur 10
-          finissent dedans.
+          {t("planning.how.inflation", {
+            inflation: fmt.pct(data.inflation),
+            median: fmt.approxEur(data.bands.p50[last]),
+            years,
+          })}
         </p>
         <p>
-          Les frais de courtage et de tenue de compte sont prélevés mois par mois, donc ils se
-          cumulent. Sans aucun frais, la médiane serait de {fmt.approxEur(data.gross_p50[last])} au
-          lieu de {fmt.approxEur(data.bands.p50[last])}.
-        </p>
-        <p>
-          Tous les montants sont en euros d'aujourd'hui : la simulation tourne en euros courants
-          puis les ramène au pouvoir d'achat actuel, à {fmt.pct(data.inflation)} d'inflation par an.
-          Un capital de {fmt.approxEur(data.bands.p50[last])} dans {years} ans, c'est ce que{" "}
-          {fmt.approxEur(data.bands.p50[last])} achètent aujourd'hui.
-        </p>
-        <p>
-          L'impôt n'est pas déduit des courbes : il n'est dû qu'à la sortie, et seulement sur les
-          gains. Au taux de tes enveloppes ({fmt.pct(data.tax_on_gains_pct)} en moyenne), il
-          resterait environ {fmt.approxEur(data.median_after_tax ?? 0)} après impôt sur la médiane.
+          {t("planning.how.tax", {
+            rate: fmt.pct(data.tax_on_gains_pct),
+            afterTax: fmt.approxEur(data.median_after_tax ?? 0),
+          })}
         </p>
       </div>
     </details>

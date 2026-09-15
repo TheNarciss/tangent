@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
 import type { EnvelopePoint, FrontierCurve, PortfolioMetrics } from "@/api";
+import { useT } from "@/i18n";
 import { fmt } from "@/lib/format";
 import { linearScale, niceTicks } from "@/lib/chart";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,7 +17,7 @@ interface Props {
 /** Everything that can be tapped on the map, in data space. */
 type Marker =
   | { kind: "etf"; label: string; sigma: number; mu: number; color: string }
-  | { kind: "portfolio"; label: string; sigma: number; mu: number }
+  | { kind: "portfolio"; sigma: number; mu: number }
   | { kind: "optimal"; label: string; sigma: number; mu: number }
   | { kind: "envelopes"; sigma: number; mu: number; items: EnvelopePoint[] };
 
@@ -33,6 +34,7 @@ const ETF_COLORS = [
 const HIT_RADIUS = 24; // px around a marker that selects it (finger-friendly)
 
 export function RiskReturn({ metrics, smoothFrontier, optimal, envelopePoints }: Props) {
+  const { t } = useT();
   const [hover, setHover] = useState<Marker | null>(null);
 
   const envelopes = useMemo(
@@ -67,7 +69,6 @@ export function RiskReturn({ metrics, smoothFrontier, optimal, envelopePoints }:
       })),
       {
         kind: "portfolio",
-        label: "Position actuelle",
         sigma: metrics.volatility,
         mu: metrics.expected_return,
       },
@@ -98,11 +99,9 @@ export function RiskReturn({ metrics, smoothFrontier, optimal, envelopePoints }:
     <Card>
       <CardHeader>
         <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-          Risque–Rendement
+          {t("investments.riskReturn.title")}
         </CardTitle>
-        <CardDescription>
-          Carte (σ, μ) de ton univers. Touche ou survole un point pour voir ses détails.
-        </CardDescription>
+        <CardDescription>{t("investments.riskReturn.desc")}</CardDescription>
       </CardHeader>
       <CardContent>
         {smoothFrontier?.unavailable_reason && (
@@ -111,7 +110,7 @@ export function RiskReturn({ metrics, smoothFrontier, optimal, envelopePoints }:
           </div>
         )}
         <Chart
-          ariaLabel="Carte risque-rendement"
+          ariaLabel={t("investments.riskReturn.aria")}
           height={(_w, compact) => (compact ? 300 : 440)}
           pad={(compact) =>
             compact
@@ -197,7 +196,11 @@ export function RiskReturn({ metrics, smoothFrontier, optimal, envelopePoints }:
                   ticks={xTicks}
                   scale={xScale}
                   format={(t) => fmt.pct(t)}
-                  label={frame.compact ? "Volatilité σ" : "Volatilité σ (annualisée)"}
+                  label={
+                    frame.compact
+                      ? t("investments.metrics.volatility")
+                      : t("investments.riskReturn.xAxis")
+                  }
                 />
                 <YAxis frame={frame} ticks={yTicks} scale={yScale} format={(t) => fmt.pct(t)} />
                 {!frame.compact && (
@@ -208,7 +211,7 @@ export function RiskReturn({ metrics, smoothFrontier, optimal, envelopePoints }:
                     transform="rotate(-90)"
                     className="font-sans text-xs fill-current text-muted-foreground"
                   >
-                    Rendement μ annualisé
+                    {t("investments.riskReturn.yAxis")}
                   </text>
                 )}
 
@@ -248,7 +251,7 @@ export function RiskReturn({ metrics, smoothFrontier, optimal, envelopePoints }:
                       y={yScale(env.mu) + 4}
                       className="font-mono text-[11px] fill-current"
                     >
-                      {env.items.length}× livrets
+                      {t("investments.riskReturn.envelopesCount", { count: env.items.length })}
                     </text>
                   </g>
                 )}
@@ -313,14 +316,17 @@ export function RiskReturn({ metrics, smoothFrontier, optimal, envelopePoints }:
 
         {/* Legend */}
         <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground">
-          <LegendItem swatch={<Dot color="#60a5fa" />} label="ETF" />
+          <LegendItem swatch={<Dot color="#60a5fa" />} label={t("investments.kind.etf")} />
           {hasEnvelopes && (
-            <LegendItem swatch={<Square color="#10b981" />} label="Livrets (σ ≈ 0)" />
+            <LegendItem
+              swatch={<Square color="#10b981" />}
+              label={t("investments.riskReturn.legendEnvelopes")}
+            />
           )}
-          <LegendItem swatch={<Diamond />} label="Position actuelle" />
+          <LegendItem swatch={<Diamond />} label={t("investments.riskReturn.currentPosition")} />
           {optimal && <LegendItem swatch={<StarSwatch />} label={optimal.label} />}
           {smoothFrontier && smoothFrontier.vol.length > 1 && (
-            <LegendItem swatch={<Line />} label="Frontière efficiente" />
+            <LegendItem swatch={<Line />} label={t("investments.riskReturn.frontier")} />
           )}
         </div>
       </CardContent>
@@ -329,11 +335,12 @@ export function RiskReturn({ metrics, smoothFrontier, optimal, envelopePoints }:
 }
 
 function MarkerTooltip({ marker }: { marker: Marker }) {
+  const { t, tn } = useT();
   if (marker.kind === "envelopes") {
     return (
       <div className="space-y-1">
         <div className="font-semibold" style={{ color: "#10b981" }}>
-          {marker.items.length} livret{marker.items.length > 1 ? "s" : ""} · σ ≈ 0
+          {tn("investments.riskReturn.envelopes", marker.items.length)}
         </div>
         {marker.items.map((e, i) => (
           <div key={i} className="flex justify-between gap-3 font-mono tabular">
@@ -348,7 +355,9 @@ function MarkerTooltip({ marker }: { marker: Marker }) {
   }
   return (
     <div className="space-y-0.5">
-      <div className="font-semibold text-foreground">{marker.label}</div>
+      <div className="font-semibold text-foreground">
+        {marker.kind === "portfolio" ? t("investments.riskReturn.currentPosition") : marker.label}
+      </div>
       <div className="font-mono tabular text-muted-foreground">
         σ {fmt.pct(marker.sigma)} · μ {fmt.pct(marker.mu)}
       </div>

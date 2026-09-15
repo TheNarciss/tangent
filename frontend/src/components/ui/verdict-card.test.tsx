@@ -1,9 +1,14 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { Verdict } from "@/api";
+import { setLocalePreference } from "@/i18n";
 
 import { VerdictCard } from "./verdict-card";
+
+// The labels follow the language; happy-dom reports English, the assertions read French.
+beforeAll(() => setLocalePreference("fr"));
+afterAll(() => setLocalePreference("auto"));
 
 const red: Verdict = {
   id: "fees",

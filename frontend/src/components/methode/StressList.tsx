@@ -7,6 +7,7 @@ import {
   type RiskLevel,
   type StressTestResult,
 } from "@/api";
+import { t, tn, useT } from "@/i18n";
 import { fmt } from "@/lib/format";
 import { useProfile } from "@/lib/profile";
 import { cn } from "@/lib/utils";
@@ -43,6 +44,7 @@ function RiskDetail({
   levels: RiskLevel[] | undefined;
   profileLevel: number | null;
 }) {
+  const { t, tn } = useT();
   // The portfolio behaves like the first slider position whose ceiling it fits under.
   const behaves =
     levels?.find((l) => metrics.volatility <= l.max_annual_volatility) ?? levels?.at(-1);
@@ -55,22 +57,21 @@ function RiskDetail({
     <div className="space-y-3">
       {behaves && (
         <p className="text-sm">
-          Ton portefeuille se comporte comme un profil{" "}
+          {t("method.stress.behavesBefore")}
           <span className="rounded-full border px-2 py-0.5 text-xs font-medium">
             {behaves.label}
           </span>
           {chosen && chosen.level !== behaves.level && (
             <span className="text-muted-foreground">
-              {" "}
-              alors que ton curseur est sur{" "}
+              {t("method.stress.sliderBefore")}
               <strong className="text-foreground">{chosen.label}</strong>
               {behaves.level > chosen.level
-                ? " : il bouge plus que ce que tu as dit accepter."
-                : " : il bouge moins que ce que tu acceptes."}
+                ? t("method.stress.movesMore")
+                : t("method.stress.movesLess")}
             </span>
           )}
           {chosen && chosen.level === behaves.level && (
-            <span className="text-muted-foreground">, comme ton curseur. Cohérent.</span>
+            <span className="text-muted-foreground">{t("method.stress.consistent")}</span>
           )}
         </p>
       )}
@@ -80,7 +81,7 @@ function RiskDetail({
         {worst && (
           <li className="rounded-md border px-3 py-2">
             <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-              <span>Pire crise rejouée : {worst.label}</span>
+              <span>{t("method.stress.worstCrisis", { label: worst.label })}</span>
               <Loss eur={worst.loss_eur} pct={worst.pnl_pct} />
             </div>
             <div className="text-xs text-muted-foreground">
@@ -91,28 +92,29 @@ function RiskDetail({
         {metrics.worst_year_class !== null && (
           <li className="rounded-md border px-3 py-2">
             <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-              <span>Pire année déjà vue sur {metrics.worst_year_label ?? "cette classe"}</span>
+              <span>
+                {t("method.stress.worstYear", {
+                  label: metrics.worst_year_label ?? t("method.stress.thisClass"),
+                })}
+              </span>
               <span className="font-mono tabular text-[hsl(var(--loss))]">
                 {fmt.signedPct(metrics.worst_year_class)}
               </span>
             </div>
-            <div className="text-xs text-muted-foreground">
-              douze mois consécutifs, sur l'historique complet de la classe depuis 1990
-            </div>
+            <div className="text-xs text-muted-foreground">{t("method.stress.worstYearSub")}</div>
           </li>
         )}
         <li className="rounded-md border px-3 py-2">
           <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-            <span>Pire baisse vécue par ce panier</span>
+            <span>{t("method.stress.worstDrawdown")}</span>
             <span className="font-mono tabular text-[hsl(var(--loss))]">
               {fmt.signedPct(metrics.max_drawdown_observed)}
             </span>
           </div>
           <div className="text-xs text-muted-foreground">
-            du plus-haut au creux suivant, sur {historyLabel(metrics.history_days)} d'historique
-            commun à tes lignes
+            {t("method.stress.worstDrawdownSub", { history: historyLabel(metrics.history_days) })}
             {metrics.history_days > 0 && metrics.history_days < SHORT_HISTORY_DAYS
-              ? " — trop court pour être comparé aux crises ci-dessus"
+              ? t("method.stress.tooShort")
               : ""}
           </div>
         </li>
@@ -122,10 +124,12 @@ function RiskDetail({
         <details className="group mt-2 rounded-md border">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-sm">
             <span>
-              Les {stress.length} crises rejouées, une par une
+              {t("method.stress.allCrises", { count: stress.length })}
               <span className="ml-2 text-xs text-muted-foreground">
-                de {fmt.eur0(Math.abs(worst?.loss_eur ?? 0))} à{" "}
-                {fmt.eur0(Math.abs(others[others.length - 1].loss_eur))}
+                {t("method.stress.range", {
+                  from: fmt.eur0(Math.abs(worst?.loss_eur ?? 0)),
+                  to: fmt.eur0(Math.abs(others[others.length - 1].loss_eur)),
+                })}
               </span>
             </span>
             <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
@@ -145,9 +149,12 @@ function RiskDetail({
                   </div>
                   {fx !== null && Math.abs(fx) >= 1 && (
                     <div className="text-xs text-muted-foreground">
-                      Dont le dollar : {fx > 0 ? "il t'a fait gagner" : "il t'a coûté"}{" "}
-                      {fmt.eur0(Math.abs(fx))}, soit{" "}
-                      {fmt.signedPct(crisis.currency_effect_pct ?? 0)} sur tes fonds monde.
+                      {t("method.stress.dollar", {
+                        effect:
+                          fx > 0 ? t("method.stress.dollarGain") : t("method.stress.dollarLoss"),
+                        amount: fmt.eur0(Math.abs(fx)),
+                        pct: fmt.signedPct(crisis.currency_effect_pct ?? 0),
+                      })}
                     </div>
                   )}
                 </li>
@@ -156,31 +163,22 @@ function RiskDetail({
           </ul>
 
           <p className="border-t px-3 py-2 text-xs text-muted-foreground">
-            Les crises sont rejouées sur les classes d'actifs, pas sur les cours de tes lignes :
-            aucun ETF français n'a d'historique avant 2009. Chaque perte est en euros, change
-            compris, et le pourcentage porte sur <strong>tout ton patrimoine</strong>, pas seulement
-            sur tes placements. Tes livrets ne bougent pas et ton fonds euros ne perd pas sa valeur,
-            seul son taux futur baisse.
+            {t("method.stress.noteBefore")}
+            <strong>{t("method.stress.noteStrong")}</strong>
+            {t("method.stress.noteAfter")}
             {metrics.measured_on_index.length > 0 && (
               <>
                 {" "}
-                {metrics.measured_on_index.length === 1
-                  ? "Une de tes classes est mesurée"
-                  : `${metrics.measured_on_index.length} de tes classes sont mesurées`}{" "}
-                sur son propre indice quotidien, du plus haut au creux de chaque épisode —{" "}
+                {tn("method.stress.measured", metrics.measured_on_index.length)}
                 <strong>{metrics.measured_on_index.join(", ")}</strong>.
               </>
             )}
             {metrics.replayed_as_world.length > 0 && (
               <>
                 {" "}
-                {metrics.replayed_as_world.length === 1
-                  ? "Une de tes classes est rejouée"
-                  : `${metrics.replayed_as_world.length} de tes classes sont rejouées`}{" "}
-                avec l'amplitude des actions monde, faute de série par épisode —{" "}
-                <strong>{metrics.replayed_as_world.join(", ")}</strong>. Un fonds sectoriel ou
-                régional tombe plus fort que l'indice mondial : ces lignes sont donc sous-estimées
-                ici.
+                {tn("method.stress.replayed", metrics.replayed_as_world.length)}
+                <strong>{metrics.replayed_as_world.join(", ")}</strong>
+                {t("method.stress.replayedAfter")}
               </>
             )}
           </p>
@@ -209,8 +207,8 @@ function Loss({ eur, pct }: { eur: number; pct: number }) {
 const SHORT_HISTORY_DAYS = 3 * 252;
 
 function historyLabel(days: number): string {
-  if (days <= 0) return "l'historique disponible";
+  if (days <= 0) return t("method.stress.historyAvailable");
   const months = Math.round(days / 21);
-  if (months < 24) return `${months} mois`;
-  return `${Math.round(months / 12)} ans`;
+  if (months < 24) return tn("method.stress.historyMonths", months);
+  return tn("method.stress.historyYears", Math.round(months / 12));
 }

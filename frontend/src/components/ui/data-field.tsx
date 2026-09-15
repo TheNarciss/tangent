@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Check, Sparkles, User, X } from "lucide-react";
+import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 
 export type DataSource = "api" | "llm" | "user" | null;
@@ -40,6 +41,7 @@ export function DataField({
   inputMin,
   inputMax,
 }: DataFieldProps) {
+  const { t } = useT();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<string>(value !== null ? String(value) : "");
 
@@ -71,7 +73,7 @@ export function DataField({
           type="button"
           onClick={submit}
           className="text-emerald-600 hover:text-emerald-700"
-          aria-label="Valider"
+          aria-label={t("investments.ui.confirm")}
         >
           <Check className="h-3 w-3" />
         </button>
@@ -79,7 +81,7 @@ export function DataField({
           type="button"
           onClick={() => setEditing(false)}
           className="text-muted-foreground hover:text-foreground"
-          aria-label="Annuler"
+          aria-label={t("common.cancel")}
         >
           <X className="h-3 w-3" />
         </button>
@@ -100,7 +102,7 @@ export function DataField({
             baseClasses,
             "cursor-pointer border-0 bg-transparent p-0 text-inherit hover:underline",
           )}
-          title="Cliquer pour modifier"
+          title={t("investments.ui.clickToEdit")}
         >
           {display}
         </button>
@@ -118,16 +120,17 @@ export function DataField({
 }
 
 function SourceBadge({ source }: { source: DataSource }) {
+  const { t } = useT();
   if (source === "api" || source === null) return null;
 
   if (source === "llm") {
     return (
       <span
-        title="Estimation IA, à vérifier"
+        title={t("investments.ui.aiEstimate")}
         className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
       >
         <Sparkles className="mr-0.5 h-2.5 w-2.5" />
-        IA
+        {t("investments.ui.ai")}
       </span>
     );
   }
@@ -135,11 +138,11 @@ function SourceBadge({ source }: { source: DataSource }) {
   if (source === "user") {
     return (
       <span
-        title="Modifié manuellement"
+        title={t("investments.ui.editedManually")}
         className="inline-flex items-center rounded-full border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400"
       >
         <User className="mr-0.5 h-2.5 w-2.5" />
-        Vous
+        {t("investments.ui.you")}
       </span>
     );
   }

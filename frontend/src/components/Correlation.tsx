@@ -1,3 +1,4 @@
+import { t, useT } from "@/i18n";
 import { fmt } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -26,12 +27,13 @@ function cellStyle(rho: number): React.CSSProperties {
 }
 
 export function Correlation({ matrix }: Props) {
+  useT();
   const tickers = Object.keys(matrix);
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-          Corrélations
+          {t("investments.correlation.title")}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -41,13 +43,13 @@ export function Correlation({ matrix }: Props) {
               <tr>
                 {/* Corner: top + left sticky */}
                 <th className="sticky left-0 top-0 z-20 bg-card" />
-                {tickers.map((t) => (
+                {tickers.map((ticker) => (
                   <th
-                    key={t}
+                    key={ticker}
                     scope="col"
                     className="sticky top-0 z-10 bg-card font-mono text-xs text-muted-foreground px-2 pb-1"
                   >
-                    {t}
+                    {ticker}
                   </th>
                 ))}
               </tr>
@@ -69,7 +71,12 @@ export function Correlation({ matrix }: Props) {
                         key={col}
                         className="font-mono text-xs tabular rounded px-2 py-1.5 md:px-3 md:py-2 text-center min-w-[56px] md:min-w-[64px] cursor-help"
                         style={cellStyle(rho)}
-                        title={`Corrélation ${row} ↔ ${col} : ρ = ${rho.toFixed(2)}\n${interp}\n\nρ ∈ [-1, 1]. ≈ 1 : actifs liés (peu de diversification). ≈ 0 : indépendants. ≈ -1 : se hedgent.`}
+                        title={t("investments.correlation.cellTitle", {
+                          row,
+                          col,
+                          rho: fmt.num(rho),
+                          interp,
+                        })}
                       >
                         {fmt.num(rho)}
                       </td>
@@ -98,9 +105,7 @@ export function Correlation({ matrix }: Props) {
             })}
           </div>
           <span className="font-mono">+1</span>
-          <span className="ml-2 italic">
-            bleu = hedge · pâle = indépendants · rouge = redondants
-          </span>
+          <span className="ml-2 italic">{t("investments.correlation.legend")}</span>
         </div>
       </CardContent>
     </Card>
@@ -108,10 +113,10 @@ export function Correlation({ matrix }: Props) {
 }
 
 function interpRho(rho: number): string {
-  if (rho > 0.85) return "très forte : bougent presque ensemble";
-  if (rho > 0.5) return "forte : tendance commune";
-  if (rho > 0.2) return "modérée";
-  if (rho > -0.2) return "faible : quasi-indépendants";
-  if (rho > -0.5) return "négative modérée";
-  return "négative forte : se compensent";
+  if (rho > 0.85) return t("investments.correlation.veryStrong");
+  if (rho > 0.5) return t("investments.correlation.strong");
+  if (rho > 0.2) return t("investments.correlation.moderate");
+  if (rho > -0.2) return t("investments.correlation.weak");
+  if (rho > -0.5) return t("investments.correlation.negativeModerate");
+  return t("investments.correlation.negativeStrong");
 }

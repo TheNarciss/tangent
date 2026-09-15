@@ -1,4 +1,5 @@
 import type { AssetMetrics } from "@/api";
+import { useT } from "@/i18n";
 import { fmt } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,25 +17,30 @@ interface Props {
 }
 
 export function Assets({ assets }: Props) {
+  const { t } = useT();
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-          Positions
+          {t("investments.positions.title")}
         </CardTitle>
       </CardHeader>
       <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Fonds</TableHead>
-              <TableHead className="hidden text-right md:table-cell">Cours</TableHead>
-              <TableHead className="text-right">Poids</TableHead>
-              <TableHead className="text-right">Valeur</TableHead>
+              <TableHead>{t("investments.positions.fund")}</TableHead>
+              <TableHead className="hidden text-right md:table-cell">
+                {t("investments.positions.price")}
+              </TableHead>
+              <TableHead className="text-right">{t("investments.positions.weight")}</TableHead>
+              <TableHead className="text-right">{t("investments.positions.value")}</TableHead>
               <TableHead className="text-right">P/L</TableHead>
               <TableHead className="hidden text-right md:table-cell">μ</TableHead>
               <TableHead className="hidden text-right md:table-cell">σ</TableHead>
-              <TableHead className="hidden text-right md:table-cell">Max DD</TableHead>
+              <TableHead className="hidden text-right md:table-cell">
+                {t("investments.positions.maxDd")}
+              </TableHead>
               <TableHead className="hidden text-right md:table-cell">Sharpe</TableHead>
             </TableRow>
           </TableHeader>

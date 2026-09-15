@@ -2,6 +2,7 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import { ArrowRight, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 
 import type { OptimizerObjective, OptimizerResponse, RiskContribution } from "@/api";
+import { LOCALE_TAGS, getLocale, useT, type MessageKey } from "@/i18n";
 import { fmt } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,13 +34,19 @@ interface Props {
 const ETF_COLORS = ["#60a5fa", "#a78bfa", "#22d3ee", "#f472b6", "#facc15"];
 const ENVELOPE_COLOR = "#10b981";
 
-const OBJECTIVE_DESCRIPTIONS: Record<OptimizerObjective, string> = {
-  from_strategy:
-    "Maximise Sharpe sous tes contraintes σ ≤ vol max ET μ ≥ rendement cible (depuis ton profil). Te dit si ton intention est atteignable.",
-  target_volatility:
-    "Maximise μ sous contrainte σ_p ≤ cible. C'est ici que livrets et ETFs se mixent vraiment.",
-  min_variance: "Minimise σ. Le portefeuille le moins volatil possible, peu importe le rendement.",
+const OBJECTIVE_DESCRIPTION_KEYS: Record<OptimizerObjective, MessageKey> = {
+  from_strategy: "investments.optimizer.desc.fromStrategy",
+  target_volatility: "investments.optimizer.desc.targetVolatility",
+  min_variance: "investments.optimizer.desc.minVariance",
 };
+
+/** A locale-aware number with `min`…`max` decimals, for the figures fmt.* does not cover. */
+function decimals(v: number, max: number, min = 0): string {
+  return new Intl.NumberFormat(LOCALE_TAGS[getLocale()], {
+    minimumFractionDigits: min,
+    maximumFractionDigits: max,
+  }).format(v);
+}
 
 export function Optimizer({
   objective,
@@ -55,21 +62,24 @@ export function Optimizer({
   profileTargetReturn,
   profileMaxVol,
 }: Props) {
+  const { t } = useT();
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-          Optimisation
+          {t("investments.optimizer.title")}
         </CardTitle>
         <CardDescription>
-          Solveur SLSQP long-only, sum(w)=1. {OBJECTIVE_DESCRIPTIONS[objective]}
+          {t("investments.optimizer.solver")} {t(OBJECTIVE_DESCRIPTION_KEYS[objective])}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Controls */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Objectif</Label>
+            <Label className="text-xs text-muted-foreground">
+              {t("investments.optimizer.objective")}
+            </Label>
             <Select
               value={objective}
               onValueChange={(v: string) => onObjectiveChange(v as OptimizerObjective)}
@@ -78,68 +88,88 @@ export function Optimizer({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="from_strategy">Selon ma stratégie</SelectItem>
-                <SelectItem value="target_volatility">Cible vol max</SelectItem>
-                <SelectItem value="min_variance">Min variance</SelectItem>
+                <SelectItem value="from_strategy">
+                  {t("investments.objective.fromStrategy")}
+                </SelectItem>
+                <SelectItem value="target_volatility">
+                  {t("investments.objective.targetVol")}
+                </SelectItem>
+                <SelectItem value="min_variance">
+                  {t("investments.objective.minVariance")}
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           {objective === "target_volatility" && (
             <NumberInput
-              label="σ max (% /an)"
+              label={t("investments.optimizer.maxVol")}
               value={maxVolatility}
               onChange={onMaxVolatilityChange}
               min={0}
               max={50}
               step={0.5}
-              hint="Pré-rempli depuis ton profil. 5 %=prudent · 15 %=actions"
+              hint={t("investments.optimizer.maxVolHint")}
             />
           )}
           {objective === "from_strategy" && (
             <div className="space-y-1 col-span-1 sm:col-span-2 lg:col-span-1">
-              <Label className="text-xs text-muted-foreground">Contraintes (profil)</Label>
+              <Label className="text-xs text-muted-foreground">
+                {t("investments.optimizer.constraints")}
+              </Label>
               <div className="h-9 flex items-center px-3 rounded-md border bg-card/50 text-xs font-mono tabular">
                 {hasProfile ? (
                   <span>
-                    μ ≥ <strong>{profileTargetReturn}%</strong> · σ ≤{" "}
-                    <strong>{profileMaxVol}%</strong>
+                    μ ≥{" "}
+                    <strong>
+                      {t("investments.percent", { value: decimals(profileTargetReturn, 2) })}
+                    </strong>{" "}
+                    · σ ≤{" "}
+                    <strong>
+                      {t("investments.percent", { value: decimals(profileMaxVol, 2) })}
+                    </strong>
                   </span>
                 ) : (
-                  <span className="text-[hsl(var(--loss))]">Renseigne ton profil</span>
+                  <span className="text-[hsl(var(--loss))]">
+                    {t("investments.optimizer.fillProfile")}
+                  </span>
                 )}
               </div>
               <p className="text-[10px] text-muted-foreground">
-                Modifie via l'icône profil en haut
+                {t("investments.optimizer.editProfileHint")}
               </p>
             </div>
           )}
 
           <ToggleField
-            label="Inclure mes livrets"
+            label={t("investments.optimizer.includeEnvelopes")}
             checked={includeEnvelopes}
             onChange={onIncludeEnvelopesChange}
             disabled={!hasProfile}
             hint={
-              hasProfile ? "Selon ton profil + plafonds restants" : "Renseigne ton profil d'abord"
+              hasProfile
+                ? t("investments.optimizer.includeHint")
+                : t("investments.optimizer.fillProfileFirst")
             }
           />
 
           <NumberInput
-            label="Capital total (€)"
+            label={t("investments.optimizer.capital")}
             value={totalCapital}
             onChange={onTotalCapitalChange}
             min={0}
             step={1000}
-            hint="Pool sur lequel répartir. Défaut = portefeuille actuel"
+            hint={t("investments.optimizer.capitalHint")}
             allowEmpty
           />
         </div>
 
-        {query.isLoading && <p className="text-sm text-muted-foreground">Optimisation en cours…</p>}
+        {query.isLoading && (
+          <p className="text-sm text-muted-foreground">{t("investments.optimizer.running")}</p>
+        )}
         {query.isError && (
           <p className="text-sm text-[hsl(var(--loss))]">
-            Erreur : {(query.error as Error).message}
+            {t("investments.optimizer.error", { error: (query.error as Error).message })}
           </p>
         )}
 
@@ -150,8 +180,7 @@ export function Optimizer({
             <RiskContributions data={query.data} />
             {query.data.unmapped_tickers.length > 0 && (
               <p className="text-xs text-muted-foreground italic border-l-2 border-muted pl-3">
-                Sans hypothèse de rendement long terme, estimé sur l'historique seul :{" "}
-                {query.data.unmapped_tickers.join(", ")}.
+                {t("investments.unmapped", { tickers: query.data.unmapped_tickers.join(", ") })}
               </p>
             )}
           </>
@@ -218,6 +247,7 @@ function ToggleField({
   disabled?: boolean;
   hint?: string;
 }) {
+  const { t } = useT();
   return (
     <div className="space-y-1">
       <Label className="text-xs text-muted-foreground">{label}</Label>
@@ -234,7 +264,7 @@ function ToggleField({
               : "hover:bg-muted/40",
         )}
       >
-        {checked ? "✓ activé" : "○ désactivé"}
+        {checked ? t("investments.toggle.on") : t("investments.toggle.off")}
       </button>
       {hint && <p className="text-[10px] text-muted-foreground">{hint}</p>}
     </div>
@@ -244,6 +274,7 @@ function ToggleField({
 /* ─── Comparison ────────────────────────────────────────────────────────── */
 
 function ComparisonTable({ data }: { data: OptimizerResponse }) {
+  const { t } = useT();
   const dSharpe = data.optimal.sharpe - data.current.sharpe;
   const dMu = data.optimal.expected_return - data.current.expected_return;
   const dSigma = data.optimal.volatility - data.current.volatility;
@@ -253,32 +284,32 @@ function ComparisonTable({ data }: { data: OptimizerResponse }) {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b text-xs uppercase tracking-wider text-muted-foreground">
-            <th className="text-left py-2 pr-4 font-medium">Métrique</th>
-            <th className="text-right py-2 px-3 font-medium">Actuel (ETF seuls)</th>
-            <th className="text-right py-2 px-3 font-medium">Optimal</th>
+            <th className="text-left py-2 pr-4 font-medium">{t("investments.compare.metric")}</th>
+            <th className="text-right py-2 px-3 font-medium">{t("investments.compare.current")}</th>
+            <th className="text-right py-2 px-3 font-medium">{t("investments.compare.optimal")}</th>
             <th className="text-right py-2 pl-3 font-medium">Δ</th>
           </tr>
         </thead>
         <tbody className="font-mono tabular">
           <CompareRow
-            label="Rendement μ"
+            label={t("investments.compare.return")}
             current={fmt.pct(data.current.expected_return)}
             optimal={fmt.pct(data.optimal.expected_return)}
             delta={fmt.signedPct(dMu)}
             sign={dMu}
           />
           <CompareRow
-            label="Volatilité σ"
+            label={t("investments.metrics.volatility")}
             current={fmt.pct(data.current.volatility)}
             optimal={fmt.pct(data.optimal.volatility)}
             delta={fmt.signedPct(dSigma)}
             sign={-dSigma}
           />
           <CompareRow
-            label="Sharpe"
-            current={data.current.sharpe.toFixed(2)}
-            optimal={data.optimal.sharpe.toFixed(2)}
-            delta={(dSharpe >= 0 ? "+" : "") + dSharpe.toFixed(2)}
+            label={t("investments.metrics.sharpe")}
+            current={fmt.num(data.current.sharpe)}
+            optimal={fmt.num(data.optimal.sharpe)}
+            delta={(dSharpe >= 0 ? "+" : "") + fmt.num(dSharpe)}
             sign={dSharpe}
             bold
           />
@@ -322,6 +353,7 @@ function CompareRow({
 /* ─── Actions ────────────────────────────────────────────────────────────── */
 
 function ActionsList({ data }: { data: OptimizerResponse }) {
+  const { t } = useT();
   // Tag each action with its ORIGINAL index so asset_kinds/labels stay aligned after filter
   const significantActions = data.actions
     .map((a, originalIdx) => ({ ...a, _idx: originalIdx }))
@@ -330,7 +362,7 @@ function ActionsList({ data }: { data: OptimizerResponse }) {
   return (
     <div>
       <h4 className="text-xs uppercase tracking-wider text-muted-foreground mb-3">
-        Allocation optimale ({fmt.eur(data.total_capital)})
+        {t("investments.actions.title", { capital: fmt.eur(data.total_capital) })}
       </h4>
       <ul className="space-y-2">
         {significantActions.map((a) => {
@@ -345,13 +377,13 @@ function ActionsList({ data }: { data: OptimizerResponse }) {
               : sign === "sell"
                 ? TrendingDown
                 : null;
-          const verb = isEnvelope
-            ? "Place"
+          const actionKey: MessageKey = isEnvelope
+            ? "investments.actions.place"
             : sign === "buy"
-              ? "Achète"
+              ? "investments.actions.buy"
               : sign === "sell"
-                ? "Vends"
-                : "Conserve";
+                ? "investments.actions.sell"
+                : "investments.actions.hold";
           const color = isEnvelope
             ? "text-[hsl(160_64%_50%)]"
             : sign === "buy"
@@ -379,7 +411,7 @@ function ActionsList({ data }: { data: OptimizerResponse }) {
                       : "bg-muted text-muted-foreground",
                   )}
                 >
-                  {isEnvelope ? "Livret" : "ETF"}
+                  {isEnvelope ? t("investments.kind.envelope") : t("investments.kind.etf")}
                 </span>
                 <span className="font-medium truncate">{label}</span>
                 <span className="text-muted-foreground tabular text-xs">
@@ -391,7 +423,7 @@ function ActionsList({ data }: { data: OptimizerResponse }) {
               <div className={cn("flex items-center gap-1.5 text-sm font-mono tabular", color)}>
                 {Icon && <Icon className="h-3.5 w-3.5" />}
                 <span>
-                  {verb} {fmt.eur(isEnvelope ? optAmount : deltaAmount)}
+                  {t(actionKey, { amount: fmt.eur(isEnvelope ? optAmount : deltaAmount) })}
                 </span>
               </div>
             </li>
@@ -405,6 +437,7 @@ function ActionsList({ data }: { data: OptimizerResponse }) {
 /* ─── Risk contributions ─────────────────────────────────────────────────── */
 
 function RiskContributions({ data }: { data: OptimizerResponse }) {
+  const { t } = useT();
   // Build weight-based pseudo-RiskContribution so we can reuse <RiskBar /> for composition.
   const weightsCurrent = {
     fraction: data.actions.map((a) => a.current_weight),
@@ -419,17 +452,17 @@ function RiskContributions({ data }: { data: OptimizerResponse }) {
     <div className="space-y-5">
       <div className="space-y-3">
         <h4 className="text-xs uppercase tracking-wider text-muted-foreground">
-          Composition (poids w)
+          {t("investments.composition.title")}
         </h4>
         <div className="space-y-2">
           <RiskBar
-            label="Actuel"
+            label={t("investments.composition.current")}
             rc={weightsCurrent}
             kinds={data.asset_kinds}
             labels={data.asset_labels}
           />
           <RiskBar
-            label="Optimal"
+            label={t("investments.composition.optimal")}
             rc={weightsOptimal}
             kinds={data.asset_kinds}
             labels={data.asset_labels}
@@ -439,26 +472,26 @@ function RiskContributions({ data }: { data: OptimizerResponse }) {
 
       <div className="space-y-3">
         <h4 className="text-xs uppercase tracking-wider text-muted-foreground">
-          Contribution à la volatilité σ
+          {t("investments.riskContribution.title")}
         </h4>
         <div className="space-y-2">
           <RiskBar
-            label="Actuel"
+            label={t("investments.composition.current")}
             rc={data.risk_contributions_current}
             kinds={data.asset_kinds}
             labels={data.asset_labels}
           />
           <RiskBar
-            label="Optimal"
+            label={t("investments.composition.optimal")}
             rc={data.risk_contributions_optimal}
             kinds={data.asset_kinds}
             labels={data.asset_labels}
           />
         </div>
         <p className="text-xs text-muted-foreground">
-          Décomposition d'Euler : σ<sub>p</sub> = Σ w<sub>i</sub> · (Σw)<sub>i</sub> / σ<sub>p</sub>
-          . Les livrets contribuent ≈ 0% au risque (σ ≈ 0), même s'ils représentent une part du
-          capital.
+          {t("investments.euler.before")}σ<sub>p</sub> = Σ w<sub>i</sub> · (Σw)<sub>i</sub> / σ
+          <sub>p</sub>
+          {t("investments.euler.after")}
         </p>
       </div>
     </div>
@@ -476,6 +509,7 @@ function RiskBar({
   kinds: ("etf" | "envelope")[];
   labels: string[];
 }) {
+  const { t } = useT();
   let etfIdx = 0;
   return (
     <div className="space-y-1">
@@ -493,9 +527,12 @@ function RiskBar({
               key={labels[i] + i}
               className="flex items-center justify-center text-[10px] font-mono tabular text-black/80"
               style={{ width: `${Math.max(0, f) * 100}%`, background: color }}
-              title={`${labels[i]} : ${(f * 100).toFixed(1)}% du risque total`}
+              title={t("investments.riskBar.title", {
+                label: labels[i],
+                share: t("investments.percent", { value: decimals(f * 100, 1, 1) }),
+              })}
             >
-              {f >= 0.08 ? `${labels[i].split(" ")[0]} ${(f * 100).toFixed(0)}%` : null}
+              {f >= 0.08 ? `${labels[i].split(" ")[0]} ${fmt.pct0(f)}` : null}
             </div>
           );
         })}
