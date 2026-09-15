@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import type { TimeseriesResponse } from "@/api";
+import { LOCALE_TAGS, getLocale, t, useT } from "@/i18n";
 import { fmt } from "@/lib/format";
 import {
   areaPath,
@@ -42,6 +43,23 @@ function totalHeight(_width: number, compact: boolean) {
   return 3 * TITLE_H + h.perf + h.dd + h.rs + AXIS_H;
 }
 
+/** A base-100 index value, one decimal, in the language's own digits. */
+function index1(v: number): string {
+  return new Intl.NumberFormat(LOCALE_TAGS[getLocale()], {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(v);
+}
+
+/** « 112,3 (+12,3 %) » — an index value and its move from 100. */
+function rebased(v: number): string {
+  const delta = v - 100;
+  return t("investments.timeline.rebased", {
+    value: index1(v),
+    delta: (delta >= 0 ? "+" : "") + index1(delta),
+  });
+}
+
 function layout(frame: ChartFrame): Layout {
   const h = panelHeights(frame.compact);
   const perf = { y: TITLE_H, h: h.perf };
@@ -57,6 +75,7 @@ function layout(frame: ChartFrame): Layout {
  *   3. Rolling Sharpe — line, with reference at 0 and 1
  */
 export function Timeline({ ts }: Props) {
+  const { t } = useT();
   const n = ts.dates.length;
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
@@ -67,17 +86,13 @@ export function Timeline({ ts }: Props) {
     <Card>
       <CardHeader>
         <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-          Évolution historique
+          {t("investments.timeline.title")}
         </CardTitle>
-        <CardDescription>
-          Positions actuelles maintenues sur la fenêtre (vue "as-if-held", utile pour les tendances
-          et le risque, pas pour le PnL réel). Touche ou survole un point pour voir tous les
-          chiffres au jour donné.
-        </CardDescription>
+        <CardDescription>{t("investments.timeline.desc")}</CardDescription>
       </CardHeader>
       <CardContent>
         <Chart
-          ariaLabel="Évolution historique"
+          ariaLabel={t("investments.timeline.title")}
           height={totalHeight}
           pad={(compact) => ({
             left: compact ? 44 : 56,
@@ -131,6 +146,7 @@ export function Timeline({ ts }: Props) {
 }
 
 function TimelineTooltipContent({ ts, idx }: { ts: TimeseriesResponse; idx: number }) {
+  const { t } = useT();
   const portValue = ts.portfolio[idx];
   const benchValue = ts.benchmark?.[idx];
   const dd = ts.drawdown[idx];
@@ -139,33 +155,21 @@ function TimelineTooltipContent({ ts, idx }: { ts: TimeseriesResponse; idx: numb
   return (
     <div className="space-y-1.5">
       <div className="font-sans font-medium text-foreground">{formatDateTick(ts.dates[idx])}</div>
-      <TimelineRow
-        label="Portefeuille"
-        value={`${portValue.toFixed(1)} (${(portValue - 100) / 100 >= 0 ? "+" : ""}${(portValue - 100).toFixed(1)}%)`}
-      />
+      <TimelineRow label={t("investments.timeline.portfolio")} value={rebased(portValue)} />
       {benchValue !== undefined && ts.benchmark_ticker && (
-        <TimelineRow
-          label={ts.benchmark_ticker}
-          value={`${benchValue.toFixed(1)} (${benchValue - 100 >= 0 ? "+" : ""}${(benchValue - 100).toFixed(1)}%)`}
-          muted
-        />
+        <TimelineRow label={ts.benchmark_ticker} value={rebased(benchValue)} muted />
       )}
-      <TimelineRow label="Drawdown" value={fmt.pct(dd)} />
+      <TimelineRow label={t("investments.timeline.drawdown")} value={fmt.pct(dd)} />
       <TimelineRow
-        label={`Sharpe ${ts.rolling_window_days}j`}
-        value={rs === null ? "—" : rs.toFixed(2)}
+        label={t("investments.timeline.sharpeWindow", { days: ts.rolling_window_days })}
+        value={rs === null ? "—" : fmt.num(rs)}
       />
       <div className="font-sans text-[10px] text-muted-foreground pt-1 leading-tight">
-        Base 100 au {formatDateTick(ts.dates[0])}. Drawdown = baisse depuis le dernier plus-haut.
-        Sharpe glissant calculé sur {ts.rolling_window_days} jours de bourse (≈ 6 mois).
-        {ts.is_backtest !== false && (
-          <>
-            {" "}
-            Cette courbe applique tes lignes d'aujourd'hui au passé : c'est une simulation de ton
-            allocation actuelle, pas l'historique de ton compte. Le vrai rendement de ton compte est
-            dans Méthode.
-          </>
-        )}
+        {t("investments.timeline.note", {
+          date: formatDateTick(ts.dates[0]),
+          days: ts.rolling_window_days,
+        })}
+        {ts.is_backtest !== false && <> {t("investments.timeline.backtestNote")}</>}
       </div>
     </div>
   );
@@ -190,6 +194,7 @@ interface PanelProps {
 }
 
 function PerformancePanel({ ts, frame, panel, xScale }: PanelProps) {
+  const { t } = useT();
   const { y: yTop, h } = panel;
   const series = ts.benchmark ? [...ts.portfolio, ...ts.benchmark] : ts.portfolio;
   const yMin = Math.min(...series);
@@ -201,7 +206,7 @@ function PerformancePanel({ ts, frame, panel, xScale }: PanelProps) {
 
   return (
     <g>
-      <PanelTitle frame={frame} y={yTop - 12} text="Performance" />
+      <PanelTitle frame={frame} y={yTop - 12} text={t("investments.timeline.performance")} />
       <PanelFrame frame={frame} panel={panel} />
       <YAxis frame={frame} ticks={ticks} scale={yScale} format={(v) => v.toFixed(0)} />
 
@@ -227,6 +232,7 @@ function PerformancePanel({ ts, frame, panel, xScale }: PanelProps) {
 }
 
 function DrawdownPanel({ ts, frame, panel, xScale }: PanelProps) {
+  const { t } = useT();
   const { y: yTop, h } = panel;
   const yMin = Math.min(...ts.drawdown);
   const yScale = linearScale([yMin * 1.05, 0], [yTop + h, yTop]);
@@ -235,7 +241,7 @@ function DrawdownPanel({ ts, frame, panel, xScale }: PanelProps) {
 
   return (
     <g>
-      <PanelTitle frame={frame} y={yTop - 12} text="Drawdown" />
+      <PanelTitle frame={frame} y={yTop - 12} text={t("investments.timeline.drawdown")} />
       <PanelFrame frame={frame} panel={panel} />
       <YAxis frame={frame} ticks={ticks} scale={yScale} format={(v) => fmt.pct(v)} />
 
@@ -254,13 +260,14 @@ function DrawdownPanel({ ts, frame, panel, xScale }: PanelProps) {
         textAnchor="end"
         className="font-mono text-[11px] fill-[hsl(var(--loss))]"
       >
-        Max : {fmt.pct(yMin)}
+        {t("investments.timeline.max", { value: fmt.pct(yMin) })}
       </text>
     </g>
   );
 }
 
 function RollingSharpePanel({ ts, frame, panel, xScale }: PanelProps) {
+  const { t } = useT();
   const { y: yTop, h } = panel;
   const finite = ts.rolling_sharpe.filter((v): v is number => v !== null && isFinite(v));
   const yMin = finite.length ? Math.min(...finite, 0) : -0.5;
@@ -275,10 +282,10 @@ function RollingSharpePanel({ ts, frame, panel, xScale }: PanelProps) {
       <PanelTitle
         frame={frame}
         y={yTop - 12}
-        text={`Rolling Sharpe (${ts.rolling_window_days}j)`}
+        text={t("investments.timeline.rollingSharpe", { days: ts.rolling_window_days })}
       />
       <PanelFrame frame={frame} panel={panel} />
-      <YAxis frame={frame} ticks={ticks} scale={yScale} format={(v) => v.toFixed(2)} />
+      <YAxis frame={frame} ticks={ticks} scale={yScale} format={(v) => fmt.num(v)} />
 
       {/* Reference at 0 (and at 1 if visible) */}
       {[0, 1].map((ref) =>
@@ -310,7 +317,7 @@ function RollingSharpePanel({ ts, frame, panel, xScale }: PanelProps) {
           textAnchor="end"
           className="font-mono text-[11px] fill-current text-muted-foreground"
         >
-          Dernier : {latest.toFixed(2)}
+          {t("investments.timeline.latest", { value: fmt.num(latest) })}
         </text>
       )}
     </g>
@@ -346,11 +353,14 @@ function PanelFrame({ frame, panel }: { frame: ChartFrame; panel: Panel }) {
 }
 
 function PerformanceLegend({ ts }: { ts: TimeseriesResponse }) {
+  const { t } = useT();
   return (
     <div className="mt-3 flex flex-wrap gap-4 text-xs text-muted-foreground">
       <span className="flex items-center gap-2">
         <span className="inline-block h-0.5 w-6 bg-foreground" />
-        Portefeuille ({ts.portfolio[ts.portfolio.length - 1].toFixed(1)})
+        {t("investments.timeline.legendPortfolio", {
+          value: index1(ts.portfolio[ts.portfolio.length - 1]),
+        })}
       </span>
       {ts.benchmark && ts.benchmark_ticker && (
         <span className="flex items-center gap-2">
@@ -362,10 +372,12 @@ function PerformanceLegend({ ts }: { ts: TimeseriesResponse }) {
               height: 2,
             }}
           />
-          {ts.benchmark_ticker} ({ts.benchmark[ts.benchmark.length - 1].toFixed(1)})
+          {ts.benchmark_ticker} ({index1(ts.benchmark[ts.benchmark.length - 1])})
         </span>
       )}
-      <span className="ml-auto font-mono">Base 100 au {formatDateTick(ts.dates[0])}</span>
+      <span className="ml-auto font-mono">
+        {t("investments.timeline.base100", { date: formatDateTick(ts.dates[0]) })}
+      </span>
     </div>
   );
 }

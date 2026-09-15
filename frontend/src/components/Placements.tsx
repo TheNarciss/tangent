@@ -2,6 +2,7 @@ import { Compass } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { ApiError, useDashboard, type AssetMetrics, type PortfolioMetrics } from "@/api";
+import { useT } from "@/i18n";
 import { fmt } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { PlacementsAdvanced } from "@/components/PlacementsAdvanced";
@@ -22,6 +23,7 @@ const COLORS = ["#60a5fa", "#f97316", "#a78bfa", "#22d3ee", "#facc15", "#f472b6"
  * under « Mode avancé ».
  */
 export function Placements() {
+  const { t } = useT();
   const dashboard = useDashboard();
 
   if (dashboard.isLoading) {
@@ -39,14 +41,14 @@ export function Placements() {
     return (
       <div className="rounded-xl border border-dashed p-8 text-center">
         <p className="text-sm font-medium">
-          {empty ? "Pas encore de placements" : "Analyse indisponible pour l'instant"}
+          {empty ? t("investments.empty.title") : t("investments.unavailable.title")}
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
           {empty
-            ? "Connecte un compte-titres, un PEA ou une assurance vie pour voir cette page."
+            ? t("investments.empty.desc")
             : err instanceof Error
               ? err.message
-              : "Réessaie dans un instant."}
+              : t("investments.unavailable.retry")}
         </p>
       </div>
     );
@@ -61,10 +63,10 @@ export function Placements() {
         className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3 text-sm transition-colors hover:bg-accent/30 md:px-6"
       >
         <Compass className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <span className="min-w-0 flex-1 leading-snug">
-          Ce qu'il faut en faire : risque, frais, doublons, prochain versement.
+        <span className="min-w-0 flex-1 leading-snug">{t("investments.methodLink")}</span>
+        <span className="shrink-0 text-xs text-muted-foreground">
+          {t("investments.methodLink.label")}
         </span>
-        <span className="shrink-0 text-xs text-muted-foreground">Méthode</span>
       </Link>
       <PlacementsAdvanced dashboard={dashboard.data} />
     </div>
@@ -74,10 +76,11 @@ export function Placements() {
 /* ── 1. Qu'est-ce que j'ai ? ──────────────────────────────────────────── */
 
 function WhatIHave({ metrics }: { metrics: PortfolioMetrics }) {
+  const { t } = useT();
   const assets = [...metrics.assets].sort((a, b) => b.weight - a.weight);
   const gain = metrics.total_pnl;
   return (
-    <Block title="Ce que j'ai">
+    <Block title={t("investments.whatIHave.title")}>
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
         <span className="font-mono text-3xl font-semibold tabular">
           {fmt.eur(metrics.total_value)}
@@ -88,7 +91,10 @@ function WhatIHave({ metrics }: { metrics: PortfolioMetrics }) {
             gain >= 0 ? "text-[hsl(var(--gain))]" : "text-[hsl(var(--loss))]",
           )}
         >
-          {fmt.signedEur(gain)} depuis l'achat ({fmt.signedPct(metrics.total_pnl_pct)})
+          {t("investments.whatIHave.sinceBuy", {
+            gain: fmt.signedEur(gain),
+            pct: fmt.signedPct(metrics.total_pnl_pct),
+          })}
         </span>
       </div>
 
@@ -113,7 +119,7 @@ function WhatIHave({ metrics }: { metrics: PortfolioMetrics }) {
             <div className="min-w-0 flex-1">
               <div className="truncate">{name(a)}</div>
               <div className="text-xs text-muted-foreground">
-                {fmt.pct(a.weight)} de tes placements
+                {t("investments.whatIHave.share", { pct: fmt.pct(a.weight) })}
               </div>
             </div>
             <div className="shrink-0 text-right">

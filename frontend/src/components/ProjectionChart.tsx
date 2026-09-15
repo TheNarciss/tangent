@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
 import type { ProjectionResponse } from "@/api";
+import { useT } from "@/i18n";
 import { linePath, linearScale, niceTicks, pickIndices } from "@/lib/chart";
 import { fmt } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -16,6 +17,7 @@ const COLOR = {
 /* ─── Fan chart ──────────────────────────────────────────────────────────── */
 
 export function FanChart({ data }: { data: ProjectionResponse }) {
+  const { t } = useT();
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const n = data.months.length;
   const yMax = useMemo(() => Math.max(...data.bands.p90, ...data.invested, data.goal ?? 0), [data]);
@@ -28,7 +30,7 @@ export function FanChart({ data }: { data: ProjectionResponse }) {
   return (
     <div>
       <Chart
-        ariaLabel="Projection de ton épargne"
+        ariaLabel={t("planning.chart.aria")}
         height={(_w, compact) => (compact ? 260 : 340)}
         pad={(compact) =>
           compact
@@ -95,7 +97,7 @@ export function FanChart({ data }: { data: ProjectionResponse }) {
                     className="font-mono text-[11px]"
                     fill={COLOR.goal}
                   >
-                    Objectif {fmt.kEur(data.goal!)}
+                    {t("planning.chart.goalLine", { amount: fmt.kEur(data.goal!) })}
                   </text>
                 </g>
               )}
@@ -143,17 +145,17 @@ export function FanChart({ data }: { data: ProjectionResponse }) {
       <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-muted-foreground">
         <Legend
           swatch={<span className="inline-block h-3 w-6 rounded-sm bg-foreground/20" />}
-          label="zone probable (8 fois sur 10)"
+          label={t("planning.chart.legendBand")}
         />
         <Legend
           swatch={<span className="inline-block h-0.5 w-6 bg-foreground" />}
-          label="le plus probable"
+          label={t("planning.chart.legendMedian")}
         />
         <Legend
           swatch={
             <span className="inline-block h-0.5 w-6 border-t border-dashed border-muted-foreground" />
           }
-          label="ce que tu auras versé"
+          label={t("planning.chart.legendInvested")}
         />
         {data.goal ? (
           <Legend
@@ -163,7 +165,7 @@ export function FanChart({ data }: { data: ProjectionResponse }) {
                 style={{ borderColor: COLOR.goal }}
               />
             }
-            label="ton objectif"
+            label={t("planning.chart.legendGoal")}
           />
         ) : null}
       </div>
@@ -180,21 +182,27 @@ function FanTooltip({
   idx: number;
   startYear: number;
 }) {
+  const { t, tn } = useT();
   const months = data.months[idx];
   const prob = data.goal_prob_by_month?.[idx];
   return (
     <div className="space-y-1 font-mono tabular">
       <div className="font-sans font-medium text-foreground">
-        {months < 12 ? `Dans ${months} mois` : `${startYear + Math.round(months / 12)}`}
+        {months < 12
+          ? tn("planning.chart.inMonths", months)
+          : `${startYear + Math.round(months / 12)}`}
       </div>
-      <Row label="Le plus probable" value={fmt.approxEur(data.bands.p50[idx])} bold />
+      <Row label={t("planning.chart.median")} value={fmt.approxEur(data.bands.p50[idx])} bold />
       <Row
-        label="Zone probable"
+        label={t("planning.chart.band")}
         value={`${fmt.kEur(data.bands.p10[idx])} – ${fmt.kEur(data.bands.p90[idx])}`}
       />
-      <Row label="Versé" value={fmt.approxEur(data.invested[idx])} muted />
+      <Row label={t("planning.chart.invested")} value={fmt.approxEur(data.invested[idx])} muted />
       {prob !== undefined && (
-        <Row label="Objectif atteint" value={`${Math.round(prob * 10)} chances sur 10`} />
+        <Row
+          label={t("planning.chart.goalReached")}
+          value={tn("planning.chances.of10", Math.round(prob * 10))}
+        />
       )}
     </div>
   );

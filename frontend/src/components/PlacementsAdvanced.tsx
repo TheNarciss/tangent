@@ -7,6 +7,7 @@ import {
   type OptimizerObjective,
   type OptimizerRequest,
 } from "@/api";
+import { useT } from "@/i18n";
 import { ageFromBirthDate, ceilingsFromEnvelopes, useProfile } from "@/lib/profile";
 import { Assets } from "@/components/Assets";
 import { Correlation } from "@/components/Correlation";
@@ -21,6 +22,7 @@ import { RiskReturn } from "@/components/RiskReturn";
  * paid by people who never look.
  */
 export function PlacementsAdvanced({ dashboard }: { dashboard: DashboardResponse }) {
+  const { t } = useT();
   const [open, setOpen] = useState(false);
   return (
     <details
@@ -29,9 +31,9 @@ export function PlacementsAdvanced({ dashboard }: { dashboard: DashboardResponse
       onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}
     >
       <summary className="flex cursor-pointer select-none items-center justify-between px-4 py-3 text-sm font-medium">
-        Mode avancé
+        {t("investments.advanced.title")}
         <span className="text-xs font-normal text-muted-foreground group-open:hidden">
-          rendement, volatilité, optimiseur, scanner, corrélations
+          {t("investments.advanced.sub")}
         </span>
       </summary>
       {open && (
@@ -44,6 +46,7 @@ export function PlacementsAdvanced({ dashboard }: { dashboard: DashboardResponse
 }
 
 function AdvancedContent({ dashboard }: { dashboard: DashboardResponse }) {
+  const { t } = useT();
   const [profile] = useProfile();
   const wealth = useWealthSummary();
   const age = profile ? ageFromBirthDate(profile.birth_date) : null;
@@ -109,10 +112,10 @@ function AdvancedContent({ dashboard }: { dashboard: DashboardResponse }) {
         mu: optimizer.data.optimal.expected_return,
         label:
           objective === "min_variance"
-            ? "Min variance"
+            ? t("investments.objective.minVariance")
             : objective === "from_strategy"
-              ? "Selon ton profil"
-              : "Cible vol max",
+              ? t("investments.objective.fromProfile")
+              : t("investments.objective.targetVol"),
       }
     : undefined;
 

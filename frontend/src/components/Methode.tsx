@@ -12,12 +12,27 @@ import {
   type SavingsRateVerdictDetails,
   type Verdict,
 } from "@/api";
+import { LOCALE_TAGS, getLocale, useT } from "@/i18n";
+import { formatDate } from "@/lib/accounts";
 import { fmt } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { NAV_PATHS } from "@/components/Sidebar";
 import { VerdictCard, VerdictDot } from "@/components/ui/verdict-card";
 import { Proposal } from "@/components/methode/Proposal";
 import { StressList } from "@/components/methode/StressList";
+
+/** Short numeric date, « 03/03/2026 » — the shape a bare toLocaleDateString gave, in the language in effect. */
+function numericDate(iso: string): string {
+  return formatDate(iso, { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+/** One decimal in the language in effect: « 3,2 » or « 3.2 ». */
+function dec1(v: number): string {
+  return new Intl.NumberFormat(LOCALE_TAGS[getLocale()], {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(v);
+}
 
 /**
  * « Méthode » : every verdict of the method as a folded card (ADR-023).
@@ -26,6 +41,7 @@ import { StressList } from "@/components/methode/StressList";
  * a phone and the detail exists for whoever wants it.
  */
 export function Methode() {
+  const { t } = useT();
   const q = useVerdicts();
 
   if (q.isLoading) {
@@ -40,9 +56,9 @@ export function Methode() {
   if (q.isError || !q.data) {
     return (
       <div className="rounded-xl border border-dashed p-8 text-center">
-        <p className="text-sm font-medium">Les verdicts ne sont pas disponibles pour l'instant</p>
+        <p className="text-sm font-medium">{t("method.unavailable")}</p>
         <p className="mt-1 text-sm text-muted-foreground">
-          {q.error instanceof Error ? q.error.message : "Réessaie dans un instant."}
+          {q.error instanceof Error ? q.error.message : t("method.retry")}
         </p>
       </div>
     );
@@ -50,11 +66,7 @@ export function Methode() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Chaque carte est un verdict : un feu, une phrase, un montant par an, une chose à faire.
-        Elles sont rangées par urgence, puis par euros en jeu — ce qui est en haut compte le plus.
-        Ouvre une carte pour voir le calcul.
-      </p>
+      <p className="text-sm text-muted-foreground">{t("method.intro")}</p>
       {q.data.verdicts.map((v) => (
         <VerdictCard key={v.id} verdict={v}>
           {v.id === "fees" ? (
@@ -91,6 +103,7 @@ export function Methode() {
 /* ── Répartition ───────────────────────────────────────────────────────── */
 
 function DiversificationDetails({ details: d }: { details: DiversificationVerdictDetails }) {
+  const { t } = useT();
   const lines = d.lines ?? [];
   const duplicates = d.duplicates ?? [];
   const concentrated = d.concentrated ?? [];
@@ -104,8 +117,8 @@ function DiversificationDetails({ details: d }: { details: DiversificationVerdic
             <div className="min-w-0 flex-1">
               <div className="truncate">{l.label}</div>
               <div className="truncate text-xs text-muted-foreground">
-                {l.index_label ?? "classe non reconnue"}
-                {!l.diversified && l.index_label ? " · un seul segment" : ""}
+                {l.index_label ?? t("method.div.unrecognisedClass")}
+                {!l.diversified && l.index_label ? t("method.div.singleSegment") : ""}
               </div>
             </div>
             <span className="shrink-0 font-mono tabular">{fmt.pct(l.weight)}</span>
@@ -115,31 +128,32 @@ function DiversificationDetails({ details: d }: { details: DiversificationVerdic
 
       {duplicates.map((g) => (
         <p key={g.index_label} className="text-xs text-muted-foreground">
-          <strong className="text-foreground">{g.labels.join(", ")}</strong> suivent le même indice
-          « {g.index_label} » et pèsent ensemble {fmt.pct(g.weight)}. En garder plusieurs ne protège
-          pas plus qu'un seul, et multiplie les frais fixes par ligne.
+          <strong className="text-foreground">{g.labels.join(", ")}</strong>
+          {t("method.div.duplicatesAfter", { index: g.index_label, weight: fmt.pct(g.weight) })}
         </p>
       ))}
 
       {concentrated.map((c) => (
         <p key={c.label} className="text-xs text-muted-foreground">
-          <strong className="text-foreground">{c.label}</strong> pèse {fmt.pct(c.weight)} et n'est
-          pas diversifié :{" "}
-          {c.kind === "stock" ? "c'est une seule société" : "il ne couvre qu'un segment du marché"}.
+          <strong className="text-foreground">{c.label}</strong>
+          {t("method.div.concentratedAfter", {
+            weight: fmt.pct(c.weight),
+            reason:
+              c.kind === "stock"
+                ? t("method.div.singleCompany")
+                : t("method.div.singleMarketSegment"),
+          })}
         </p>
       ))}
 
       {unrecognised.length > 0 && (
         <p className="text-xs text-muted-foreground">
-          Non reconnu, donc non jugé : {unrecognised.join(", ")}. Tangent lit le nom officiel de
-          chaque ligne pour savoir ce qu'elle suit ; celles-ci ne correspondent à rien de connu.
+          {t("method.div.unrecognised", { labels: unrecognised.join(", ") })}
         </p>
       )}
 
       <p className="text-xs text-muted-foreground">
-        Un fonds indiciel large n'est jamais signalé, quel que soit son poids : détenir un seul ETF
-        monde est la recommandation la plus répandue. Le seuil de{" "}
-        {fmt.pct(d.single_line_max ?? 0.4)} ne vise que les lignes qui parient sur une seule chose.
+        {t("method.div.note", { max: fmt.pct(d.single_line_max ?? 0.4) })}
       </p>
     </div>
   );
@@ -148,13 +162,12 @@ function DiversificationDetails({ details: d }: { details: DiversificationVerdic
 /* ── Ce que tes placements ont vraiment rapporté ───────────────────────── */
 
 function PerformanceDetails({ details: d }: { details: PerformanceVerdictDetails }) {
+  const { t, tn } = useT();
   if (d.twr === undefined || d.twr === null) {
     return (
       <p className="text-xs text-muted-foreground">
-        Tangent enregistre chaque nuit la valeur de tes placements et les quantités qui la
-        composent. C'est la seule façon de distinguer ce que le marché a fait de ce que tu as versé,
-        parce que ta banque ne transmet aucune opération sur un PEA ou un compte-titres.
-        {d.min_days ? ` Il faut ${d.min_days} jours pour un premier chiffre.` : ""}
+        {t("method.perf.noData")}
+        {d.min_days ? ` ${tn("method.perf.minDays", d.min_days)}` : ""}
       </p>
     );
   }
@@ -163,40 +176,42 @@ function PerformanceDetails({ details: d }: { details: PerformanceVerdictDetails
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Figure
-          label="Tes fonds (TWR)"
+          label={t("method.perf.twr")}
           value={signed(d.twr_annualized ?? d.twr)}
           sub={
             d.twr_annualized !== null && d.twr_annualized !== undefined
-              ? "par an, versements mis à part"
-              : "depuis le début, versements mis à part"
+              ? t("method.perf.twrAnnual")
+              : t("method.perf.twrTotal")
           }
         />
         <Figure
-          label="Ton argent (TRI)"
+          label={t("method.perf.irr")}
           value={d.irr !== null && d.irr !== undefined ? signed(d.irr) : "—"}
           sub={
             d.irr !== null && d.irr !== undefined
-              ? "par an, avec le calendrier de tes versements"
-              : "six mois d'historique nécessaires"
+              ? t("method.perf.irrSub")
+              : t("method.perf.irrMissing")
           }
         />
         <Figure
-          label="Écart de comportement"
+          label={t("method.perf.gap")}
           value={
             d.behaviour_gap !== null && d.behaviour_gap !== undefined
               ? signed(d.behaviour_gap)
               : "—"
           }
-          sub="ce que le moment de tes versements ajoute ou retire"
+          sub={t("method.perf.gapSub")}
         />
       </div>
       <p className="text-xs text-muted-foreground">
-        Historique du {d.start ? new Date(d.start).toLocaleDateString("fr-FR") : "?"} au{" "}
-        {d.end ? new Date(d.end).toLocaleDateString("fr-FR") : "?"}, {d.days ?? 0} jours.{" "}
-        {fmt.eur0(d.first_value_eur ?? 0)} au départ, {fmt.eur0(d.net_flows_eur ?? 0)} versés
-        depuis, {fmt.eur0(d.last_value_eur ?? 0)} aujourd'hui. Le TWR juge la stratégie, le TRI juge
-        ton résultat ; c'est la mesure que les fonds publient et celle que ton relevé devrait
-        porter.
+        {t("method.perf.history", {
+          start: d.start ? numericDate(d.start) : "?",
+          end: d.end ? numericDate(d.end) : "?",
+          days: tn("method.perf.days", d.days ?? 0),
+          first: fmt.eur0(d.first_value_eur ?? 0),
+          flows: fmt.eur0(d.net_flows_eur ?? 0),
+          last: fmt.eur0(d.last_value_eur ?? 0),
+        })}
       </p>
     </div>
   );
@@ -205,6 +220,7 @@ function PerformanceDetails({ details: d }: { details: PerformanceVerdictDetails
 /* ── Baisse depuis le plus haut ────────────────────────────────────────── */
 
 function DrawdownDetails({ details: d }: { details: DrawdownVerdictDetails }) {
+  const { t } = useT();
   if (d.drawdown === undefined) return null;
   const dd = Math.abs(d.drawdown);
   const max = Math.abs(d.max_drawdown ?? 0);
@@ -213,32 +229,34 @@ function DrawdownDetails({ details: d }: { details: DrawdownVerdictDetails }) {
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Figure
-          label="Sous le plus haut"
+          label={t("method.dd.below")}
           value={`−${fmt.pct(dd)}`}
           sub={
             d.peak_day
-              ? `plus haut du ${new Date(d.peak_day).toLocaleDateString("fr-FR")}`
-              : "depuis le début"
+              ? t("method.dd.peakOn", { date: numericDate(d.peak_day) })
+              : t("method.dd.sinceStart")
           }
         />
         <Figure
-          label="En euros"
+          label={t("method.dd.inEuros")}
           value={`−${fmt.eur0(d.missing_eur ?? 0)}`}
-          sub="par rapport à ce plus haut"
+          sub={t("method.dd.inEurosSub")}
         />
         <Figure
-          label="Pire baisse connue"
+          label={t("method.dd.worst")}
           value={`−${fmt.pct(max)}`}
-          sub="depuis que Tangent suit ton compte"
+          sub={t("method.dd.worstSub")}
         />
       </div>
       {d.worst_year_ever && (
         <p className="text-xs text-muted-foreground">
-          Pour situer : sur {d.worst_year_ever.to_year - d.worst_year_ever.from_year} ans d'actions
-          américaines ({d.worst_year_ever.from_year}-{d.worst_year_ever.to_year}), la pire année a
-          coûté{" "}
-          <strong className="text-foreground">{fmt.pct(Math.abs(d.worst_year_ever.return))}</strong>{" "}
-          en pouvoir d'achat. C'est le pire connu, pas une prévision.
+          {t("method.dd.contextBefore", {
+            years: d.worst_year_ever.to_year - d.worst_year_ever.from_year,
+            from: d.worst_year_ever.from_year,
+            to: d.worst_year_ever.to_year,
+          })}
+          <strong className="text-foreground">{fmt.pct(Math.abs(d.worst_year_ever.return))}</strong>
+          {t("method.dd.contextAfter")}
         </p>
       )}
       <div>
@@ -253,16 +271,12 @@ function DrawdownDetails({ details: d }: { details: DrawdownVerdictDetails }) {
           />
         </div>
         <div className="mt-1 flex justify-between text-xs text-muted-foreground">
-          <span>au plus haut</span>
-          <span>seuil d'alerte {fmt.pct(d.alert_step ?? 0.1)}</span>
+          <span>{t("method.dd.atPeak")}</span>
+          <span>{t("method.dd.alertStep", { pct: fmt.pct(d.alert_step ?? 0.1) })}</span>
           <span>−{fmt.pct(scale)}</span>
         </div>
       </div>
-      <p className="text-xs text-muted-foreground">
-        Un gérant doit prévenir son client le jour où le portefeuille passe 10 % sous son point de
-        départ, puis à chaque tranche de 10 % (MiFID II, article 62). Tangent applique la même
-        règle, mesurée hors versements. Une baisse n'est une perte qu'au moment où on vend.
-      </p>
+      <p className="text-xs text-muted-foreground">{t("method.dd.note")}</p>
     </div>
   );
 }
@@ -270,6 +284,7 @@ function DrawdownDetails({ details: d }: { details: DrawdownVerdictDetails }) {
 /* ── Épargne pour ton objectif ─────────────────────────────────────────── */
 
 function GoalDetails({ details: d }: { details: GoalVerdictDetails }) {
+  const { t } = useT();
   if (d.probability === undefined || d.goal_eur === undefined) return null;
   const p = d.probability;
   const target = d.target_probability ?? 0.75;
@@ -278,24 +293,28 @@ function GoalDetails({ details: d }: { details: GoalVerdictDetails }) {
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Figure
-          label="Objectif"
+          label={t("method.goal.target")}
           value={fmt.eur0(d.goal_eur)}
-          sub={`dans ${d.horizon_years ?? 10} ans, en euros d'aujourd'hui`}
+          sub={t("method.goal.targetSub", { years: d.horizon_years ?? 10 })}
         />
         <Figure
-          label="Point de départ"
+          label={t("method.goal.start")}
           value={fmt.eur0(d.initial_eur ?? 0)}
-          sub={`+ ${fmt.eur0(d.monthly_used_eur ?? 0)} par mois (${
-            d.monthly_source === "observed" ? "virements observés" : "versement déclaré"
-          })`}
+          sub={t("method.goal.startSub", {
+            monthly: fmt.eur0(d.monthly_used_eur ?? 0),
+            source:
+              d.monthly_source === "observed"
+                ? t("method.goal.observed")
+                : t("method.goal.declared"),
+          })}
         />
         <Figure
-          label="Pour 3 chances sur 4"
-          value={`${fmt.eur0(d.required_monthly_eur ?? 0)}/mois`}
+          label={t("method.goal.required")}
+          value={t("method.goal.perMonth", { amount: fmt.eur0(d.required_monthly_eur ?? 0) })}
           sub={
             d.extra_monthly_eur && d.extra_monthly_eur > 0
-              ? `soit ${fmt.eur0(d.extra_monthly_eur)} de plus qu'aujourd'hui`
-              : "tu y es déjà"
+              ? t("method.goal.extra", { amount: fmt.eur0(d.extra_monthly_eur) })
+              : t("method.goal.already")
           }
         />
       </div>
@@ -321,21 +340,24 @@ function GoalDetails({ details: d }: { details: GoalVerdictDetails }) {
           />
         </div>
         <div className="mt-1 flex justify-between text-xs text-muted-foreground">
-          <span>0 %</span>
-          <span>
-            {fmt.pct0(p)} de chances · cible {fmt.pct0(target)}
-          </span>
-          <span>100 %</span>
+          <span>{t("method.gauge.zero")}</span>
+          <span>{t("method.goal.gauge", { p: fmt.pct0(p), target: fmt.pct0(target) })}</span>
+          <span>{t("method.gauge.full")}</span>
         </div>
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Dans {d.horizon_years ?? 10} ans, 1 fois sur 10 tu auras moins de {fmt.eur0(d.p10_eur ?? 0)}
-        , la moitié du temps plus de {fmt.eur0(d.p50_eur ?? 0)}, 1 fois sur 10 plus de{" "}
-        {fmt.eur0(d.p90_eur ?? 0)}. Simulation de {d.n_paths ?? 2000} trajectoires avec{" "}
-        {fmt.pct0(d.equity_share ?? 0)} d'actions (ton profil), {fmt.pct(d.mu_real ?? 0)} de
-        rendement réel par an après {fmt.pct0(d.inflation ?? 0.02)} d'inflation, volatilité{" "}
-        {fmt.pct0(d.sigma ?? 0)}.
+        {t("method.goal.simulation", {
+          years: d.horizon_years ?? 10,
+          p10: fmt.eur0(d.p10_eur ?? 0),
+          p50: fmt.eur0(d.p50_eur ?? 0),
+          p90: fmt.eur0(d.p90_eur ?? 0),
+          paths: d.n_paths ?? 2000,
+          equity: fmt.pct0(d.equity_share ?? 0),
+          mu: fmt.pct(d.mu_real ?? 0),
+          inflation: fmt.pct0(d.inflation ?? 0.02),
+          sigma: fmt.pct0(d.sigma ?? 0),
+        })}
       </p>
     </div>
   );
@@ -344,6 +366,7 @@ function GoalDetails({ details: d }: { details: GoalVerdictDetails }) {
 /* ── Taux d'épargne ────────────────────────────────────────────────────── */
 
 function SavingsRateDetails({ details: d }: { details: SavingsRateVerdictDetails }) {
+  const { t } = useT();
   if (d.rate === undefined || d.income_monthly_eur === undefined) return null;
   const rate = d.rate;
   const target = d.target_rate ?? 0.15;
@@ -353,23 +376,21 @@ function SavingsRateDetails({ details: d }: { details: SavingsRateVerdictDetails
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Figure
-          label="Épargné par mois"
+          label={t("method.sr.saved")}
           value={fmt.eur0(d.monthly_saved_used_eur ?? 0)}
           sub={
-            d.source === "observed"
-              ? "virements vers livrets et placements, 90 derniers jours"
-              : "versement déclaré dans ton profil"
+            d.source === "observed" ? t("method.sr.savedObserved") : t("method.sr.savedDeclared")
           }
         />
         <Figure
-          label="Revenu par mois"
+          label={t("method.sr.income")}
           value={fmt.eur0(d.income_monthly_eur)}
-          sub={`revenu fiscal ${fmt.eur0(d.rfr_eur ?? 0)} sur 12 mois`}
+          sub={t("method.sr.incomeSub", { rfr: fmt.eur0(d.rfr_eur ?? 0) })}
         />
         <Figure
-          label="Cible"
+          label={t("method.sr.target")}
           value={fmt.eur0(d.target_monthly_eur ?? 0)}
-          sub={`${fmt.pct0(target)} du revenu`}
+          sub={t("method.sr.targetSub", { pct: fmt.pct0(target) })}
         />
       </div>
 
@@ -397,23 +418,25 @@ function SavingsRateDetails({ details: d }: { details: SavingsRateVerdictDetails
           />
         </div>
         <div className="mt-1 flex justify-between text-xs text-muted-foreground">
-          <span>0 %</span>
-          <span>
-            toi : {fmt.pct0(rate)} · cible {fmt.pct0(target)}
-          </span>
+          <span>{t("method.gauge.zero")}</span>
+          <span>{t("method.sr.gauge", { rate: fmt.pct0(rate), target: fmt.pct0(target) })}</span>
           <span>{fmt.pct0(scale)}</span>
         </div>
       </div>
 
       <p className="text-xs text-muted-foreground">
         {d.missing_monthly_eur && d.missing_monthly_eur > 0
-          ? `Les ${fmt.eur0(d.missing_monthly_eur)} par mois qui manquent valent ${fmt.eur0(
-              d.gap_at_horizon_eur ?? 0,
-            )} dans ${d.horizon_years ?? 20} ans à ${fmt.pct0(d.growth_for_horizon ?? 0.05)} par an. `
+          ? `${t("method.sr.missing", {
+              missing: fmt.eur0(d.missing_monthly_eur),
+              gap: fmt.eur0(d.gap_at_horizon_eur ?? 0),
+              years: d.horizon_years ?? 20,
+              growth: fmt.pct0(d.growth_for_horizon ?? 0.05),
+            })} `
           : ""}
-        À 20 ans, plus de la moitié du capital final vient des versements, pas du rendement. La
-        hausse automatique de {fmt.pct0(d.escalation ?? 0.05)} par an (« Save More Tomorrow »)
-        porterait ton versement à {fmt.eur0(d.escalated_next_year_eur ?? 0)} l'an prochain.
+        {t("method.sr.note", {
+          escalation: fmt.pct0(d.escalation ?? 0.05),
+          next: fmt.eur0(d.escalated_next_year_eur ?? 0),
+        })}
       </p>
     </div>
   );
@@ -422,6 +445,7 @@ function SavingsRateDetails({ details: d }: { details: SavingsRateVerdictDetails
 /* ── Où placer le prochain euro ────────────────────────────────────────── */
 
 function NextEuroDetails({ details: d }: { details: NextEuroVerdictDetails }) {
+  const { t, tn } = useT();
   const steps = d.steps ?? [];
   const p = d.precaution;
   if (steps.length === 0) return null;
@@ -430,23 +454,25 @@ function NextEuroDetails({ details: d }: { details: NextEuroVerdictDetails }) {
       {p && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Figure
-            label="Sur tes livrets"
+            label={t("method.next.liquid")}
             value={fmt.eur0(p.liquid_eur)}
             sub={
               p.months_covered !== null
-                ? `${p.months_covered.toFixed(1).replace(".", ",")} mois de dépenses`
-                : "dépenses mensuelles inconnues"
+                ? tn("method.next.monthsOfSpending", p.months_covered, {
+                    count: dec1(p.months_covered),
+                  })
+                : t("method.next.unknownSpending")
             }
           />
           <Figure
-            label="Cible de précaution"
+            label={t("method.next.precautionTarget")}
             value={p.target_eur !== null ? fmt.eur0(p.target_eur) : "—"}
-            sub={`${p.target_months} mois de dépenses`}
+            sub={tn("method.next.monthsOfSpending", p.target_months)}
           />
           <Figure
-            label="Dépenses par mois"
+            label={t("method.next.spending")}
             value={p.monthly_spending_eur !== null ? fmt.eur0(p.monthly_spending_eur) : "—"}
-            sub="débits de tes comptes courants, 90 derniers jours"
+            sub={t("method.next.spendingSub")}
           />
         </div>
       )}
@@ -463,7 +489,8 @@ function NextEuroDetails({ details: d }: { details: NextEuroVerdictDetails }) {
                 <span className="font-medium">{s.label}</span>
                 {s.impact_eur_per_year !== null && s.impact_eur_per_year > 0 && (
                   <span className="font-mono text-xs tabular text-muted-foreground">
-                    {fmt.eur0(s.impact_eur_per_year)}/an
+                    {fmt.eur0(s.impact_eur_per_year)}
+                    {t("method.perYearSuffix")}
                   </span>
                 )}
               </div>
@@ -474,10 +501,9 @@ function NextEuroDetails({ details: d }: { details: NextEuroVerdictDetails }) {
       </ol>
 
       <p className="text-xs text-muted-foreground">
-        La règle, dans l'ordre : précaution sur livrets, puis actions à long terme dans le PEA, puis
-        PER seulement au-dessus de la tranche à 30 %, le reste en compte-titres.
+        {t("method.next.rule")}
         {d.tax?.tmi !== null && d.tax?.tmi !== undefined
-          ? ` Ta tranche d'imposition estimée : ${fmt.pct(d.tax.tmi)}, d'après ton revenu fiscal et tes parts.`
+          ? ` ${t("method.next.tmi", { tmi: fmt.pct(d.tax.tmi) })}`
           : ""}
       </p>
     </div>
@@ -487,19 +513,21 @@ function NextEuroDetails({ details: d }: { details: NextEuroVerdictDetails }) {
 /* ── Part d'actions ────────────────────────────────────────────────────── */
 
 function LongRun({ d }: { d: RiskShareVerdictDetails }) {
+  const { t } = useT();
   if (!d.long_run) return null;
   return (
     <p className="text-xs text-muted-foreground">
-      Pourquoi accepter ces variations : de {d.long_run.from_year} à {d.long_run.to_year}, les
-      actions ont rapporté{" "}
-      <strong className="text-foreground">{fmt.pct(d.long_run.equities)} par an</strong> contre{" "}
-      {fmt.pct(d.long_run.bonds)} pour les obligations d'État. C'est ce qui s'est passé, pas ce qui
-      se passera.
+      {t("method.risk.longRunBefore", { from: d.long_run.from_year, to: d.long_run.to_year })}
+      <strong className="text-foreground">
+        {t("method.risk.longRunEquities", { pct: fmt.pct(d.long_run.equities) })}
+      </strong>
+      {t("method.risk.longRunAfter", { bonds: fmt.pct(d.long_run.bonds) })}
     </p>
   );
 }
 
 function RiskShareDetails({ details: d }: { details: RiskShareVerdictDetails }) {
+  const { t } = useT();
   if (d.pocket_eur === undefined || d.actual_share === undefined) return null;
   const actual = d.actual_share;
   const target = d.target_share ?? actual;
@@ -510,25 +538,34 @@ function RiskShareDetails({ details: d }: { details: RiskShareVerdictDetails }) 
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Figure
-          label="Part d'actions"
+          label={t("method.risk.share")}
           value={fmt.pct0(actual)}
-          sub={`${fmt.eur0(d.equity_eur ?? 0)} en lignes cotées sur ${fmt.eur0(d.pocket_eur)}`}
+          sub={t("method.risk.shareSub", {
+            equity: fmt.eur0(d.equity_eur ?? 0),
+            pocket: fmt.eur0(d.pocket_eur),
+          })}
         />
         <Figure
-          label="Part visée"
+          label={t("method.risk.target")}
           value={fmt.pct0(target)}
           sub={
             d.horizon_cap !== undefined &&
             d.merton_share !== undefined &&
             d.horizon_cap < d.merton_share
-              ? `plafonnée par ton horizon de ${d.horizon_years} ans (${fmt.pct0(d.merton_share)} sinon)`
-              : `profil « ${d.risk_label ?? "?"} », horizon ${d.horizon_years ?? 10} ans`
+              ? t("method.risk.capped", {
+                  years: d.horizon_years ?? "?",
+                  merton: fmt.pct0(d.merton_share),
+                })
+              : t("method.risk.profile", {
+                  label: d.risk_label ?? "?",
+                  years: d.horizon_years ?? 10,
+                })
           }
         />
         <Figure
-          label="Mauvaise année"
+          label={t("method.risk.badYear")}
           value={`−${fmt.eur0(d.bad_year_eur ?? 0)}`}
-          sub="deux fois la volatilité des actions sur ta poche actions"
+          sub={t("method.risk.badYearSub")}
         />
       </div>
 
@@ -549,21 +586,17 @@ function RiskShareDetails({ details: d }: { details: RiskShareVerdictDetails }) 
           />
         </div>
         <div className="mt-1 flex justify-between text-xs text-muted-foreground">
-          <span>0 % actions</span>
-          <span>
-            bande {fmt.pct0(lo)} – {fmt.pct0(hi)}
-          </span>
-          <span>100 %</span>
+          <span>{t("method.risk.gaugeLeft")}</span>
+          <span>{t("method.risk.band", { lo: fmt.pct0(lo), hi: fmt.pct0(hi) })}</span>
+          <span>{t("method.gauge.full")}</span>
         </div>
       </div>
 
       <p className="text-xs text-muted-foreground">
-        La part visée est le point de la droite de marché que ton curseur choisit (volatilité
-        maximale de ton cran divisée par celle des actions monde, {fmt.pct(d.equity_sigma ?? 0.15)}
-        ). C'est la part de Merton, avec une aversion au risque γ ≈{" "}
-        {d.gamma ? d.gamma.toFixed(1).replace(".", ",") : "?"}. Les lignes cotées comptent comme
-        actions ; fonds euros, PER ou assurance vie sans détail et PEL comptent comme produits de
-        taux.
+        {t("method.risk.note", {
+          sigma: fmt.pct(d.equity_sigma ?? 0.15),
+          gamma: d.gamma ? dec1(d.gamma) : "?",
+        })}
       </p>
       <LongRun d={d} />
     </div>
@@ -573,6 +606,7 @@ function RiskShareDetails({ details: d }: { details: RiskShareVerdictDetails }) 
 /* ── Frais réels ───────────────────────────────────────────────────────── */
 
 function FeesDetails({ details: d }: { details: FeesVerdictDetails }) {
+  const { t } = useT();
   const lines = d.lines ?? [];
   const missing = d.missing_ter ?? [];
   const uncovered = d.uncovered_accounts ?? [];
@@ -585,25 +619,26 @@ function FeesDetails({ details: d }: { details: FeesVerdictDetails }) {
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Figure
-          label="Frais des fonds"
+          label={t("method.fees.funds")}
           value={fmt.eur0(d.fund_fees_eur ?? 0)}
-          sub={`TER de chaque ligne × sa valeur${missing.length ? ", lignes sans TER exclues" : ""}`}
+          sub={`${t("method.fees.fundsSub")}${missing.length ? t("method.fees.fundsSubMissing") : ""}`}
         />
         <Figure
-          label="Frais du courtier"
+          label={t("method.fees.broker")}
           value={d.broker_known === false ? "—" : fmt.eur0(d.broker_fees_eur ?? 0)}
           sub={
             d.broker_known === false
-              ? "banque non renseignée : ses frais ne sont pas comptés"
-              : `${d.broker_name ?? "courtier"} : garde, frais par ligne, courtage sur ${fmt.eur(
-                  d.monthly_contribution_eur ?? 0,
-                )}/mois`
+              ? t("method.fees.brokerUnknown")
+              : t("method.fees.brokerSub", {
+                  broker: d.broker_name ?? t("method.fees.defaultBroker"),
+                  monthly: fmt.eur(d.monthly_contribution_eur ?? 0),
+                })
           }
         />
         <Figure
-          label="Référence"
+          label={t("method.fees.reference")}
           value={fmt.eur0(d.reference_eur ?? 0)}
-          sub={`PEA en ligne + ETF monde, ${fmt.pct(d.reference_pct ?? 0)} par an`}
+          sub={t("method.fees.referenceSub", { pct: fmt.pct(d.reference_pct ?? 0) })}
         />
       </div>
 
@@ -619,13 +654,13 @@ function FeesDetails({ details: d }: { details: FeesVerdictDetails }) {
             <div className="shrink-0 text-right">
               {l.ter === null ? (
                 <Link to={NAV_PATHS.accounts} className="text-xs text-primary underline">
-                  TER à renseigner
+                  {t("method.fees.setTer")}
                 </Link>
               ) : (
                 <>
                   <div className="font-mono tabular">{fmt.eur0(l.fund_fee_eur ?? 0)}</div>
                   <div className="font-mono text-xs tabular text-muted-foreground">
-                    {fmt.pct(l.ter)} par an
+                    {t("method.fees.perYear", { pct: fmt.pct(l.ter) })}
                   </div>
                   {l.ter_source_url && (
                     <a
@@ -634,7 +669,7 @@ function FeesDetails({ details: d }: { details: FeesVerdictDetails }) {
                       rel="noreferrer"
                       className="text-xs text-muted-foreground underline"
                     >
-                      source
+                      {t("method.fees.source")}
                     </a>
                   )}
                 </>
@@ -647,10 +682,13 @@ function FeesDetails({ details: d }: { details: FeesVerdictDetails }) {
       {uncovered.length > 0 && <Uncovered accounts={uncovered} />}
 
       <p className="text-xs text-muted-foreground">
-        Total {fmt.eur0(d.total_fees_eur ?? 0)} par an, soit {fmt.pct(d.total_fees_pct ?? 0)} de{" "}
-        {fmt.eur0(d.positions_total_eur)}. Vert jusqu'à {fmt.pct(d.thresholds?.green_max ?? 0)} par
-        an, orange jusqu'à {fmt.pct(d.thresholds?.amber_max ?? 0)}. Les frais des fonds sont déjà
-        dans les cours : ils ne sont pas retirés une seconde fois de la projection.
+        {t("method.fees.total", {
+          total: fmt.eur0(d.total_fees_eur ?? 0),
+          pct: fmt.pct(d.total_fees_pct ?? 0),
+          positions: fmt.eur0(d.positions_total_eur),
+          green: fmt.pct(d.thresholds?.green_max ?? 0),
+          amber: fmt.pct(d.thresholds?.amber_max ?? 0),
+        })}
       </p>
     </div>
   );
@@ -661,10 +699,12 @@ function Uncovered({
 }: {
   accounts: { name: string; account_type: string; value_eur: number }[];
 }) {
+  const { t } = useT();
   return (
     <div className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
-      Non mesuré, le contrat ne détaille pas ses lignes :{" "}
-      {accounts.map((a) => `${a.name} (${fmt.eur0(a.value_eur)})`).join(", ")}.
+      {t("method.fees.uncovered", {
+        accounts: accounts.map((a) => `${a.name} (${fmt.eur0(a.value_eur)})`).join(", "),
+      })}
     </div>
   );
 }

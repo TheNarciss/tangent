@@ -3,21 +3,43 @@ import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import { useVerdicts, type Verdict, type VerdictStatus } from "@/api";
+import { useT, type MessageKey } from "@/i18n";
 import { fmt } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-export const VERDICT_STATUS: Record<VerdictStatus, { label: string; dot: string; text: string }> = {
-  green: { label: "Rien à changer", dot: "bg-[hsl(var(--gain))]", text: "text-[hsl(var(--gain))]" },
-  amber: { label: "À surveiller", dot: "bg-amber-500", text: "text-amber-600 dark:text-amber-400" },
-  red: { label: "À corriger", dot: "bg-[hsl(var(--loss))]", text: "text-[hsl(var(--loss))]" },
-  unknown: { label: "Incomplet", dot: "bg-muted-foreground/40", text: "text-muted-foreground" },
+/** Style tokens per status; the label is a message key so it follows the language. */
+export const VERDICT_STATUS: Record<
+  VerdictStatus,
+  { labelKey: MessageKey; dot: string; text: string }
+> = {
+  green: {
+    labelKey: "method.status.green",
+    dot: "bg-[hsl(var(--gain))]",
+    text: "text-[hsl(var(--gain))]",
+  },
+  amber: {
+    labelKey: "method.status.amber",
+    dot: "bg-amber-500",
+    text: "text-amber-600 dark:text-amber-400",
+  },
+  red: {
+    labelKey: "method.status.red",
+    dot: "bg-[hsl(var(--loss))]",
+    text: "text-[hsl(var(--loss))]",
+  },
+  unknown: {
+    labelKey: "method.status.unknown",
+    dot: "bg-muted-foreground/40",
+    text: "text-muted-foreground",
+  },
 };
 
 /** The traffic light alone — used inline on the simple screens. */
 export function VerdictDot({ status, className }: { status: VerdictStatus; className?: string }) {
+  const { t } = useT();
   return (
     <span
-      aria-label={VERDICT_STATUS[status].label}
+      aria-label={t(VERDICT_STATUS[status].labelKey)}
       className={cn(
         "inline-block h-2.5 w-2.5 shrink-0 rounded-full",
         VERDICT_STATUS[status].dot,
@@ -40,6 +62,7 @@ interface VerdictCardProps {
  * phone (stacked) and a desktop (the amount sits on the right).
  */
 export function VerdictCard({ verdict, children, defaultOpen = false }: VerdictCardProps) {
+  const { t } = useT();
   const [open, setOpen] = useState(defaultOpen);
   const status = VERDICT_STATUS[verdict.status];
   const impact = verdict.impact_eur_per_year;
@@ -55,12 +78,12 @@ export function VerdictCard({ verdict, children, defaultOpen = false }: VerdictC
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
             <span className="text-base font-semibold">{verdict.title}</span>
-            <span className={cn("text-xs font-medium", status.text)}>{status.label}</span>
+            <span className={cn("text-xs font-medium", status.text)}>{t(status.labelKey)}</span>
           </div>
           <p className="text-sm leading-snug">{verdict.headline}</p>
           {verdict.action && (
             <p className="text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">À faire : </span>
+              <span className="font-medium text-foreground">{t("method.card.todo")}</span>
               {verdict.action}
             </p>
           )}
@@ -69,7 +92,9 @@ export function VerdictCard({ verdict, children, defaultOpen = false }: VerdictC
           {impact !== null && impact > 0 && (
             <span className={cn("font-mono text-sm tabular md:text-base", status.text)}>
               {fmt.eur0(impact)}
-              <span className="ml-1 text-xs text-muted-foreground">/an</span>
+              <span className="ml-1 text-xs text-muted-foreground">
+                {t("method.perYearSuffix")}
+              </span>
             </span>
           )}
           <ChevronDown
@@ -98,6 +123,7 @@ export function VerdictLine({
   /** For alerts: say nothing while there is nothing to say. */
   hideWhenGreen?: boolean;
 }) {
+  const { t } = useT();
   const q = useVerdicts();
   const v = q.data?.verdicts.find((x) => x.id === id);
   if (!v) return null;
@@ -109,7 +135,7 @@ export function VerdictLine({
     >
       <VerdictDot status={v.status} />
       <span className="min-w-0 flex-1 leading-snug">{v.headline}</span>
-      <span className="shrink-0 text-xs text-muted-foreground">Détail</span>
+      <span className="shrink-0 text-xs text-muted-foreground">{t("method.card.detail")}</span>
     </Link>
   );
 }
@@ -122,6 +148,7 @@ export function VerdictLine({
  * repeats every verdict is a screen nobody reads.
  */
 export function VerdictAlerts({ to, max = 3 }: { to: string; max?: number }) {
+  const { t, tn } = useT();
   const q = useVerdicts();
   const pending = (q.data?.verdicts ?? []).filter(
     (v) => v.status === "red" || v.status === "amber",
@@ -140,12 +167,12 @@ export function VerdictAlerts({ to, max = 3 }: { to: string; max?: number }) {
         >
           <VerdictDot status={v.status} />
           <span className="min-w-0 flex-1 leading-snug">{v.headline}</span>
-          <span className="shrink-0 text-xs text-muted-foreground">Détail</span>
+          <span className="shrink-0 text-xs text-muted-foreground">{t("method.card.detail")}</span>
         </Link>
       ))}
       {rest > 0 && (
         <Link to={to} className="block px-4 text-xs text-muted-foreground underline md:px-6">
-          {rest === 1 ? "Un autre point à regarder" : `${rest} autres points à regarder`}
+          {tn("method.card.more", rest)}
         </Link>
       )}
     </div>

@@ -11,6 +11,8 @@ import {
   type MarketLeadSource,
 } from "@/api";
 import { Button } from "@/components/ui/button";
+import { t, useT, type MessageKey } from "@/i18n";
+import { formatDate } from "@/lib/accounts";
 import { cn } from "@/lib/utils";
 
 /**
@@ -23,6 +25,7 @@ import { cn } from "@/lib/utils";
  * a buy or a sell, and the screen says so before the list.
  */
 export function MarketLeads() {
+  const { t } = useT();
   const { data, isLoading, error } = useMarketLeads();
   const [source, setSource] = useState<MarketLeadSource | "all">("all");
 
@@ -64,7 +67,7 @@ export function MarketLeads() {
               source === key ? "bg-primary text-primary-foreground" : "hover:bg-accent",
             )}
           >
-            {key === "all" ? "Toutes" : SOURCE_LABELS[key]}
+            {key === "all" ? t("market.leads.filter.all") : sourceLabel(key)}
             <span className={cn("ml-1", source === key ? "opacity-80" : "text-muted-foreground")}>
               {key === "all" ? data.leads.length : (counts[key] ?? 0)}
             </span>
@@ -74,9 +77,7 @@ export function MarketLeads() {
 
       {shown.length === 0 ? (
         <section className="rounded-xl border bg-card p-4 md:p-6">
-          <p className="text-sm text-muted-foreground">
-            Rien de cette source cette nuit : aucune observation n'a passé les seuils.
-          </p>
+          <p className="text-sm text-muted-foreground">{t("market.leads.emptySource")}</p>
         </section>
       ) : (
         <ul className="space-y-3">
@@ -92,22 +93,18 @@ export function MarketLeads() {
 /* ── What this is, before the list ─────────────────────────────────────── */
 
 function WhatThisIs({ computedAt, total }: { computedAt: string; total: number }) {
+  const { t, tn } = useT();
   return (
     <section className="rounded-xl border bg-card p-4 md:p-6">
       <p className="text-sm">
-        Chaque nuit, Tangent lit trois sources publiques de ce que des gens{" "}
-        <strong>font de leur argent</strong> : les paris qui bougent sur Polymarket, les dirigeants
-        qui achètent l'action de leur propre société, les grands gérants qui ouvrent ou soldent une
-        ligne. Tout ce qui dépasse un seuil est ici, sans tri.
+        {t("market.leads.introBefore")}
+        <strong>{t("market.leads.introStrong")}</strong>
+        {t("market.leads.introAfter")}
       </p>
-      <p className="mt-2 text-sm text-muted-foreground">
-        C'est du bruit pour l'essentiel, et c'est voulu : ton briefing du matin en garde zéro à
-        trois, avec la raison. Une piste est une chose à regarder, jamais un ordre d'acheter ou de
-        vendre.
-      </p>
+      <p className="mt-2 text-sm text-muted-foreground">{t("market.leads.noise")}</p>
       <p className="mt-3 text-xs text-muted-foreground">
-        {total} piste{total > 1 ? "s" : ""} collectée{total > 1 ? "s" : ""} {when(computedAt)}.
-        Prochaine collecte cette nuit à 02:15.
+        {tn("market.leads.collected", total, { when: when(computedAt) })}{" "}
+        {t("market.leads.nextCollection")}
       </p>
     </section>
   );
@@ -115,29 +112,39 @@ function WhatThisIs({ computedAt, total }: { computedAt: string; total: number }
 
 /* ── One lead ──────────────────────────────────────────────────────────── */
 
-const SOURCE_LABELS: Record<MarketLeadSource, string> = {
-  polymarket: "Polymarket",
-  edgar_form4: "SEC · dirigeants",
-  edgar_13f: "SEC · gérants",
+const SOURCE_KEYS: Record<MarketLeadSource, MessageKey> = {
+  polymarket: "market.leads.source.polymarket",
+  edgar_form4: "market.leads.source.edgar_form4",
+  edgar_13f: "market.leads.source.edgar_13f",
 };
 
-const KIND_LABELS: Record<string, string> = {
-  prediction_move: "Cote qui a bougé",
-  prediction_state: "État des attentes",
-  insider_cluster: "Achats groupés",
-  insider_buy: "Gros achat",
-  fund_new_position: "Nouvelle ligne",
-  fund_exit: "Ligne soldée",
-  fund_change: "Ligne modifiée",
+const KIND_KEYS: Record<string, MessageKey> = {
+  prediction_move: "market.leads.kind.prediction_move",
+  prediction_state: "market.leads.kind.prediction_state",
+  insider_cluster: "market.leads.kind.insider_cluster",
+  insider_buy: "market.leads.kind.insider_buy",
+  fund_new_position: "market.leads.kind.fund_new_position",
+  fund_exit: "market.leads.kind.fund_exit",
+  fund_change: "market.leads.kind.fund_change",
 };
+
+function sourceLabel(source: MarketLeadSource): string {
+  return t(SOURCE_KEYS[source]);
+}
+
+function kindLabel(kind: string): string {
+  const key = KIND_KEYS[kind];
+  return key ? t(key) : kind;
+}
 
 function LeadCard({ lead }: { lead: MarketLead }) {
+  const { t } = useT();
   return (
     <li className="rounded-xl border bg-card p-4 md:px-6">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] uppercase tracking-wider text-muted-foreground">
-        <span className="rounded-sm border px-1.5 py-0.5">{SOURCE_LABELS[lead.source]}</span>
-        <span>{KIND_LABELS[lead.kind] ?? lead.kind}</span>
-        <span className="ml-auto normal-case tracking-normal">{longDate(lead.observed_at)}</span>
+        <span className="rounded-sm border px-1.5 py-0.5">{sourceLabel(lead.source)}</span>
+        <span>{kindLabel(lead.kind)}</span>
+        <span className="ml-auto normal-case tracking-normal">{dayLabel(lead.observed_at)}</span>
       </div>
       <p className="mt-2 text-sm font-medium">{lead.title}</p>
       <p className="mt-1 text-sm text-muted-foreground">{lead.detail}</p>
@@ -147,7 +154,7 @@ function LeadCard({ lead }: { lead: MarketLead }) {
         rel="noopener noreferrer"
         className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline"
       >
-        Voir la source
+        {t("market.leads.viewSource")}
         <ExternalLink className="h-3 w-3" />
       </a>
     </li>
@@ -157,6 +164,7 @@ function LeadCard({ lead }: { lead: MarketLead }) {
 /* ── Before the first collection ───────────────────────────────────────── */
 
 function NotYet({ error }: { error: unknown }) {
+  const { t } = useT();
   const { data: user } = useCurrentUser();
   const qc = useQueryClient();
   const collect = useMutation({
@@ -170,14 +178,10 @@ function NotYet({ error }: { error: unknown }) {
     <section className="rounded-xl border bg-card p-4 md:p-6">
       <div className="flex items-center gap-2 text-sm">
         <Radar className="h-4 w-4 shrink-0 text-muted-foreground" />
-        {notYet
-          ? "Les pistes ne sont pas encore collectées : la première lecture part cette nuit à 02:15."
-          : "Les pistes ne peuvent pas être lues pour l'instant."}
+        {notYet ? t("market.leads.notYet") : t("market.leads.unavailable")}
       </div>
       {!notYet && detail && <p className="mt-1 text-xs text-muted-foreground">{detail}</p>}
-      <p className="mt-2 text-xs text-muted-foreground">
-        Cette page se rafraîchit toute seule dès que la liste existe.
-      </p>
+      <p className="mt-2 text-xs text-muted-foreground">{t("market.leads.autoRefresh")}</p>
       {user?.is_superuser && (
         <div className="mt-3">
           <Button
@@ -186,11 +190,13 @@ function NotYet({ error }: { error: unknown }) {
             onClick={() => collect.mutate()}
             disabled={collect.isPending || collect.isSuccess}
           >
-            {collect.isSuccess ? "Collecte lancée, quelques minutes" : "Collecter maintenant"}
+            {collect.isSuccess ? t("market.leads.collectStarted") : t("market.leads.collectNow")}
           </Button>
           {collect.error && (
             <p className="mt-2 text-xs text-[hsl(var(--loss))]">
-              {collect.error instanceof Error ? collect.error.message : "Erreur inconnue"}
+              {collect.error instanceof Error
+                ? collect.error.message
+                : t("market.leads.unknownError")}
             </p>
           )}
         </div>
@@ -201,14 +207,19 @@ function NotYet({ error }: { error: unknown }) {
 
 /* ── Dates ─────────────────────────────────────────────────────────────── */
 
+/** « le 3 mars à 02:15 » — when the collection ran. */
 function when(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return `le ${d.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} à ${d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`;
+  return t("market.leads.when", {
+    date: formatDate(iso, { day: "numeric", month: "long" }),
+    time: formatDate(iso, { hour: "2-digit", minute: "2-digit" }),
+  });
 }
 
-function longDate(day: string): string {
+/** « 3 mars » from a `YYYY-MM-DD` day, read as a local date so the day never shifts. */
+function dayLabel(day: string): string {
   const [y, m, d] = day.split("-").map(Number);
   if (!y || !m || !d) return day;
-  return new Date(y, m - 1, d).toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
+  return formatDate(new Date(y, m - 1, d).toISOString(), { day: "numeric", month: "long" });
 }

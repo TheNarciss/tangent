@@ -1,4 +1,5 @@
 import type { PortfolioMetrics } from "@/api";
+import { useT } from "@/i18n";
 import { fmt } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,43 +9,51 @@ interface Props {
 }
 
 export function Metrics({ metrics }: Props) {
+  const { t } = useT();
   const pnlPositive = metrics.total_pnl >= 0;
 
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <MetricCard
-          label="Valorisation"
+          label={t("investments.metrics.value")}
           value={fmt.eur(metrics.total_value)}
-          sub={`Coût ${fmt.eur(metrics.total_cost)}`}
+          sub={t("investments.metrics.cost", { value: fmt.eur(metrics.total_cost) })}
         />
         <MetricCard
-          label="Plus-value"
+          label={t("investments.metrics.pnl")}
           value={fmt.signedEur(metrics.total_pnl)}
           sub={fmt.signedPct(metrics.total_pnl_pct)}
           tone={pnlPositive ? "gain" : "loss"}
         />
         <MetricCard
-          label="E(R) annuel"
+          label={t("investments.metrics.expectedReturn")}
           value={fmt.pct(metrics.expected_return)}
-          sub="Espérance (μ blendé)"
+          sub={t("investments.metrics.expectedReturnSub")}
         />
-        <MetricCard label="Volatilité σ" value={fmt.pct(metrics.volatility)} sub="Annualisée" />
-        <MetricCard label="Sharpe" value={fmt.num(metrics.sharpe)} sub="vs. r_f = 2,5 %" />
+        <MetricCard
+          label={t("investments.metrics.volatility")}
+          value={fmt.pct(metrics.volatility)}
+          sub={t("investments.metrics.annualised")}
+        />
+        <MetricCard
+          label={t("investments.metrics.sharpe")}
+          value={fmt.num(metrics.sharpe)}
+          sub={t("investments.metrics.sharpeSub")}
+        />
       </div>
 
       {metrics.unmapped_tickers.length > 0 && (
         <p className="text-xs text-muted-foreground">
-          Sans hypothèse de rendement long terme, estimé sur l'historique seul :{" "}
-          {metrics.unmapped_tickers.join(", ")}.
+          {t("investments.unmapped", { tickers: metrics.unmapped_tickers.join(", ") })}
         </p>
       )}
 
       <div className="grid gap-3 rounded-lg border bg-muted/20 p-3">
         <RiskCard
-          label="Pire baisse vécue"
+          label={t("investments.metrics.worstDrop")}
           value={fmt.signedPct(metrics.max_drawdown_observed)}
-          hint="Plus forte chute entre un plus-haut et le creux suivant, sur l'historique de ton panier"
+          hint={t("investments.metrics.worstDropHint")}
         />
       </div>
     </div>
