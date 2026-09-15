@@ -134,7 +134,7 @@ npm run ios:sync        # production bundle pointed at riskybusinesses.uk, copie
 npx cap open ios        # then select your team under Signing & Capabilities and run on a device
 ```
 
-The backend side needs `APPLE_*` in `backend/.env` for Sign in with Apple (see `backend/.env.example`).
+The backend side needs `APPLE_*` in `backend/.env` for Sign in with Apple (see `backend/.env.example`). Everything to do by hand in Apple Developer and App Store Connect, the demo account for the review, and the TestFlight pipeline are in `docs/ios-app-store.md`.
 
 ## Project structure
 tangent/
