@@ -12,6 +12,7 @@ import {
 import { NavLink } from "react-router-dom";
 
 import { cn } from "@/lib/utils";
+import { Logo } from "./Logo";
 
 export type NavView =
   | "overview"
@@ -123,7 +124,8 @@ export function Sidebar({ footer, pathname }: SidebarProps) {
   return (
     <aside className="hidden w-60 flex-col border-r border-border bg-card md:flex">
       {/* Logo */}
-      <div className="border-b border-border px-6 py-5">
+      <div className="flex items-center gap-2.5 border-b border-border px-6 py-5">
+        <Logo size={26} className="shrink-0" />
         <span className="text-lg font-semibold tracking-tight">Tangent</span>
       </div>
 
