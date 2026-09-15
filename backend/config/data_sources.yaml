@@ -117,3 +117,19 @@ xtrackers:
     stoxx_europe_600: "LU0328475792"   # Xtrackers Stoxx Europe 600 UCITS ETF 1C
     euro_stoxx_50: "LU0380865021"      # Xtrackers Euro Stoxx 50 UCITS ETF 1C
     dax: "LU0274211480"                # Xtrackers DAX UCITS ETF 1C
+
+polymarket:
+  # Marchés de prédiction : ce que des gens qui misent de l'argent pensent
+  # d'une décision de la Fed, d'une récession, d'un prix du pétrole. API
+  # publique de lecture, sans clé. Les cotes sont des probabilités.
+  base_url: "https://gamma-api.polymarket.com"
+
+edgar:
+  # Déclarations à la SEC : Form 4 (un dirigeant achète ou vend l'action de
+  # sa propre société, déposé sous deux jours) et 13F-HR (un gérant de plus
+  # de 100 M$ liste ses positions US, 45 jours après chaque trimestre).
+  # Public, sans clé. La SEC demande un User-Agent identifié et au plus dix
+  # requêtes par seconde.
+  archives_url: "https://www.sec.gov/Archives"
+  submissions_url: "https://data.sec.gov/submissions"
+  min_seconds_between_requests: 0.12

@@ -1,5 +1,6 @@
 """Admin routes — restricted to superusers."""
 
+import asyncio
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..auth import User, fastapi_users
 from ..db import get_session
 from ..db.models import ReviewBatch
+from ..finance import market_leads
 from ..finance.gap_filler import engine as gap_filler_engine
 from ..llm import batch_poller, batch_submitter
 from ..repositories import bank_transactions as tx_repo
@@ -124,6 +126,17 @@ async def categorize_now(
         learned += await tx_repo.apply_learned_categories(session, user.id)
     batch = await batch_submitter.submit_nightly_batch(session, gaps_only=True)
     return {"learned": learned, "batch": _batch_to_dict(batch) if batch else None}
+
+
+@router.post("/market-leads/refresh")
+async def refresh_market_leads(superuser: User = Depends(_superuser)) -> dict:
+    """Collect the market leads now instead of tonight.
+
+    Answers at once: EDGAR is read filing by filing, a quarter of an hour on
+    a busy day, and the result lands in `GET /market-leads` when it is done.
+    """
+    asyncio.get_running_loop().run_in_executor(None, market_leads.refresh)
+    return {"started": True}
 
 
 @router.post("/batches/poll-all")

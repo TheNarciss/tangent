@@ -33,6 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..auth import User
 from ..db.models import ReviewBatch
 from ..deps import get_user_wealth
+from ..finance import market_leads
 from ..finance import verdicts as verdicts_engine
 from ..finance.gap_filler import engine as gap_filler_engine
 from ..repositories import bank_transactions as tx_repo
@@ -128,9 +129,11 @@ async def submit_nightly_batch(
         logger.warning("Daily cost cap reached — refusing batch submit")
         return None
 
-    # 3. Build per-user requests
+    # 3. Build per-user requests. The market leads are the same list for everyone.
     requests: list[Request] = []
     skipped: list[uuid.UUID] = []
+    collected = market_leads.load() if opted_in_profiles else None
+    leads = collected.leads if collected else []
 
     for profile in opted_in_profiles:
         user_id = profile.user_id
@@ -151,7 +154,9 @@ async def submit_nightly_batch(
             verdicts = verdicts_engine.compute_all(
                 wealth, profile, monthly_spending=spending, monthly_saved=saved, perf=perf
             ).verdicts
-            snapshot = build_anonymized_snapshot(wealth, profile, verdicts=verdicts)
+            snapshot = build_anonymized_snapshot(
+                wealth, profile, verdicts=verdicts, market_leads=leads
+            )
             user_prompt = build_user_prompt(snapshot)
 
             requests.append(

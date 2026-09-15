@@ -17,7 +17,7 @@ from datetime import date
 from typing import Any
 
 from ..db.models import Profile
-from ..models import OptimizerResponse, Verdict, Wealth
+from ..models import MarketLead, OptimizerResponse, Verdict, Wealth
 
 # system prompt held in a separate module-level constant; loaded via a sentinel
 # multi-line string. Kept here (not in a .txt file) so it ships with the wheel.
@@ -45,6 +45,9 @@ Une explication simple de la cause (une hausse de taux, un résultat d'entrepris
 
 # À faire cette semaine
 Par défaut une seule ligne : « Rien à faire : continue tes versements. » Sinon, une à deux pistes concrètes, chacune avec sa raison structurelle. Les verdicts de la méthode fournis dans les données sont déjà calculés : un verdict orange ou rouge est la piste à proposer en premier, avec son montant en euros tel quel ; tu ne recalcules pas et tu ne contredis pas un verdict vert.
+
+# Pistes à regarder
+Les données peuvent contenir une liste brute de « pistes de marché » collectée dans la nuit : des paris Polymarket qui ont bougé, des dirigeants qui achètent l'action de leur propre société, de grands gérants qui ouvrent ou soldent une ligne. C'est du bruit pour l'essentiel, et c'est voulu : c'est toi qui tries. Tu en gardes zéro à trois, celles qui peuvent concerner un épargnant en fonds indiciels (les taux, une récession, l'inflation, un secteur ou une région qu'il détient), et tu dis en une phrase ce que chacune raconte et pourquoi la regarder. Une piste est une chose à suivre, jamais un ordre d'acheter ou de vendre, et tu ne cites une société que comme un fait déclaré, pas comme une idée. Si rien ne mérite l'attention, une seule ligne : « Rien de notable cette nuit. » Si les données ne contiennent pas de pistes, tu omets cette section.
 
 # Sources
 Liste de toutes les URLs citées : - [Nom court](URL)
@@ -75,11 +78,13 @@ def build_anonymized_snapshot(
     profile: Profile,
     optimizer_response: OptimizerResponse | None = None,
     verdicts: list[Verdict] | None = None,
+    market_leads: list[MarketLead] | None = None,
 ) -> dict[str, Any]:
-    """Project Wealth + Profile + optimizer + verdicts into a JSON-safe dict for the LLM.
+    """Project Wealth + Profile + optimizer + verdicts + leads into a JSON-safe dict for the LLM.
 
     Stripped of: provider_account_id, institution_name. Kept: tickers,
-    amounts, dates, all profile fields (age computed from birth_date).
+    amounts, dates, all profile fields (age computed from birth_date). The
+    market leads are the same for everyone: raw, the briefing sorts them.
     """
     return {
         "snapshot_at": wealth.snapshot_at.isoformat(),
@@ -156,6 +161,16 @@ def build_anonymized_snapshot(
                 "action": v.action,
             }
             for v in (verdicts or [])
+        ],
+        "market_leads": [
+            {
+                "source": lead.source,
+                "title": lead.title,
+                "detail": lead.detail,
+                "url": lead.url,
+                "observed_at": lead.observed_at,
+            }
+            for lead in (market_leads or [])
         ],
     }
 
@@ -309,6 +324,17 @@ def build_user_prompt(snapshot: dict[str, Any]) -> str:
             impact_txt = f" ({impact:,.0f} € par an en jeu)" if impact else ""
             action = f" À faire : {v['action']}" if v["action"] else " Rien à faire."
             lines.append(f"- **{v['title']}** [{status}]{impact_txt} : {v['headline']}{action}")
+        lines.append("")
+
+    if snapshot.get("market_leads"):
+        lines.append(
+            "## Pistes de marché (brutes, collectées cette nuit — la plupart sont du bruit)"
+        )
+        for lead in snapshot["market_leads"]:
+            lines.append(
+                f"- [{lead['source']}] {lead['title']} — {lead['detail']} "
+                f"({lead['observed_at']}, {lead['url']})"
+            )
         lines.append("")
 
     lines.append("---")
