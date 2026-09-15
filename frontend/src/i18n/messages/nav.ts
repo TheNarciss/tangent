@@ -1,0 +1,81 @@
+/** Navigation: tab labels, page titles and subtitles, the « Plus » sheet, the user menu. */
+const fr = {
+  "nav.overview": "Aperçu",
+  "nav.method": "Méthode",
+  "nav.accounts": "Comptes",
+  "nav.spending": "Dépenses",
+  "nav.investments": "Placements",
+  "nav.picks": "La liste de l'année",
+  "nav.leads": "Pistes de marché",
+  "nav.projection": "Projection",
+  "nav.profile": "Mon profil",
+  "nav.account": "Mon compte",
+  "nav.more": "Plus",
+  "nav.mainAria": "Navigation principale",
+
+  "view.overview.subtitle": "Ton patrimoine en un coup d'œil",
+  "view.accounts.subtitle": "Tous tes comptes, mis à jour automatiquement",
+  "view.spending.subtitle": "Ce qui entre et sort de tes comptes courants, mois par mois",
+  "view.projection.subtitle": "Où tu en seras, en euros d'aujourd'hui",
+  "view.investments.subtitle": "Ce que tu détiens, le risque que tu prends, des pistes",
+  "view.picks.subtitle":
+    "Une règle publiée, pas une opinion : ce qu'elle dit d'acheter et de vendre",
+  "view.leads.subtitle":
+    "Ce que déclarent ceux qui engagent leur argent, brut, avant le tri du briefing",
+  "view.method.subtitle": "Ce que la méthode dit de ton patrimoine, verdict par verdict",
+  "view.profile.subtitle": "Ce que Tangent doit savoir pour calculer juste",
+  "view.account.subtitle": "Connexion, sécurité, banques et briefing",
+
+  "menu.title": "Compte",
+  "menu.admin": "Admin",
+  "menu.userMenuAria": "Menu utilisateur",
+  "menu.googleLinked": "Google lié ✓",
+  "menu.linkGoogle": "Lier mon compte Google",
+  "menu.linkGoogleFromSite": "Lier Google : depuis le site",
+  "menu.linkGoogleFailed": "Impossible de lier le compte Google.",
+  "menu.terms": "Conditions d'utilisation",
+  "menu.privacy": "Confidentialité",
+  "menu.signOut": "Se déconnecter",
+  "menu.signingOut": "Déconnexion…",
+};
+
+const en: Record<keyof typeof fr, string> = {
+  "nav.overview": "Overview",
+  "nav.method": "Method",
+  "nav.accounts": "Accounts",
+  "nav.spending": "Spending",
+  "nav.investments": "Investments",
+  "nav.picks": "This year's list",
+  "nav.leads": "Market leads",
+  "nav.projection": "Projection",
+  "nav.profile": "My profile",
+  "nav.account": "My account",
+  "nav.more": "More",
+  "nav.mainAria": "Main navigation",
+
+  "view.overview.subtitle": "Your wealth at a glance",
+  "view.accounts.subtitle": "All your accounts, updated automatically",
+  "view.spending.subtitle": "What comes in and goes out of your current accounts, month by month",
+  "view.projection.subtitle": "Where you will stand, in today's euros",
+  "view.investments.subtitle": "What you hold, the risk you take, some leads",
+  "view.picks.subtitle": "A published rule, not an opinion: what it says to buy and sell",
+  "view.leads.subtitle":
+    "What those who put their own money in declare, raw, before the briefing sorts it",
+  "view.method.subtitle": "What the method says about your wealth, verdict by verdict",
+  "view.profile.subtitle": "What Tangent needs to know to get the numbers right",
+  "view.account.subtitle": "Sign-in, security, banks and briefing",
+
+  "menu.title": "Account",
+  "menu.admin": "Admin",
+  "menu.userMenuAria": "User menu",
+  "menu.googleLinked": "Google linked ✓",
+  "menu.linkGoogle": "Link my Google account",
+  "menu.linkGoogleFromSite": "Link Google: from the website",
+  "menu.linkGoogleFailed": "Could not link the Google account.",
+  "menu.terms": "Terms of use",
+  "menu.privacy": "Privacy",
+  "menu.signOut": "Sign out",
+  "menu.signingOut": "Signing out…",
+};
+
+export const nav = { fr, en };

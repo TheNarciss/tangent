@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { useRequestReset, useVerifyResetCode, useConfirmReset } from "@/api";
+import { useT } from "@/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,6 +21,7 @@ export function ForgotPasswordFlow({ onBack }: Props) {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const { t } = useT();
 
   const requestReset = useRequestReset();
   const verifyCode = useVerifyResetCode();
@@ -42,7 +44,7 @@ export function ForgotPasswordFlow({ onBack }: Props) {
     e.preventDefault();
     setError(null);
     if (code.length !== 6) {
-      setError("Le code doit faire 6 chiffres.");
+      setError(t("reset.codeSixDigits"));
       return;
     }
     try {
@@ -50,7 +52,7 @@ export function ForgotPasswordFlow({ onBack }: Props) {
       setResetToken(res.reset_token);
       setStep("password");
     } catch {
-      setError("Code invalide ou expiré. Vérifie ta boîte mail.");
+      setError(t("reset.codeInvalid"));
     }
   };
 
@@ -58,30 +60,30 @@ export function ForgotPasswordFlow({ onBack }: Props) {
     e.preventDefault();
     setError(null);
     if (newPassword.length < 8) {
-      setError("Le mot de passe doit faire au moins 8 caractères.");
+      setError(t("reset.passwordTooShort"));
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError("Les mots de passe ne correspondent pas.");
+      setError(t("reset.passwordsDiffer"));
       return;
     }
     try {
       await confirmReset.mutateAsync({ reset_token: resetToken, new_password: newPassword });
       setStep("success");
     } catch {
-      setError("Impossible de réinitialiser. Recommence depuis le début.");
+      setError(t("reset.failed"));
     }
   };
 
   return (
     <div className="space-y-6">
       <div className="space-y-1.5">
-        <h2 className="text-xl font-semibold tracking-tight">Mot de passe oublié</h2>
+        <h2 className="text-xl font-semibold tracking-tight">{t("reset.title")}</h2>
         <p className="text-sm text-muted-foreground">
-          {step === "email" && "Entre ton adresse e-mail, on t'envoie un code."}
-          {step === "code" && `Code envoyé à ${email}. Vérifie ta boîte mail.`}
-          {step === "password" && "Choisis ton nouveau mot de passe (8 caractères min)."}
-          {step === "success" && "C'est fait. Tu peux te reconnecter."}
+          {step === "email" && t("reset.stepEmail")}
+          {step === "code" && t("reset.stepCode", { email })}
+          {step === "password" && t("reset.stepPassword")}
+          {step === "success" && t("reset.stepSuccess")}
         </p>
       </div>
 
@@ -94,7 +96,7 @@ export function ForgotPasswordFlow({ onBack }: Props) {
       {step === "email" && (
         <form onSubmit={handleRequestEmail} className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="reset-email">E-mail</Label>
+            <Label htmlFor="reset-email">{t("reset.emailLabel")}</Label>
             <Input
               id="reset-email"
               type="email"
@@ -103,11 +105,11 @@ export function ForgotPasswordFlow({ onBack }: Props) {
               autoComplete="email"
               autoFocus
               required
-              placeholder="toi@exemple.com"
+              placeholder={t("reset.emailPlaceholder")}
             />
           </div>
           <Button type="submit" className="w-full" disabled={requestReset.isPending}>
-            {requestReset.isPending ? "Envoi…" : "Envoyer le code"}
+            {requestReset.isPending ? t("reset.sending") : t("reset.sendCode")}
           </Button>
         </form>
       )}
@@ -115,7 +117,7 @@ export function ForgotPasswordFlow({ onBack }: Props) {
       {step === "code" && (
         <form onSubmit={handleVerifyCode} className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="reset-code">Code (6 chiffres)</Label>
+            <Label htmlFor="reset-code">{t("reset.codeLabel")}</Label>
             <Input
               id="reset-code"
               type="text"
@@ -136,7 +138,7 @@ export function ForgotPasswordFlow({ onBack }: Props) {
               className="w-full"
               disabled={verifyCode.isPending || code.length !== 6}
             >
-              {verifyCode.isPending ? "Vérification…" : "Vérifier le code"}
+              {verifyCode.isPending ? t("reset.verifying") : t("reset.verifyCode")}
             </Button>
             <Button
               type="button"
@@ -148,7 +150,7 @@ export function ForgotPasswordFlow({ onBack }: Props) {
                 setError(null);
               }}
             >
-              Changer d'e-mail
+              {t("reset.changeEmail")}
             </Button>
           </div>
         </form>
@@ -157,7 +159,7 @@ export function ForgotPasswordFlow({ onBack }: Props) {
       {step === "password" && (
         <form onSubmit={handleResetPassword} className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="new-password">Nouveau mot de passe</Label>
+            <Label htmlFor="new-password">{t("reset.newPassword")}</Label>
             <Input
               id="new-password"
               type="password"
@@ -167,11 +169,11 @@ export function ForgotPasswordFlow({ onBack }: Props) {
               autoFocus
               required
               minLength={8}
-              placeholder="8 caractères minimum"
+              placeholder={t("reset.newPasswordPlaceholder")}
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="confirm-password">Confirmer</Label>
+            <Label htmlFor="confirm-password">{t("reset.confirm")}</Label>
             <Input
               id="confirm-password"
               type="password"
@@ -183,7 +185,7 @@ export function ForgotPasswordFlow({ onBack }: Props) {
             />
           </div>
           <Button type="submit" className="w-full" disabled={confirmReset.isPending}>
-            {confirmReset.isPending ? "Réinitialisation…" : "Réinitialiser le mot de passe"}
+            {confirmReset.isPending ? t("reset.resetting") : t("reset.resetPassword")}
           </Button>
         </form>
       )}
@@ -191,12 +193,10 @@ export function ForgotPasswordFlow({ onBack }: Props) {
       {step === "success" && (
         <div className="space-y-4">
           <Alert>
-            <AlertDescription>
-              ✓ Ton mot de passe a été mis à jour. Tu peux te reconnecter dès maintenant.
-            </AlertDescription>
+            <AlertDescription>{t("reset.done")}</AlertDescription>
           </Alert>
           <Button onClick={onBack} className="w-full">
-            Retour à la connexion
+            {t("reset.backToLogin")}
           </Button>
         </div>
       )}
@@ -207,7 +207,7 @@ export function ForgotPasswordFlow({ onBack }: Props) {
           onClick={onBack}
           className="text-xs text-muted-foreground hover:text-foreground transition w-full text-center"
         >
-          ← Retour à la connexion
+          {t("reset.backToLoginArrow")}
         </button>
       )}
     </div>

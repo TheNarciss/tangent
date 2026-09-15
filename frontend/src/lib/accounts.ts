@@ -6,6 +6,7 @@
  * shown for each account. No jargon, no ticker, no IBAN.
  */
 import type { BankAccountResponse, BankAccountType } from "@/api";
+import { LOCALE_TAGS, getLocale, t } from "@/i18n";
 
 export type AccountGroup =
   "cash" | "savings" | "invest" | "retirement" | "employee" | "loan" | "other";
@@ -151,33 +152,30 @@ export function cleanName(name: string): string {
     .join(" ");
 }
 
-/** "il y a 3 min", "il y a 2 h", "il y a 4 j". */
+/** "il y a 3 min", "il y a 2 h", "il y a 4 j" — "3 min ago" in English. */
 export function relativeTime(iso: string | null): string {
-  if (!iso) return "jamais";
+  if (!iso) return t("common.never");
   const minutes = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
-  if (minutes < 1) return "à l'instant";
-  if (minutes < 60) return `il y a ${minutes} min`;
+  if (minutes < 1) return t("common.justNow");
+  if (minutes < 60) return t("common.minutesAgo", { count: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `il y a ${hours} h`;
-  return `il y a ${Math.floor(hours / 24)} j`;
+  if (hours < 24) return t("common.hoursAgo", { count: hours });
+  return t("common.daysAgo", { count: Math.floor(hours / 24) });
 }
 
-const DATE_LONG = new Intl.DateTimeFormat("fr-FR", {
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-});
-const DATE_SHORT = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" });
-const MONTH_YEAR = new Intl.DateTimeFormat("fr-FR", { month: "long", year: "numeric" });
+/** Date formatting in the language in effect: « 3 mars 2026 » or « 3 March 2026 ». */
+export function formatDate(iso: string, options: Intl.DateTimeFormatOptions): string {
+  return new Intl.DateTimeFormat(LOCALE_TAGS[getLocale()], options).format(new Date(iso));
+}
 
 export function longDate(iso: string | null): string {
-  return iso ? DATE_LONG.format(new Date(iso)) : "—";
+  return iso ? formatDate(iso, { day: "numeric", month: "long", year: "numeric" }) : "—";
 }
 export function shortDate(iso: string): string {
-  return DATE_SHORT.format(new Date(iso));
+  return formatDate(iso, { day: "numeric", month: "short" });
 }
 export function monthYear(iso: string | null): string {
-  return iso ? MONTH_YEAR.format(new Date(iso)) : "—";
+  return iso ? formatDate(iso, { month: "long", year: "numeric" }) : "—";
 }
 
 /** Backend taxonomy (finance/gap_filler/fields/transaction_category.py) → French. */

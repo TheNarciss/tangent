@@ -1,6 +1,7 @@
 import { ChevronUp, MoreHorizontal } from "lucide-react";
 import { NavLink } from "react-router-dom";
 
+import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 
 import { NAV_GROUPS, NAV_PATHS, groupOf, type NavGroup } from "./Sidebar";
@@ -29,10 +30,11 @@ export function BottomNav({
   onOpenSubNav,
   isMoreOpen = false,
 }: BottomNavProps) {
+  const { t } = useT();
   const active = groupOf(pathname);
   return (
     <nav
-      aria-label="Navigation principale"
+      aria-label={t("nav.mainAria")}
       className="fixed inset-x-0 bottom-0 z-30 flex h-[calc(4rem+env(safe-area-inset-bottom))] items-stretch border-t border-border bg-background pb-[env(safe-area-inset-bottom)] md:hidden"
     >
       {NAV_GROUPS.map((group) => {
@@ -56,7 +58,7 @@ export function BottomNav({
           >
             <Icon className={cn("h-5 w-5", isActive && "text-primary")} />
             <span className={cn("flex items-center gap-0.5", isActive && "font-medium")}>
-              {group.label}
+              {t(group.labelKey)}
               {isActive && hasSubViews && <ChevronUp className="h-3 w-3" aria-hidden />}
             </span>
           </NavLink>
@@ -71,7 +73,7 @@ export function BottomNav({
         )}
       >
         <MoreHorizontal className={cn("h-5 w-5", isMoreOpen && "text-primary")} />
-        <span className={cn(isMoreOpen && "font-medium")}>Plus</span>
+        <span className={cn(isMoreOpen && "font-medium")}>{t("nav.more")}</span>
       </button>
     </nav>
   );

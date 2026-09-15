@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ChevronRight, FileText, Link2, LogOut, Shield, User as UserIcon } from "lucide-react";
 
 import { listOAuthAccounts, startGoogleAssociate, useCurrentUser, useLogout } from "@/api";
+import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 import {
   BottomSheet,
@@ -27,6 +28,7 @@ interface MoreSheetProps {
  */
 export function MoreSheet({ open, onOpenChange }: MoreSheetProps) {
   const navigate = useNavigate();
+  const { t } = useT();
   const { data: user } = useCurrentUser();
   const logout = useLogout();
   const oauthAccounts = useQuery({
@@ -45,7 +47,7 @@ export function MoreSheet({ open, onOpenChange }: MoreSheetProps) {
     try {
       await startGoogleAssociate();
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Impossible de lier le compte Google.");
+      window.alert(e instanceof Error ? e.message : t("menu.linkGoogleFailed"));
     }
   };
 
@@ -58,7 +60,7 @@ export function MoreSheet({ open, onOpenChange }: MoreSheetProps) {
     <BottomSheet open={open} onOpenChange={onOpenChange}>
       <BottomSheetContent>
         <BottomSheetHeader>
-          <BottomSheetTitle>Compte</BottomSheetTitle>
+          <BottomSheetTitle>{t("menu.title")}</BottomSheetTitle>
         </BottomSheetHeader>
 
         <div className="space-y-4 p-4">
@@ -72,7 +74,9 @@ export function MoreSheet({ open, onOpenChange }: MoreSheetProps) {
                 {user.display_name || user.email.split("@")[0]}
               </p>
               <p className="truncate text-xs text-muted-foreground">{user.email}</p>
-              {user.is_superuser && <p className="mt-0.5 text-xs text-[hsl(var(--gain))]">Admin</p>}
+              {user.is_superuser && (
+                <p className="mt-0.5 text-xs text-[hsl(var(--gain))]">{t("menu.admin")}</p>
+              )}
             </div>
           </div>
 
@@ -82,28 +86,28 @@ export function MoreSheet({ open, onOpenChange }: MoreSheetProps) {
               <div className="flex items-center justify-between rounded-md px-3 py-3 text-sm text-muted-foreground">
                 <span className="flex items-center gap-3">
                   <Link2 className="h-4 w-4" />
-                  Google lié ✓
+                  {t("menu.googleLinked")}
                 </span>
               </div>
             ) : (
-              <MoreItem icon={Link2} label="Lier mon compte Google" onClick={handleLinkGoogle} />
+              <MoreItem icon={Link2} label={t("menu.linkGoogle")} onClick={handleLinkGoogle} />
             )}
             <MoreItem
               icon={UserIcon}
-              label="Mon profil"
+              label={t("nav.profile")}
               onClick={() => handleNavigate("profile")}
             />
-            <MoreItem icon={Shield} label="Mon compte" onClick={() => handleNavigate("account")} />
+            <MoreItem
+              icon={Shield}
+              label={t("nav.account")}
+              onClick={() => handleNavigate("account")}
+            />
           </div>
 
           {/* Legal */}
           <div className="space-y-1 border-t border-border pt-4">
-            <MoreItemLink
-              icon={FileText}
-              label="Conditions d'utilisation"
-              href="/legal/terms.html"
-            />
-            <MoreItemLink icon={Shield} label="Confidentialité" href="/legal/privacy.html" />
+            <MoreItemLink icon={FileText} label={t("menu.terms")} href="/legal/terms.html" />
+            <MoreItemLink icon={Shield} label={t("menu.privacy")} href="/legal/privacy.html" />
           </div>
 
           {/* Sign out */}
@@ -119,7 +123,7 @@ export function MoreSheet({ open, onOpenChange }: MoreSheetProps) {
             >
               <span className="flex items-center gap-3">
                 <LogOut className="h-4 w-4" />
-                {logout.isPending ? "Déconnexion…" : "Se déconnecter"}
+                {logout.isPending ? t("menu.signingOut") : t("menu.signOut")}
               </span>
               <ChevronRight className="h-4 w-4" />
             </button>

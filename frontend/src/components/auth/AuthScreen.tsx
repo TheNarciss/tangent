@@ -7,12 +7,14 @@ import { ForgotPasswordFlow } from "@/components/auth/ForgotPasswordFlow";
 import { GoogleButton } from "@/components/auth/GoogleButton";
 import { AppleButton } from "@/components/auth/AppleButton";
 import { useAuthProviders } from "@/api";
+import { useT } from "@/i18n";
 import { OAuthCallbackHandler } from "@/components/OAuthCallback";
 
 type Mode = "login" | "register" | "forgot";
 
 export function AuthScreen() {
   const [mode, setMode] = useState<Mode>("login");
+  const { t } = useT();
   const providers = useAuthProviders().data ?? { google: true, apple: false };
   const anyProvider = providers.google || providers.apple;
 
@@ -24,7 +26,7 @@ export function AuthScreen() {
         {/* Branding */}
         <div className="text-center space-y-2">
           <h1 className="text-4xl font-semibold tracking-tight">Tangent</h1>
-          <p className="text-sm text-muted-foreground">Ton patrimoine, clairement.</p>
+          <p className="text-sm text-muted-foreground">{t("auth.tagline")}</p>
         </div>
 
         {/* Card with the form */}
@@ -32,7 +34,7 @@ export function AuthScreen() {
           {mode !== "forgot" && (
             <CardHeader>
               <CardTitle className="text-xl">
-                {mode === "login" ? "Connexion" : "Inscription"}
+                {mode === "login" ? t("auth.login") : t("auth.register")}
               </CardTitle>
             </CardHeader>
           )}
@@ -46,7 +48,9 @@ export function AuthScreen() {
                     <span className="w-full border-t border-border" />
                   </div>
                   <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-card px-2 text-muted-foreground">ou par email</span>
+                    <span className="bg-card px-2 text-muted-foreground">
+                      {t("auth.orByEmail")}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -62,23 +66,21 @@ export function AuthScreen() {
           </CardContent>
         </Card>
 
+        <p className="text-center text-xs text-muted-foreground">{t("auth.privacyNote")}</p>
         <p className="text-center text-xs text-muted-foreground">
-          Tes données restent privées — chaque compte voit uniquement son portefeuille.
-        </p>
-        <p className="text-center text-xs text-muted-foreground">
-          En vous inscrivant, vous acceptez nos{" "}
+          {t("auth.bySigningUp")}{" "}
           <a
             href="/legal/terms.html"
             className="underline underline-offset-2 hover:text-foreground"
           >
-            Conditions
+            {t("auth.termsLink")}
           </a>{" "}
-          et notre{" "}
+          {t("auth.andOur")}{" "}
           <a
             href="/legal/privacy.html"
             className="underline underline-offset-2 hover:text-foreground"
           >
-            Politique de confidentialité
+            {t("auth.privacyLink")}
           </a>
           .
         </p>

@@ -13,11 +13,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { startGoogleAssociate } from "@/api";
+import { useT } from "@/i18n";
 import { isNative } from "@/native/bridge";
 import { NAV_PATHS } from "@/components/Sidebar";
 
 export function UserMenu() {
   const navigate = useNavigate();
+  const { t } = useT();
   const { data: user } = useCurrentUser();
   const logout = useLogout();
   const oauthAccounts = useQuery({
@@ -36,14 +38,19 @@ export function UserMenu() {
     try {
       await startGoogleAssociate();
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Impossible de lier le compte Google.");
+      window.alert(e instanceof Error ? e.message : t("menu.linkGoogleFailed"));
     }
   };
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="rounded-full" aria-label="User menu">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="rounded-full"
+          aria-label={t("menu.userMenuAria")}
+        >
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-sm font-medium">
             {initial}
           </span>
@@ -57,7 +64,7 @@ export function UserMenu() {
             </p>
             <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
             {user.is_superuser && (
-              <p className="text-xs leading-none text-[hsl(var(--gain))] mt-1">Admin</p>
+              <p className="text-xs leading-none text-[hsl(var(--gain))] mt-1">{t("menu.admin")}</p>
             )}
           </div>
         </DropdownMenuLabel>
@@ -71,33 +78,33 @@ export function UserMenu() {
           <DropdownMenuItem disabled className="text-xs">
             <Link2 className="mr-2 h-3.5 w-3.5" />
             <span className="text-muted-foreground">
-              {hasGoogle ? "Google lié ✓" : "Lier Google : depuis le site"}
+              {hasGoogle ? t("menu.googleLinked") : t("menu.linkGoogleFromSite")}
             </span>
           </DropdownMenuItem>
         ) : (
           <DropdownMenuItem onClick={handleLinkGoogle}>
             <Link2 className="mr-2 h-3.5 w-3.5" />
-            <span>Lier mon compte Google</span>
+            <span>{t("menu.linkGoogle")}</span>
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => navigate(NAV_PATHS.profile)} className="cursor-pointer">
           <UserIcon className="mr-2 h-3.5 w-3.5" />
-          <span>Mon profil</span>
+          <span>{t("nav.profile")}</span>
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => navigate(NAV_PATHS.account)} className="cursor-pointer">
           <Shield className="mr-2 h-3.5 w-3.5" />
-          <span>Mon compte</span>
+          <span>{t("nav.account")}</span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <a href="/legal/terms.html" className="cursor-pointer">
-            <span>Conditions d&apos;utilisation</span>
+            <span>{t("menu.terms")}</span>
           </a>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <a href="/legal/privacy.html" className="cursor-pointer">
-            <span>Confidentialité</span>
+            <span>{t("menu.privacy")}</span>
           </a>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
@@ -107,7 +114,7 @@ export function UserMenu() {
           className="text-[hsl(var(--loss))] focus:text-[hsl(var(--loss))]"
         >
           <LogOut className="mr-2 h-3.5 w-3.5" />
-          <span>{logout.isPending ? "Déconnexion…" : "Se déconnecter"}</span>
+          <span>{logout.isPending ? t("menu.signingOut") : t("menu.signOut")}</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

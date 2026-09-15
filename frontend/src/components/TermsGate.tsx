@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { acceptTerms, fetchTermsVersion, useLogout } from "@/api";
 import type { UserRead } from "@/api";
+import { useT } from "@/i18n";
 
 interface TermsGateProps {
   user: UserRead;
@@ -26,6 +27,7 @@ export function TermsGate({ user }: TermsGateProps) {
   const [error, setError] = useState<string | null>(null);
   const qc = useQueryClient();
   const logout = useLogout();
+  const { t } = useT();
 
   const versionQuery = useQuery({
     queryKey: ["terms-version"],
@@ -40,7 +42,7 @@ export function TermsGate({ user }: TermsGateProps) {
       qc.invalidateQueries({ queryKey: ["user", "me"] });
     },
     onError: (e) => {
-      setError(e instanceof Error ? e.message : "Erreur inconnue");
+      setError(e instanceof Error ? e.message : t("common.unknownError"));
     },
   });
 
@@ -60,35 +62,20 @@ export function TermsGate({ user }: TermsGateProps) {
       >
         <DialogHeader>
           <DialogTitle>
-            {isReturningUser ? "Mise à jour de nos conditions" : "Bienvenue sur Tangent"}
+            {isReturningUser ? t("terms.updateTitle") : t("terms.welcomeTitle")}
           </DialogTitle>
           <DialogDescription className="pt-2 text-sm leading-relaxed">
-            {isReturningUser ? (
-              <>
-                Nos Conditions d&apos;utilisation et/ou notre Politique de confidentialité ont
-                évolué depuis votre dernière acceptation. Merci de les relire avant de continuer.
-              </>
-            ) : (
-              <>
-                Avant d&apos;utiliser Tangent, merci de prendre connaissance de nos Conditions
-                d&apos;utilisation et de notre Politique de confidentialité.
-              </>
-            )}
+            {isReturningUser ? t("terms.updateBody") : t("terms.welcomeBody")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           <div className="rounded-md border bg-muted/30 p-3 text-sm">
-            <p className="mb-1 font-medium">À retenir</p>
+            <p className="mb-1 font-medium">{t("terms.keyPoints")}</p>
             <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
-              <li>
-                Tangent est un outil d&apos;analyse — pas un conseil en investissement régulé.
-              </li>
-              <li>
-                Vos données ne sont jamais vendues, partagées à des fins publicitaires, ou utilisées
-                pour entraîner de l&apos;IA tierce.
-              </li>
-              <li>Vous pouvez supprimer votre compte à tout moment (effacement immédiat).</li>
+              <li>{t("terms.point1")}</li>
+              <li>{t("terms.point2")}</li>
+              <li>{t("terms.point3")}</li>
             </ul>
           </div>
 
@@ -100,26 +87,29 @@ export function TermsGate({ user }: TermsGateProps) {
               className="mt-0.5 h-4 w-4 cursor-pointer rounded border-border accent-foreground"
             />
             <span className="text-sm leading-relaxed">
-              J&apos;ai lu et j&apos;accepte les{" "}
+              {t("terms.iAccept")}{" "}
               <a
                 href="/legal/terms.html"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-medium underline underline-offset-2 hover:text-foreground"
               >
-                Conditions d&apos;utilisation
+                {t("terms.termsLink")}
               </a>{" "}
-              et la{" "}
+              {t("terms.andThe")}{" "}
               <a
                 href="/legal/privacy.html"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-medium underline underline-offset-2 hover:text-foreground"
               >
-                Politique de confidentialité
+                {t("terms.privacyLink")}
               </a>
               {currentVersion && (
-                <span className="text-muted-foreground"> (version {currentVersion})</span>
+                <span className="text-muted-foreground">
+                  {" "}
+                  {t("terms.version", { version: currentVersion })}
+                </span>
               )}
               .
             </span>
@@ -136,14 +126,14 @@ export function TermsGate({ user }: TermsGateProps) {
             disabled={mutation.isPending}
             className="text-muted-foreground"
           >
-            Décliner et se déconnecter
+            {t("terms.decline")}
           </Button>
           <Button
             type="button"
             onClick={() => mutation.mutate()}
             disabled={!checked || mutation.isPending || !currentVersion}
           >
-            {mutation.isPending ? "Acceptation…" : "Accepter et continuer"}
+            {mutation.isPending ? t("terms.accepting") : t("terms.accept")}
           </Button>
         </DialogFooter>
       </DialogContent>

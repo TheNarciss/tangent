@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 
+import { useT, type MessageKey } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { Logo } from "./Logo";
 
@@ -42,7 +43,8 @@ export const NAV_PATHS: Record<NavView, string> = {
 
 export interface NavItem {
   view: NavView;
-  label: string;
+  /** Translation key of the label — read it with `t(item.labelKey)`. */
+  labelKey: MessageKey;
   icon: LucideIcon;
 }
 
@@ -63,37 +65,37 @@ export interface NavGroup extends NavItem {
 export const NAV_GROUPS: NavGroup[] = [
   {
     view: "overview",
-    label: "Aperçu",
+    labelKey: "nav.overview",
     icon: LayoutDashboard,
     children: [
-      { view: "overview", label: "Aperçu", icon: LayoutDashboard },
-      { view: "method", label: "Méthode", icon: Compass },
+      { view: "overview", labelKey: "nav.overview", icon: LayoutDashboard },
+      { view: "method", labelKey: "nav.method", icon: Compass },
     ],
   },
   {
     view: "accounts",
-    label: "Comptes",
+    labelKey: "nav.accounts",
     icon: Wallet,
     children: [
-      { view: "accounts", label: "Comptes", icon: Wallet },
-      { view: "spending", label: "Dépenses", icon: Receipt },
+      { view: "accounts", labelKey: "nav.accounts", icon: Wallet },
+      { view: "spending", labelKey: "nav.spending", icon: Receipt },
     ],
   },
   {
     view: "investments",
-    label: "Placements",
+    labelKey: "nav.investments",
     icon: PieChart,
     children: [
-      { view: "investments", label: "Placements", icon: PieChart },
-      { view: "picks", label: "La liste de l'année", icon: ListOrdered },
-      { view: "leads", label: "Pistes de marché", icon: Radar },
+      { view: "investments", labelKey: "nav.investments", icon: PieChart },
+      { view: "picks", labelKey: "nav.picks", icon: ListOrdered },
+      { view: "leads", labelKey: "nav.leads", icon: Radar },
     ],
   },
   {
     view: "projection",
-    label: "Projection",
+    labelKey: "nav.projection",
     icon: TrendingUp,
-    children: [{ view: "projection", label: "Projection", icon: TrendingUp }],
+    children: [{ view: "projection", labelKey: "nav.projection", icon: TrendingUp }],
   },
 ];
 
@@ -159,6 +161,7 @@ export function Sidebar({ footer, pathname }: SidebarProps) {
 }
 
 function SidebarLink({ item, active }: { item: NavItem; active: boolean }) {
+  const { t } = useT();
   const Icon = item.icon;
   return (
     <NavLink
@@ -171,12 +174,13 @@ function SidebarLink({ item, active }: { item: NavItem; active: boolean }) {
       )}
     >
       <Icon className="h-4 w-4" />
-      {item.label}
+      {t(item.labelKey)}
     </NavLink>
   );
 }
 
 function SidebarSubLink({ item, active }: { item: NavItem; active: boolean }) {
+  const { t } = useT();
   return (
     <NavLink
       to={NAV_PATHS[item.view]}
@@ -185,7 +189,7 @@ function SidebarSubLink({ item, active }: { item: NavItem; active: boolean }) {
         active ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
       )}
     >
-      {item.label}
+      {t(item.labelKey)}
     </NavLink>
   );
 }

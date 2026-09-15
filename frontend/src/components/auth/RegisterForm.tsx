@@ -1,6 +1,7 @@
 import { useState, FormEvent } from "react";
 
 import { ApiError, useLogin, useRegister } from "@/api";
+import { useT } from "@/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,6 +16,7 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
   const [displayName, setDisplayName] = useState("");
   const register = useRegister();
   const login = useLogin();
+  const { t } = useT();
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -34,15 +36,15 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
   const errorMessage = register.error
     ? register.error instanceof ApiError
       ? register.error.status === 400 && register.error.message.includes("USER_ALREADY_EXISTS")
-        ? "Un compte existe déjà avec cet email."
+        ? t("auth.alreadyExists")
         : register.error.status === 422
-          ? "Email invalide ou mot de passe trop court (min 8 caractères)."
+          ? t("auth.invalidRegister")
           : register.error.status === 429
-            ? "Trop d'inscriptions. Réessaie dans une heure."
+            ? t("auth.tooManyRegisters")
             : register.error.message
-      : "Erreur inconnue."
+      : t("common.unknownError")
     : login.error
-      ? "Compte créé mais connexion impossible. Essaie de te connecter manuellement."
+      ? t("auth.createdButNoLogin")
       : null;
 
   const isPending = register.isPending || login.isPending;
@@ -50,11 +52,11 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       <div className="space-y-2">
-        <Label htmlFor="register-name">Nom (optionnel)</Label>
+        <Label htmlFor="register-name">{t("auth.nameOptional")}</Label>
         <Input
           id="register-name"
           type="text"
-          placeholder="Clément"
+          placeholder={t("auth.namePlaceholder")}
           autoComplete="given-name"
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
@@ -64,11 +66,11 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="register-email">Email</Label>
+        <Label htmlFor="register-email">{t("auth.email")}</Label>
         <Input
           id="register-email"
           type="email"
-          placeholder="toi@example.com"
+          placeholder={t("auth.emailPlaceholder")}
           autoComplete="email"
           required
           value={email}
@@ -78,7 +80,7 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="register-password">Mot de passe</Label>
+        <Label htmlFor="register-password">{t("auth.password")}</Label>
         <Input
           id="register-password"
           type="password"
@@ -89,7 +91,7 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
           onChange={(e) => setPassword(e.target.value)}
           disabled={isPending}
         />
-        <p className="text-xs text-muted-foreground">8 caractères minimum.</p>
+        <p className="text-xs text-muted-foreground">{t("auth.minChars")}</p>
       </div>
 
       {errorMessage && (
@@ -99,17 +101,21 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
       )}
 
       <Button type="submit" className="w-full" disabled={isPending}>
-        {register.isPending ? "Création…" : login.isPending ? "Connexion…" : "Créer mon compte"}
+        {register.isPending
+          ? t("auth.creating")
+          : login.isPending
+            ? t("auth.signingIn")
+            : t("auth.createAccount")}
       </Button>
 
       <div className="text-center text-sm text-muted-foreground">
-        Déjà un compte ?{" "}
+        {t("auth.alreadyAccount")}{" "}
         <button
           type="button"
           onClick={onSwitchToLogin}
           className="text-foreground underline hover:no-underline"
         >
-          Connecte-toi
+          {t("auth.logIn")}
         </button>
       </div>
     </form>
