@@ -24,6 +24,7 @@ os.environ.setdefault("COOKIE_SECURE", "false")
 from cryptography.fernet import Fernet as _Fernet
 
 os.environ.setdefault("OAUTH_TOKEN_ENCRYPTION_KEY", _Fernet.generate_key().decode())
+os.environ.setdefault("ARCHIVE_ENCRYPTION_KEY", _Fernet.generate_key().decode())
 os.environ.setdefault("OAUTH_STATE_SECRET", "test-oauth-state-secret-not-for-production")
 os.environ.setdefault("FRONTEND_URL", "http://localhost:5173")
 os.environ.setdefault("GOOGLE_OAUTH_CLIENT_ID", "test-google-client-id")

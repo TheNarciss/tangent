@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import date
 
 from fastapi import APIRouter, Depends, Query
@@ -60,14 +61,21 @@ async def read_spending(
     Uncategorised debits count under « autre », and the response says what
     share of the picture they are.
     """
-    today = date.today()
+    return await build_spending(session, user.id, months=months)
+
+
+async def build_spending(
+    session: AsyncSession, user_id: uuid.UUID, *, months: int = 6, today: date | None = None
+) -> SpendingResponse:
+    """The spending picture over the window; what the route serves and the archive keeps."""
+    today = today or date.today()
     first = _shift(today.replace(day=1), -(months - 1))
-    rows = await tx_repo.spending_by_month_and_category(session, user.id, since=first)
+    rows = await tx_repo.spending_by_month_and_category(session, user_id, since=first)
     credits = dict(
         (m.strftime("%Y-%m"), v)
-        for m, v in await tx_repo.income_by_month(session, user.id, since=first)
+        for m, v in await tx_repo.income_by_month(session, user_id, since=first)
     )
-    labels = await tx_repo.spending_by_description(session, user.id, since=first)
+    labels = await tx_repo.spending_by_description(session, user_id, since=first)
 
     by_month: dict[str, dict[str, float]] = {}
     cursor = first
