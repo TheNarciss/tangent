@@ -2,7 +2,17 @@ import { useMemo, useState } from "react";
 
 import { useSpending, type Merchant, type MonthSpending, type SpendingResponse } from "@/api";
 import { BentoTile } from "@/components/ui/bento-tile";
+import { Chart, XAxis, YAxis, type ChartFrame } from "@/components/ui/chart";
+import { linearScale, niceTicks } from "@/lib/chart";
 import { fmt } from "@/lib/format";
+import {
+  OTHERS,
+  UNLABELLED,
+  categoryDeltas,
+  monthStack,
+  stackSeries,
+  type DeltaReport,
+} from "@/lib/spending";
 import { cn } from "@/lib/utils";
 
 /**
@@ -10,13 +20,16 @@ import { cn } from "@/lib/utils";
  *
  * One filter row (the period) scopes everything below it. Then, in the order
  * a person asks: the month's four figures (spent, received, what is left, the
- * observed saving rate), money in and out month by month, where it goes by
- * category, and at whom. « Voir le tableau » is the accessibility twin: every
+ * observed saving rate), money in and out month by month, what it went on
+ * month by month, where it goes over the window, what moved against the
+ * habit, and at whom. « Voir le tableau » is the accessibility twin: every
  * number the charts show is readable there without hovering.
  *
- * Plain SVG and divs, no charting library. Two series at most (in / out),
- * hence a legend; one hue for anything that is a single series; text never
- * wears the data colour; the current month is lighter because it is not over.
+ * Plain SVG and divs, no charting library. Categorical hues only where the
+ * series are the subject (the stack), in a fixed validated order; one hue for
+ * anything that is a single series; gain/loss tokens where a bar means
+ * better/worse; text never wears the data colour; the current month is
+ * lighter because it is not over.
  */
 export function Spending() {
   const [months, setMonths] = useState<3 | 6 | 12>(6);
@@ -88,25 +101,40 @@ export function Spending() {
             )}
           </section>
           {!showTable && (
-            <div className="grid gap-6 md:grid-cols-2">
+            <>
               <section className="rounded-xl border bg-card p-4 md:p-6">
                 <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Où ça part
+                  Dans quoi, mois par mois
                 </div>
                 {data.unlabelled_share > 0.2 && (
                   <p className="mt-1 text-xs text-muted-foreground">
                     {fmt.pct0(data.unlabelled_share)} des dépenses n'ont pas encore de catégorie.
                   </p>
                 )}
-                <CategoryBars categories={data.categories} />
+                <CategoryStack months={data.months} />
               </section>
-              <section className="rounded-xl border bg-card p-4 md:p-6">
-                <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Chez qui
-                </div>
-                <MerchantBars merchants={data.merchants} />
-              </section>
-            </div>
+              <div className="grid gap-6 md:grid-cols-3">
+                <section className="rounded-xl border bg-card p-4 md:p-6">
+                  <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Où ça part
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">Sur toute la période.</p>
+                  <CategoryBars categories={data.categories} />
+                </section>
+                <section className="rounded-xl border bg-card p-4 md:p-6">
+                  <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Ce qui a bougé
+                  </div>
+                  <CategoryDeltas report={categoryDeltas(data.months)} />
+                </section>
+                <section className="rounded-xl border bg-card p-4 md:p-6">
+                  <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Chez qui
+                  </div>
+                  <MerchantBars merchants={data.merchants} />
+                </section>
+              </div>
+            </>
           )}
           {showTable && <CategoryTable months={data.months} />}
         </div>
@@ -172,25 +200,45 @@ function Kpis({ data }: { data: SpendingResponse }) {
   );
 }
 
-/* ── In and out, month by month ────────────────────────────────────────── */
+/* ── Column charts, on the shared px-true frame ────────────────────────── */
 
-const W = 360;
-const H = 170;
-const PAD_TOP = 22;
-const PAD_BOTTOM = 18;
-const PLOT_H = H - PAD_TOP - PAD_BOTTOM;
-const BAR_MAX = 18;
-const GAP = 2; // the surface gap between the two bars of a month
+const COLUMN_H = 220;
+const COLUMN_PAD = { top: 20, right: 8, bottom: 22, left: 54 }; // room for « 2,5 k€ »
+const BAR_MAX = 24; // a column never thicker than this: the slot's leftover is air
+const GAP = 2; // the surface gap between touching marks, in px
 
 const IN = "fill-[#2a78d6] dark:fill-[#3987e5]";
 const OUT = "fill-[#eb6834] dark:fill-[#d95926]";
 
+/** A column with a 4px rounded top and a square foot on the baseline. */
+function column(x: number, y: number, w: number, h: number): string {
+  const r = Math.min(4, h, w / 2);
+  return `M ${x} ${y + h} V ${y + r} Q ${x} ${y} ${x + r} ${y} H ${x + w - r} Q ${x + w} ${y} ${x + w} ${y + r} V ${y + h} Z`;
+}
+
+/** The month under the pointer, by slot; null outside the plot. */
+function slotAt(x: number, frame: ChartFrame, n: number): number | null {
+  if (n === 0 || x < frame.left || x > frame.right) return null;
+  return Math.min(n - 1, Math.floor(((x - frame.left) / frame.innerW) * n));
+}
+
+function MonthAxis({ frame, months }: { frame: ChartFrame; months: MonthSpending[] }) {
+  const slot = frame.innerW / months.length;
+  return (
+    <XAxis
+      frame={frame}
+      ticks={months.map((_, i) => i)}
+      scale={(i) => frame.left + slot * i + slot / 2}
+      format={(i) => monthLabel(months[i].month)}
+    />
+  );
+}
+
+/* ── In and out, month by month ────────────────────────────────────────── */
+
 function InOutColumns({ months }: { months: MonthSpending[] }) {
   const [hover, setHover] = useState<number | null>(null);
   const max = Math.max(...months.flatMap((m) => [m.total, m.income])) || 1;
-  const slot = W / months.length;
-  const bar = Math.min(BAR_MAX, (slot * 0.7 - GAP) / 2);
-  const yOf = (v: number) => PAD_TOP + PLOT_H - (v / max) * PLOT_H;
   const last = months.length - 1;
 
   return (
@@ -205,74 +253,97 @@ function InOutColumns({ months }: { months: MonthSpending[] }) {
           Dépensé
         </span>
       </div>
-      <div className="relative mt-2">
-        <svg
-          viewBox={`0 0 ${W} ${H}`}
-          className="h-auto w-full"
-          role="img"
-          aria-label="Reçu et dépensé par mois"
-        >
-          <line
-            x1={0}
-            x2={W}
-            y1={PAD_TOP + PLOT_H}
-            y2={PAD_TOP + PLOT_H}
-            className="stroke-border"
-            strokeWidth={1}
-          />
-          {months.map((m, i) => {
-            const xIn = slot * i + slot / 2 - bar - GAP / 2;
-            const xOut = slot * i + slot / 2 + GAP / 2;
-            const isCurrent = i === last;
-            return (
-              <g
-                key={m.month}
-                tabIndex={0}
-                onPointerEnter={() => setHover(i)}
-                onPointerLeave={() => setHover(null)}
-                onFocus={() => setHover(i)}
-                onBlur={() => setHover(null)}
-                className="outline-none"
-              >
-                <rect x={slot * i} y={0} width={slot} height={H} fill="transparent" />
-                {m.income > 0 && (
-                  <path
-                    d={column(xIn, yOf(m.income), bar, PAD_TOP + PLOT_H - yOf(m.income))}
-                    className={cn(IN, isCurrent && "opacity-50", hover === i && "opacity-80")}
-                  />
-                )}
-                {m.total > 0 && (
-                  <path
-                    d={column(xOut, yOf(m.total), bar, PAD_TOP + PLOT_H - yOf(m.total))}
-                    className={cn(OUT, isCurrent && "opacity-50", hover === i && "opacity-80")}
-                  />
-                )}
-                {isCurrent && m.total > 0 && (
-                  <text
-                    x={xOut + bar / 2}
-                    y={yOf(m.total) - 6}
-                    textAnchor="middle"
-                    className="fill-foreground text-[10px] font-medium"
+      <Chart
+        className="mt-2"
+        height={COLUMN_H}
+        pad={COLUMN_PAD}
+        ariaLabel="Reçu et dépensé par mois"
+        onPointer={(p, frame) => setHover(p ? slotAt(p.x, frame, months.length) : null)}
+        tooltip={(frame) => {
+          if (hover === null) return null;
+          const slot = frame.innerW / months.length;
+          const m = months[hover];
+          const rows: [string, number][] = [
+            ["Reçu", m.income],
+            ["Dépensé", m.total],
+            ["Reste", m.income - m.total],
+          ];
+          return {
+            x: frame.left + slot * hover + slot / 2,
+            y: frame.top,
+            content: (
+              <>
+                <div className="text-muted-foreground">{monthLabel(m.month, true)}</div>
+                {rows.map(([label, v]) => (
+                  <div key={label} className="mt-1 flex justify-between gap-2">
+                    <span className="text-muted-foreground">{label}</span>
+                    <span
+                      className={cn(
+                        "tabular-nums font-medium",
+                        label === "Reste" && v < 0 && "text-[hsl(var(--loss))]",
+                      )}
+                    >
+                      {fmt.eur0(v)}
+                    </span>
+                  </div>
+                ))}
+              </>
+            ),
+          };
+        }}
+      >
+        {(frame) => {
+          const yScale = linearScale([0, max], [frame.bottom, frame.top]);
+          const ticks = niceTicks(0, max, frame.compact ? 3 : 4);
+          const slot = frame.innerW / months.length;
+          const bar = Math.min(BAR_MAX, (slot * 0.7 - GAP) / 2);
+          return (
+            <>
+              <YAxis frame={frame} ticks={ticks} scale={yScale} format={fmt.kEur} grid />
+              <MonthAxis frame={frame} months={months} />
+              {months.map((m, i) => {
+                const centre = frame.left + slot * i + slot / 2;
+                const xIn = centre - bar - GAP / 2;
+                const xOut = centre + GAP / 2;
+                const isCurrent = i === last;
+                const lift = hover === i;
+                return (
+                  <g
+                    key={m.month}
+                    tabIndex={0}
+                    onFocus={() => setHover(i)}
+                    onBlur={() => setHover(null)}
+                    className="outline-none"
                   >
-                    {fmt.kEur(m.total)}
-                  </text>
-                )}
-                <text
-                  x={slot * i + slot / 2}
-                  y={H - 4}
-                  textAnchor="middle"
-                  className="fill-muted-foreground text-[10px]"
-                >
-                  {monthLabel(m.month)}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
-        {hover !== null && (
-          <MonthTooltip month={months[hover]} index={hover} count={months.length} />
-        )}
-      </div>
+                    {m.income > 0 && (
+                      <path
+                        d={column(xIn, yScale(m.income), bar, frame.bottom - yScale(m.income))}
+                        className={cn(IN, isCurrent && "opacity-50", lift && "opacity-80")}
+                      />
+                    )}
+                    {m.total > 0 && (
+                      <path
+                        d={column(xOut, yScale(m.total), bar, frame.bottom - yScale(m.total))}
+                        className={cn(OUT, isCurrent && "opacity-50", lift && "opacity-80")}
+                      />
+                    )}
+                    {isCurrent && m.total > 0 && (
+                      <text
+                        x={xOut + bar / 2}
+                        y={yScale(m.total) - 6}
+                        textAnchor="middle"
+                        className="fill-foreground text-[11px] font-medium"
+                      >
+                        {fmt.kEur(m.total)}
+                      </text>
+                    )}
+                  </g>
+                );
+              })}
+            </>
+          );
+        }}
+      </Chart>
       <p className="mt-1 text-[10px] text-muted-foreground">
         Le mois en cours est plus clair : il n'est pas fini.
       </p>
@@ -280,48 +351,259 @@ function InOutColumns({ months }: { months: MonthSpending[] }) {
   );
 }
 
-/** A column with a 4px rounded top and a square foot on the baseline. */
-function column(x: number, y: number, w: number, h: number): string {
-  const r = Math.min(4, h, w / 2);
-  return `M ${x} ${y + h} V ${y + r} Q ${x} ${y} ${x + r} ${y} H ${x + w - r} Q ${x + w} ${y} ${x + w} ${y + r} V ${y + h} Z`;
+/* ── What it went on, month by month ───────────────────────────────────── */
+
+/**
+ * Categorical slots 1–5 of the validated palette, in their fixed order (the
+ * order is the colour-blindness safety, not a taste). Assigned to the window's
+ * biggest categories by rank; the fold and the unlabelled wear neutral greys.
+ * Literal class names so Tailwind keeps them.
+ */
+const SLOT_FILL = [
+  "fill-[#2a78d6] dark:fill-[#3987e5]",
+  "fill-[#eb6834] dark:fill-[#d95926]",
+  "fill-[#1baf7a] dark:fill-[#199e70]",
+  "fill-[#eda100] dark:fill-[#c98500]",
+  "fill-[#e87ba4] dark:fill-[#d55181]",
+];
+const SLOT_SWATCH = [
+  "bg-[#2a78d6] dark:bg-[#3987e5]",
+  "bg-[#eb6834] dark:bg-[#d95926]",
+  "bg-[#1baf7a] dark:bg-[#199e70]",
+  "bg-[#eda100] dark:bg-[#c98500]",
+  "bg-[#e87ba4] dark:bg-[#d55181]",
+];
+const NEUTRAL_FILL: Record<string, string> = {
+  [OTHERS]: "fill-[#898781]",
+  [UNLABELLED]: "fill-[#c3c2b7] dark:fill-[#383835]",
+};
+const NEUTRAL_SWATCH: Record<string, string> = {
+  [OTHERS]: "bg-[#898781]",
+  [UNLABELLED]: "bg-[#c3c2b7] dark:bg-[#383835]",
+};
+
+function seriesFill(key: string, index: number): string {
+  return NEUTRAL_FILL[key] ?? SLOT_FILL[index] ?? "fill-[#898781]";
+}
+function seriesSwatch(key: string, index: number): string {
+  return NEUTRAL_SWATCH[key] ?? SLOT_SWATCH[index] ?? "bg-[#898781]";
+}
+function seriesLabel(key: string): string {
+  return key === OTHERS ? "Autres catégories" : categoryLabel(key);
 }
 
-function MonthTooltip({
-  month,
-  index,
-  count,
-}: {
-  month: MonthSpending;
-  index: number;
-  count: number;
-}) {
-  const left = ((index + 0.5) / count) * 100;
-  const rows: [string, number][] = [
-    ["Reçu", month.income],
-    ["Dépensé", month.total],
-    ["Reste", month.income - month.total],
-  ];
+function CategoryStack({ months }: { months: MonthSpending[] }) {
+  const [hover, setHover] = useState<number | null>(null);
+  const series = useMemo(() => stackSeries(months), [months]);
+  const stacks = useMemo(() => months.map((m) => monthStack(m, series)), [months, series]);
+  const max = Math.max(...months.map((m) => m.total)) || 1;
+  const last = months.length - 1;
+
+  if (series.length === 0) {
+    return <p className="mt-2 text-sm text-muted-foreground">Rien à montrer sur cette période.</p>;
+  }
+
   return (
-    <div
-      className="pointer-events-none absolute top-0 z-10 w-40 -translate-x-1/2 rounded-md border bg-popover p-2 text-xs shadow-md"
-      style={{ left: `${Math.min(Math.max(left, 20), 80)}%` }}
-    >
-      <div className="text-muted-foreground">{monthLabel(month.month, true)}</div>
-      {rows.map(([label, v]) => (
-        <div key={label} className="mt-1 flex justify-between gap-2">
-          <span className="text-muted-foreground">{label}</span>
-          <span
-            className={cn(
-              "tabular-nums font-medium",
-              label === "Reste" && v < 0 && "text-[hsl(var(--loss))]",
-            )}
-          >
-            {fmt.eur0(v)}
+    <figure className="m-0 mt-3">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        {series.map((key, i) => (
+          <span key={key} className="flex items-center gap-1.5">
+            <span className={cn("inline-block h-2.5 w-2.5 rounded-sm", seriesSwatch(key, i))} />
+            {seriesLabel(key)}
           </span>
-        </div>
-      ))}
-    </div>
+        ))}
+      </div>
+      <Chart
+        className="mt-2"
+        height={COLUMN_H}
+        pad={COLUMN_PAD}
+        ariaLabel="Dépenses par catégorie et par mois"
+        onPointer={(p, frame) => setHover(p ? slotAt(p.x, frame, months.length) : null)}
+        tooltip={(frame) => {
+          if (hover === null) return null;
+          const slot = frame.innerW / months.length;
+          const m = months[hover];
+          // Largest first, like a reader scans; every series at this month, zeros left out.
+          const rows = series
+            .map((key, i) => ({ key, i, value: stacks[hover][key] }))
+            .filter((r) => r.value > 0)
+            .sort((a, b) => b.value - a.value);
+          return {
+            x: frame.left + slot * hover + slot / 2,
+            y: frame.top,
+            content: (
+              <>
+                <div className="flex justify-between gap-2">
+                  <span className="text-muted-foreground">{monthLabel(m.month, true)}</span>
+                  <span className="tabular-nums font-medium">{fmt.eur0(m.total)}</span>
+                </div>
+                {rows.map((r) => (
+                  <div key={r.key} className="mt-1 flex items-center gap-2">
+                    <span
+                      className={cn("inline-block h-0.5 w-3 shrink-0", seriesSwatch(r.key, r.i))}
+                    />
+                    <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                      {seriesLabel(r.key)}
+                    </span>
+                    <span className="tabular-nums font-medium">{fmt.eur0(r.value)}</span>
+                  </div>
+                ))}
+              </>
+            ),
+          };
+        }}
+      >
+        {(frame) => {
+          const yScale = linearScale([0, max], [frame.bottom, frame.top]);
+          const ticks = niceTicks(0, max, frame.compact ? 3 : 4);
+          const slot = frame.innerW / months.length;
+          const bar = Math.min(BAR_MAX, slot * 0.6);
+          const scale = frame.innerH / max;
+          return (
+            <>
+              <YAxis frame={frame} ticks={ticks} scale={yScale} format={fmt.kEur} grid />
+              <MonthAxis frame={frame} months={months} />
+              {months.map((m, i) => {
+                const x = frame.left + slot * i + slot / 2 - bar / 2;
+                const isCurrent = i === last;
+                const lift = hover === i;
+                // Segments grow from the baseline, a 2px surface gap between
+                // them; only the topmost one wears the rounded data-end.
+                let top = frame.bottom;
+                const segments = series
+                  .filter((key) => stacks[i][key] > 0)
+                  .map((key, j) => {
+                    const h = stacks[i][key] * scale;
+                    const y = top - (j === 0 ? 0 : GAP) - h;
+                    top = y;
+                    return { key, y, h, index: series.indexOf(key) };
+                  });
+                return (
+                  <g
+                    key={m.month}
+                    tabIndex={0}
+                    onFocus={() => setHover(i)}
+                    onBlur={() => setHover(null)}
+                    className="outline-none"
+                  >
+                    {segments.map((seg, j) => {
+                      const fill = cn(
+                        seriesFill(seg.key, seg.index),
+                        isCurrent && "opacity-50",
+                        lift && "opacity-80",
+                      );
+                      return j === segments.length - 1 ? (
+                        <path key={seg.key} d={column(x, seg.y, bar, seg.h)} className={fill} />
+                      ) : (
+                        <rect
+                          key={seg.key}
+                          x={x}
+                          y={seg.y}
+                          width={bar}
+                          height={seg.h}
+                          className={fill}
+                        />
+                      );
+                    })}
+                    {isCurrent && m.total > 0 && (
+                      <text
+                        x={x + bar / 2}
+                        y={top - 6}
+                        textAnchor="middle"
+                        className="fill-foreground text-[11px] font-medium"
+                      >
+                        {fmt.kEur(m.total)}
+                      </text>
+                    )}
+                  </g>
+                );
+              })}
+            </>
+          );
+        }}
+      </Chart>
+      <p className="mt-1 text-[10px] text-muted-foreground">
+        Les {Math.min(series.length, SLOT_FILL.length)} plus grosses catégories de la période ont
+        leur couleur ; le reste est en gris. Le mois en cours est plus clair : il n'est pas fini.
+      </p>
+    </figure>
   );
+}
+
+/* ── What moved, against the habit ─────────────────────────────────────── */
+
+/**
+ * Diverging bars from a centre line: right and in the loss colour when the
+ * category cost more than usual, left and in the gain colour when less. The
+ * colour means better/worse, hence the status tokens rather than a series hue.
+ * Value at the tip of every bar: nothing is gated behind hover.
+ */
+function CategoryDeltas({ report }: { report: DeltaReport | null }) {
+  if (report === null) {
+    return (
+      <p className="mt-2 text-sm text-muted-foreground">
+        Il faut deux mois complets pour comparer. Reviens le mois prochain.
+      </p>
+    );
+  }
+  if (report.rows.length === 0) {
+    return (
+      <p className="mt-2 text-sm text-muted-foreground">
+        Rien de notable en {monthLabel(report.month, true)}.
+      </p>
+    );
+  }
+  const max = Math.max(...report.rows.map((r) => Math.abs(r.delta))) || 1;
+  return (
+    <>
+      <p className="mt-1 text-xs text-muted-foreground">
+        {capitalize(monthLabel(report.month, true))}, contre la moyenne{" "}
+        {report.baseline > 1
+          ? `des ${report.baseline} mois complets précédents`
+          : "du mois précédent"}
+        .
+      </p>
+      <ul className="mt-3 space-y-2.5">
+        {report.rows.map((r) => {
+          const more = r.delta > 0;
+          const width = (Math.abs(r.delta) / max) * 50;
+          return (
+            <li
+              key={r.category}
+              className="grid grid-cols-[minmax(0,7rem)_1fr_auto] items-center gap-x-2 gap-y-1 text-xs"
+            >
+              <span className="truncate">{categoryLabel(r.category)}</span>
+              <span className="relative h-2" aria-hidden>
+                <span className="absolute inset-y-0 left-1/2 w-px bg-border" />
+                <span
+                  className={cn(
+                    "absolute inset-y-0",
+                    more
+                      ? "left-1/2 rounded-r-[4px] bg-[hsl(var(--loss))]"
+                      : "right-1/2 rounded-l-[4px] bg-[hsl(var(--gain))]",
+                  )}
+                  style={{ width: `${width}%` }}
+                />
+              </span>
+              <span className="whitespace-nowrap tabular-nums text-foreground">
+                {fmt.signedEur0(r.delta)}
+              </span>
+              <span className="col-span-3 -mt-1 text-[10px] text-muted-foreground">
+                {fmt.eur0(r.last)} contre {fmt.eur0(r.average)} d'habitude
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-2 text-[10px] text-muted-foreground">
+        À droite en rouge : plus que d'habitude. À gauche en vert : moins.
+      </p>
+    </>
+  );
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 /* ── Where it goes, and at whom ────────────────────────────────────────── */
