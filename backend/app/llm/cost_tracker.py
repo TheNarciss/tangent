@@ -36,9 +36,11 @@ PRICE_WEB_SEARCH_USD = 0.01  # per individual search invocation
 
 
 # -- Daily cap --------------------------------------------------------------
-# Mirrors ADR-015 spec. ~EUR 4.60 at typical 2026 rates — the slack on either
-# side is well within the kill-switch's intended tolerance.
-DAILY_CAP_USD = 5.0
+# One euro a day, all users together (ADR-015, amended 2026-09-15). Anthropic
+# bills in dollars: a dollar stays under a euro whatever the rate does, and
+# rounding the cap down is the safe side of a kill-switch. Batches still in
+# flight count against it, so three submissions in a day cannot each pass.
+DAILY_CAP_USD = 1.0
 
 
 # -- Timezone anchor --------------------------------------------------------
