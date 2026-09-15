@@ -123,6 +123,19 @@ Then open http://localhost:5173, create an account, link a bank via the "Add ban
 
 For a production deployment with Caddy and Cloudflare Tunnel, read `docs/adr/005-deployment-topology.md`. It walks through Oracle Cloud setup, SSL, security headers, and the self-hosted runner.
 
+## iPhone app
+
+The iPhone app is the same web build inside a Capacitor shell, talking to the same backend (ADR-035). Everything the shell adds lives in `frontend/ios` and `frontend/src/native`. Building it needs a Mac with Xcode 16 and an Apple Developer account:
+
+```bash
+cd frontend
+npm ci
+npm run ios:sync        # production bundle pointed at riskybusinesses.uk, copied into the Xcode project
+npx cap open ios        # then select your team under Signing & Capabilities and run on a device
+```
+
+The backend side needs `APPLE_*` in `backend/.env` for Sign in with Apple (see `backend/.env.example`).
+
 ## Project structure
 tangent/
 backend/                  FastAPI app

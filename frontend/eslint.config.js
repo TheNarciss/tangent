@@ -9,7 +9,7 @@ import globals from "globals";
 
 export default tseslint.config(
   {
-    ignores: ["dist", "build", "node_modules", "*.config.js", "*.config.ts", "vite-env.d.ts"],
+    ignores: ["dist", "build", "node_modules", "ios", "*.config.js", "*.config.ts", "vite-env.d.ts"],
   },
   {
     files: ["**/*.{ts,tsx,js,jsx}"],

@@ -22,7 +22,9 @@ L'app est le build web actuel embarqué dans **Capacitor**, avec ce que le natif
 
 Le code d'échange ne vaut rien sans le verifier resté dans l'app : un autre programme qui capterait le schéma `tangent://` n'en ferait rien. Le cookie lui-même ne transite jamais par une URL.
 
-Les retours des banques (Powens, Enable Banking) et Sign in with Apple suivent dans les lots suivants, sur le même principe : le backend reconnaît l'utilisateur par un état signé, pas par un cookie que le navigateur système n'a pas.
+Sign in with Apple suit le même principe, en tenant compte de ce qu'Apple fait autrement : retour par POST, `id_token` vérifié contre ses clés publiées, client secret signé par le serveur ; depuis l'app, l'`id_token` obtenu nativement se poste sur `/api/auth/apple/native`. Les retours des banques (Powens, Enable Banking) suivent : le backend reconnaît l'utilisateur par un état signé, pas par un cookie que le navigateur système n'a pas.
+
+La coque vit dans `frontend/ios` (projet Xcode, Swift Package Manager, iOS 15+) et tient en trois fichiers Swift à nous : un plugin `TangentNative` (Face ID via LocalAuthentication, navigateur sécurisé via ASWebAuthenticationSession, Sign in with Apple via AuthenticationServices), le contrôleur qui l'enregistre, et un flou posé sur la fenêtre dès que l'app passe en arrière-plan. Côté web, `src/native` expose la même chose et ne fait rien sur le site. Pas de plugin tiers au-delà de `@capacitor/app` (liens entrants, état de l'app). Le manifeste de confidentialité déclare ce que l'app collecte (e-mail, informations financières, identifiant) sans aucun suivi.
 
 ## Conséquences
 
@@ -35,5 +37,5 @@ Les retours des banques (Powens, Enable Banking) et Sign in with Apple suivent d
 ### Négatives
 
 - Le cookie persistant survit à la fermeture du navigateur : sur un ordinateur partagé, il faut se déconnecter.
-- Capacitor ajoute trois paquets npm et un projet Xcode au dépôt ; la compilation iOS ne se fait que sur macOS.
+- Capacitor ajoute quatre paquets npm et un projet Xcode au dépôt ; la compilation iOS ne se fait que sur macOS, et le Swift écrit ici n'est vérifié qu'à cette compilation.
 - Le code d'échange est mémorisé en mémoire pour l'usage unique : valable pour une instance de backend, à revoir si l'on en fait tourner plusieurs.
