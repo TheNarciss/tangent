@@ -23,7 +23,7 @@ Un créneau rejoué remplace sa ligne (deux index uniques partiels). La clé vit
 
 Le JSON personnel est produit par les mêmes fonctions que les écrans (`get_user_wealth`, `build_summary`, `build_spending`, `verdicts.compute_all`, `dashboard.build`) : l'archive dit exactement ce que l'app disait. Le tableau de bord et les verdicts sont au mieux : une source hors de portée laisse une note, jamais un trou dans la ligne.
 
-Aucune route ne lit l'archive. Elle se lit en SQL pour la partie marché, et par `archive.unseal` dans l'app pour la partie personnelle, plus tard, quand on saura quoi en faire.
+Aucun écran ne montre l'archive : ce n'est pas une chose à regarder, c'est une matière pour des questions qu'on ne sait pas encore poser. Une seule route la lit : l'export de données (`GET /api/export`) rend à la personne l'intégralité de ses lignes, ouvertes avec la clé, puisque ce sont ses données. La partie marché se lit en SQL.
 
 ## Conséquences
 

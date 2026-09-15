@@ -84,3 +84,13 @@ async def list_for_day(session: AsyncSession, snapshot_date: date) -> list[DataS
         .order_by(DataSnapshot.scope, DataSnapshot.slot)
     )
     return list((await session.execute(stmt)).scalars().all())
+
+
+async def list_for_user(session: AsyncSession, user_id: uuid.UUID) -> list[DataSnapshot]:
+    """Every sealed row of one user, oldest first, morning before evening."""
+    stmt = (
+        select(DataSnapshot)
+        .where(DataSnapshot.user_id == user_id)
+        .order_by(DataSnapshot.snapshot_date, DataSnapshot.slot.desc())
+    )
+    return list((await session.execute(stmt)).scalars().all())
