@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 
 import { useSyncBankAccounts } from "@/api";
 import { NAV_PATHS } from "@/components/Sidebar";
+import { useT } from "@/i18n";
 
 /** Detects ?powens_sync=success in the URL after the Powens OAuth callback,
  *  refreshes the auth status, triggers a sync via the new /accounts/sync
@@ -14,6 +15,7 @@ export function PowensCallbackHandler() {
   const { pathname, search } = useLocation();
   const sync = useSyncBankAccounts();
   const hasRun = useRef(false);
+  const { t } = useT();
 
   useEffect(() => {
     if (hasRun.current) return;
@@ -41,18 +43,16 @@ export function PowensCallbackHandler() {
           qc.invalidateQueries({ queryKey: ["optimizer"] });
         },
         onError: () => {
-          window.alert(
-            "Banque ajoutée, mais la première récupération des comptes a échoué. Réessaie avec « Mettre à jour ».",
-          );
+          window.alert(t("system.powens.firstSyncFailed"));
         },
       });
     } else {
       navigate(pathname, { replace: true });
       const reason = params.get("error") || "unknown";
       console.error("Powens callback failed:", reason);
-      window.alert(`La connexion à la banque a échoué (${reason}). Réessaie.`);
+      window.alert(t("system.powens.failed", { reason }));
     }
-  }, [qc, sync, navigate, pathname, search]);
+  }, [qc, sync, navigate, pathname, search, t]);
 
   return null;
 }

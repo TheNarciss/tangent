@@ -1,4 +1,5 @@
 import { useWealthSummary } from "@/api";
+import { useT } from "@/i18n";
 import { NAV_PATHS } from "@/components/Sidebar";
 import { VerdictAlerts } from "@/components/ui/verdict-card";
 
@@ -71,12 +72,11 @@ function DashboardSkeleton() {
 }
 
 function DashboardEmptyState() {
+  const { t } = useT();
   return (
     <div className="rounded-lg border border-border bg-card p-8 text-center">
-      <h2 className="mb-2 text-lg font-semibold">Bienvenue sur Tangent</h2>
-      <p className="text-sm text-muted-foreground">
-        Connecte ton premier compte bancaire pour voir ton patrimoine ici.
-      </p>
+      <h2 className="mb-2 text-lg font-semibold">{t("dashboard.welcome")}</h2>
+      <p className="text-sm text-muted-foreground">{t("dashboard.connectFirst")}</p>
     </div>
   );
 }

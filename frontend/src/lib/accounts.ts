@@ -2,11 +2,11 @@
  * Plain-language vocabulary for bank accounts (Comptes screen + detail sheet).
  *
  * Everything a non-expert reads on the Comptes screen comes from here: account
- * type labels, transaction categories in French, grouping rules and the value
- * shown for each account. No jargon, no ticker, no IBAN.
+ * type labels, transaction categories (in the language in effect), grouping
+ * rules and the value shown for each account. No jargon, no ticker, no IBAN.
  */
 import type { BankAccountResponse, BankAccountType } from "@/api";
-import { LOCALE_TAGS, getLocale, t } from "@/i18n";
+import { LOCALE_TAGS, getLocale, t, type MessageKey } from "@/i18n";
 
 export type AccountGroup =
   "cash" | "savings" | "invest" | "retirement" | "employee" | "loan" | "other";
@@ -21,51 +21,15 @@ export const GROUP_ORDER: AccountGroup[] = [
   "other",
 ];
 
-export const GROUP_LABELS: Record<AccountGroup, string> = {
-  cash: "Comptes courants",
-  savings: "Épargne",
-  invest: "Placements",
-  retirement: "Retraite",
-  employee: "Épargne salariale",
-  loan: "Prêts",
-  other: "Autres",
-};
+/** « Comptes courants », « Épargne »… in the language in effect. */
+export function groupLabel(g: AccountGroup): string {
+  return t(`accounts.group.${g}`);
+}
 
 /** Long, spelled-out account types (no acronym a newcomer has to decode). */
-export const TYPE_LABELS: Record<BankAccountType, string> = {
-  checking: "Compte courant",
-  card: "Carte à débit différé",
-  joint: "Compte joint",
-  savings: "Compte épargne",
-  livret_a: "Livret A",
-  livret_b: "Livret B",
-  ldds: "Livret développement durable (LDDS)",
-  lep: "Livret d'épargne populaire (LEP)",
-  pel: "Plan épargne logement (PEL)",
-  cel: "Compte épargne logement (CEL)",
-  csl: "Compte sur livret",
-  cat: "Compte à terme",
-  deposit: "Dépôt",
-  pea: "Plan d'épargne en actions (PEA)",
-  cto: "Compte-titres",
-  life_insurance: "Assurance vie",
-  capitalisation: "Contrat de capitalisation",
-  real_estate: "Immobilier",
-  crowdlending: "Prêt participatif",
-  per: "Plan épargne retraite (PER)",
-  perp: "Plan épargne retraite (PERP)",
-  perco: "Épargne retraite d'entreprise (PERCO)",
-  madelin: "Retraite Madelin",
-  article_83: "Retraite d'entreprise (art. 83)",
-  pee: "Plan d'épargne entreprise (PEE)",
-  rsp: "Réserve spéciale de participation",
-  loan: "Prêt",
-  mortgage: "Prêt immobilier",
-  consumer_credit: "Crédit à la consommation",
-  revolving_credit: "Crédit renouvelable",
-  crypto: "Cryptomonnaies",
-  other: "Autre",
-};
+export function typeLabel(type: BankAccountType): string {
+  return t(`accounts.type.${type}`);
+}
 
 export function groupOf(type: BankAccountType): AccountGroup {
   switch (type) {
@@ -178,33 +142,37 @@ export function monthYear(iso: string | null): string {
   return iso ? formatDate(iso, { month: "long", year: "numeric" }) : "—";
 }
 
-/** Backend taxonomy (finance/gap_filler/fields/transaction_category.py) → French. */
-export const TRANSACTION_CATEGORIES: Record<string, string> = {
-  alimentation: "Courses",
-  restaurant: "Restaurant",
-  transport: "Transports",
-  carburant: "Carburant",
-  loyer: "Loyer",
-  charges_logement: "Charges du logement",
-  telecom_internet: "Téléphone & internet",
-  assurance: "Assurance",
-  sante: "Santé",
-  loisirs: "Loisirs",
-  abonnements: "Abonnements",
-  shopping: "Achats",
-  voyages: "Voyages",
-  education: "Éducation",
-  impots_taxes: "Impôts & taxes",
-  salaire: "Salaire",
-  remboursement: "Remboursement",
-  virement_interne: "Virement entre mes comptes",
-  epargne_investissement: "Épargne & placements",
-  frais_bancaires: "Frais bancaires",
-  cadeaux_dons: "Cadeaux & dons",
-  autre: "Autre",
-};
+/** Backend taxonomy (finance/gap_filler/fields/transaction_category.py), in its order. */
+export const TRANSACTION_CATEGORY_KEYS: string[] = [
+  "alimentation",
+  "restaurant",
+  "transport",
+  "carburant",
+  "loyer",
+  "charges_logement",
+  "telecom_internet",
+  "assurance",
+  "sante",
+  "loisirs",
+  "abonnements",
+  "shopping",
+  "voyages",
+  "education",
+  "impots_taxes",
+  "salaire",
+  "remboursement",
+  "virement_interne",
+  "epargne_investissement",
+  "frais_bancaires",
+  "cadeaux_dons",
+  "autre",
+];
 
+const KNOWN_CATEGORIES = new Set(TRANSACTION_CATEGORY_KEYS);
+
+/** « Courses », « Loyer »… ; a key the dictionary does not know is shown as-is, underscores as spaces. */
 export function categoryLabel(key: string | null): string {
-  if (!key) return "Sans catégorie";
-  return TRANSACTION_CATEGORIES[key] ?? key.replace(/_/g, " ");
+  if (!key) return t("accounts.category.none");
+  if (KNOWN_CATEGORIES.has(key)) return t(`accounts.category.${key}` as MessageKey);
+  return key.replace(/_/g, " ");
 }

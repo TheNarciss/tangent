@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Sparkles } from "lucide-react";
 
 import { useCurrentUser, useReviews, useTodayReview, type PortfolioReviewResponse } from "@/api";
+import { t, useT } from "@/i18n";
+import { formatDate } from "@/lib/accounts";
 import { useProfile } from "@/lib/profile";
 import { ReviewSheet } from "@/components/ReviewSheet";
 import { Button } from "@/components/ui/button";
@@ -15,7 +17,9 @@ import { cn } from "@/lib/utils";
 
 const PREVIEW_MAX_CHARS = 200;
 /** The nightly batch runs before the user wakes up; one message everywhere. */
-export const BRIEFING_TIME = "au petit matin, avant 9 h";
+export function briefingTime(): string {
+  return t("dashboard.briefingTime");
+}
 
 /**
  * Take everything before the first markdown `#` heading of the body (the
@@ -36,11 +40,11 @@ function extractPreview(content: string): string {
     : cleaned;
 }
 
-const dateFmt = new Intl.DateTimeFormat("fr-FR", {
+const DATE_OPTIONS: Intl.DateTimeFormatOptions = {
   weekday: "long",
   day: "numeric",
   month: "long",
-});
+};
 
 /**
  * Briefing tile — preview of today's briefing, full text and past briefings
@@ -48,6 +52,7 @@ const dateFmt = new Intl.DateTimeFormat("fr-FR", {
  * place to turn it on (one tap, saved to the profile).
  */
 export function AiBriefTile() {
+  const { t } = useT();
   const { data: review, isLoading } = useTodayReview();
   const { data: user } = useCurrentUser();
   const [profile, setProfile] = useProfile();
@@ -59,7 +64,7 @@ export function AiBriefTile() {
   const header = (
     <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
       <Sparkles className="h-3 w-3" />
-      Briefing du matin
+      {t("dashboard.brief.title")}
     </div>
   );
   const frame = "flex flex-col gap-2 rounded-lg border border-border bg-card p-4 md:p-5";
@@ -79,14 +84,12 @@ export function AiBriefTile() {
         {header}
         {enabled ? (
           <p className="text-sm leading-relaxed text-muted-foreground">
-            Pas encore de briefing aujourd'hui. Le prochain arrive {BRIEFING_TIME} : ce qui a bougé
-            chez toi, ce que ça veut dire, et s'il y a quelque chose à faire.
+            {t("dashboard.brief.noneYet", { time: briefingTime() })}
           </p>
         ) : (
           <>
             <p className="text-sm leading-relaxed text-muted-foreground">
-              Chaque matin, un court texte sur ce qui a bougé dans ton patrimoine et ce que ça veut
-              dire. Rien à lire si rien n'a bougé.
+              {t("dashboard.brief.pitch")}
             </p>
             {/* The nightly run costs an LLM call: only an administrator turns it on. */}
             {user?.is_superuser && (
@@ -97,11 +100,11 @@ export function AiBriefTile() {
                   disabled={!profile}
                   onClick={() => profile && setProfile({ ...profile, auto_review_enabled: true })}
                 >
-                  Activer le briefing du matin
+                  {t("dashboard.brief.enable")}
                 </Button>
                 {!profile && (
                   <p className="text-[10px] text-muted-foreground">
-                    Renseigne d'abord ton profil pour l'activer.
+                    {t("dashboard.brief.needProfile")}
                   </p>
                 )}
               </>
@@ -127,7 +130,7 @@ export function AiBriefTile() {
       >
         {header}
         <p className="line-clamp-4 text-sm leading-relaxed">{preview}</p>
-        <div className="text-[10px] text-muted-foreground">Lire le briefing →</div>
+        <div className="text-[10px] text-muted-foreground">{t("dashboard.brief.read")}</div>
       </button>
 
       <BottomSheet
@@ -141,15 +144,15 @@ export function AiBriefTile() {
           <BottomSheetHeader>
             <BottomSheetTitle>
               {shown.id === review.id
-                ? "Ton briefing du jour"
-                : `Briefing du ${dateFmt.format(new Date(shown.review_date))}`}
+                ? t("dashboard.brief.today")
+                : t("dashboard.brief.dated", { date: formatDate(shown.review_date, DATE_OPTIONS) })}
             </BottomSheetTitle>
           </BottomSheetHeader>
           <ReviewSheet review={shown} />
           {history.data && history.data.length > 1 && (
             <div className="border-t border-border px-4 pb-6 pt-4 md:px-6">
               <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Briefings précédents
+                {t("dashboard.brief.previous")}
               </h4>
               <ul className="flex flex-wrap gap-2">
                 {history.data
@@ -162,7 +165,7 @@ export function AiBriefTile() {
                         onClick={() => setSelected(r)}
                         className="rounded-full border px-3 py-1 text-xs capitalize hover:bg-accent"
                       >
-                        {dateFmt.format(new Date(r.review_date))}
+                        {formatDate(r.review_date, DATE_OPTIONS)}
                       </button>
                     </li>
                   ))}

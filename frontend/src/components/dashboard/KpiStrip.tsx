@@ -1,5 +1,6 @@
 import type { WealthSummary } from "@/api";
 import { BentoTile } from "@/components/ui/bento-tile";
+import { useT } from "@/i18n";
 import { fmt } from "@/lib/format";
 
 interface KpiStripProps {
@@ -20,6 +21,7 @@ interface KpiStripProps {
  * worth tile.
  */
 export function KpiStrip({ wealth }: KpiStripProps) {
+  const { t } = useT();
   const cash = wealth.checking_total + wealth.envelopes_total;
   const invest = wealth.investments_total + wealth.pea_cash_total;
   const debts = wealth.total_liabilities;
@@ -28,25 +30,26 @@ export function KpiStrip({ wealth }: KpiStripProps) {
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
       <BentoTile
-        label="Patrimoine net"
+        label={t("dashboard.kpi.netWorth")}
         value={fmt.eur(wealth.net_worth)}
         sub={
           debts > 0 ? (
-            <span className="text-muted-foreground">−{fmt.eur(debts)} de dettes</span>
+            <span className="text-muted-foreground">
+              {t("dashboard.kpi.debts", { amount: fmt.eur(debts) })}
+            </span>
           ) : undefined
         }
         size="lg"
         className="col-span-2"
       />
-      <BentoTile label="Cash" value={fmt.eur(cash)} />
+      <BentoTile label={t("dashboard.kpi.cash")} value={fmt.eur(cash)} />
       <BentoTile
-        label="Investissements"
+        label={t("dashboard.kpi.investments")}
         value={fmt.eur(invest)}
         sub={
           pnl !== 0 ? (
             <span className={pnl >= 0 ? "text-[hsl(var(--gain))]" : "text-[hsl(var(--loss))]"}>
-              {pnl >= 0 ? "+" : ""}
-              {fmt.eur(pnl)} P&L latent
+              {t("dashboard.kpi.pnl", { amount: `${pnl >= 0 ? "+" : ""}${fmt.eur(pnl)}` })}
             </span>
           ) : undefined
         }

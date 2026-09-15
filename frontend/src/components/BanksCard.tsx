@@ -10,7 +10,8 @@ import {
   unlinkEnableBankingSession,
   useEnableBankingSessions,
 } from "@/api";
-import { relativeTime } from "@/lib/accounts";
+import { useT } from "@/i18n";
+import { formatDate, relativeTime } from "@/lib/accounts";
 import { openExternalFlow, platform } from "@/native/flows";
 import { Button } from "@/components/ui/button";
 
@@ -19,6 +20,7 @@ import { Button } from "@/components/ui/button";
  * Comptes screen (add is the header button, unlink here, errors shown here).
  */
 export function BanksCard() {
+  const { t } = useT();
   const connections = useQuery({ queryKey: ["bank-connections"], queryFn: fetchBankConnections });
   const sessions = useEnableBankingSessions();
   const nothing =
@@ -30,22 +32,21 @@ export function BanksCard() {
   return (
     <section className="rounded-xl border bg-card p-4 md:p-6">
       <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-        Mes banques
+        {t("accounts.banks.title")}
       </h2>
-      <p className="mt-1 text-xs text-muted-foreground">
-        Tangent se connecte à ta banque via un service agréé (Powens, ou Enable Banking pour
-        Revolut) : on ne voit jamais tes identifiants. Retirer une banque supprime aussi ses comptes
-        ici.
-      </p>
+      <p className="mt-1 text-xs text-muted-foreground">{t("accounts.banks.desc")}</p>
       <div className="mt-3 space-y-2">
-        {connections.isLoading && <p className="text-sm text-muted-foreground">Chargement…</p>}
+        {connections.isLoading && (
+          <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+        )}
         {connections.isError && (
-          <p className="text-sm text-[hsl(var(--loss))]">Impossible de charger tes banques.</p>
+          <p className="text-sm text-[hsl(var(--loss))]">{t("accounts.banks.loadFailed")}</p>
         )}
         {nothing && (
           <p className="text-sm text-muted-foreground">
-            Aucune banque connectée. Utilise <strong>+ Ajouter une banque</strong> en haut de la
-            page.
+            {t("accounts.banks.emptyBefore")}
+            <strong>{t("accounts.empty.addBank")}</strong>
+            {t("accounts.banks.emptyAfter")}
           </p>
         )}
         {sessions.data?.map((s) => (
@@ -88,6 +89,7 @@ function BankRow({
   lastUpdate: string | null;
   hasError: boolean;
 }) {
+  const { t, tn } = useT();
   const qc = useQueryClient();
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -100,7 +102,7 @@ function BankRow({
       }
       setConfirming(false);
     },
-    onError: (e) => setError(e instanceof Error ? e.message : "Erreur inconnue"),
+    onError: (e) => setError(e instanceof Error ? e.message : t("accounts.unknownError")),
   });
 
   return (
@@ -110,11 +112,13 @@ function BankRow({
         <div className="min-w-[12rem] flex-1">
           <p className="truncate text-sm font-medium">{name}</p>
           <p className="text-xs text-muted-foreground">
-            {accountsCount} compte{accountsCount > 1 ? "s" : ""} · mis à jour{" "}
-            {relativeTime(lastUpdate)}
+            {t("accounts.banks.summary", {
+              accounts: tn("accounts.banks.count", accountsCount),
+              when: relativeTime(lastUpdate),
+            })}
             {hasError && (
               <span className="ml-2 text-[hsl(var(--loss))]">
-                connexion à refaire (mot de passe changé ?)
+                {t("accounts.banks.reconnectNeeded")}
               </span>
             )}
           </p>
@@ -126,17 +130,20 @@ function BankRow({
             onClick={() => setConfirming(true)}
             className="ml-auto shrink-0"
           >
-            Retirer
+            {t("accounts.banks.remove")}
           </Button>
         )}
       </div>
       {confirming && (
         <div className="mt-2 flex flex-wrap items-center justify-end gap-2 text-xs">
           <span className="mr-auto text-muted-foreground">
-            Retirer {name} et ses {accountsCount} compte{accountsCount > 1 ? "s" : ""} ?
+            {t("accounts.banks.removeConfirm", {
+              name,
+              accounts: tn("accounts.banks.count", accountsCount),
+            })}
           </span>
           <Button variant="outline" size="sm" onClick={() => setConfirming(false)}>
-            Annuler
+            {t("common.cancel")}
           </Button>
           <Button
             variant="destructive"
@@ -144,7 +151,7 @@ function BankRow({
             onClick={() => unlink.mutate()}
             disabled={unlink.isPending}
           >
-            {unlink.isPending ? "Retrait…" : "Retirer"}
+            {unlink.isPending ? t("accounts.banks.removing") : t("accounts.banks.remove")}
           </Button>
         </div>
       )}
@@ -170,6 +177,7 @@ function EnableBankingRow({
   lastSync: string | null;
   error: string | null;
 }) {
+  const { t, tn } = useT();
   const qc = useQueryClient();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -186,7 +194,7 @@ function EnableBankingRow({
       invalidate();
       setConfirming(false);
     },
-    onError: (e) => setFailure(e instanceof Error ? e.message : "Erreur inconnue"),
+    onError: (e) => setFailure(e instanceof Error ? e.message : t("accounts.unknownError")),
   });
   const navigate = useNavigate();
   const reconnect = async () => {
@@ -195,11 +203,11 @@ function EnableBankingRow({
       await openExternalFlow(await startEnableBankingAuth(name, "FR", platform()), navigate);
       setBusy(false);
     } catch (e) {
-      setFailure(e instanceof Error ? e.message : "Erreur inconnue");
+      setFailure(e instanceof Error ? e.message : t("accounts.unknownError"));
       setBusy(false);
     }
   };
-  const until = new Date(validUntil).toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
+  const until = formatDate(validUntil, { day: "numeric", month: "long" });
 
   return (
     <div className="rounded-md border px-3 py-2">
@@ -208,31 +216,33 @@ function EnableBankingRow({
         <div className="min-w-[12rem] flex-1">
           <p className="truncate text-sm font-medium">{name}</p>
           <p className="text-xs text-muted-foreground">
-            {accountsCount} compte{accountsCount > 1 ? "s" : ""} · mis à jour{" "}
-            {relativeTime(lastSync)}
+            {t("accounts.banks.summary", {
+              accounts: tn("accounts.banks.count", accountsCount),
+              when: relativeTime(lastSync),
+            })}
             {expired ? (
               <span className="ml-2 text-[hsl(var(--loss))]">
-                consentement expiré, à reconnecter
+                {t("accounts.banks.consentExpired")}
               </span>
             ) : (
-              <span className="ml-2">· consentement jusqu'au {until}</span>
+              <span className="ml-2">{t("accounts.banks.consentUntil", { date: until })}</span>
             )}
           </p>
           {!expired && error && (
             <p className="mt-0.5 break-words text-xs text-[hsl(var(--loss))]">
-              Dernière relève en échec : {error}
+              {t("accounts.banks.lastFetchFailed", { error })}
             </p>
           )}
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-1">
           {expired && (
             <Button variant="outline" size="sm" onClick={reconnect} disabled={busy}>
-              {busy ? "Redirection…" : "Reconnecter"}
+              {busy ? t("accounts.addBank.redirecting") : t("accounts.banks.reconnect")}
             </Button>
           )}
           {!confirming && (
             <Button variant="ghost" size="sm" onClick={() => setConfirming(true)}>
-              Retirer
+              {t("accounts.banks.remove")}
             </Button>
           )}
         </div>
@@ -240,10 +250,13 @@ function EnableBankingRow({
       {confirming && (
         <div className="mt-2 flex flex-wrap items-center justify-end gap-2 text-xs">
           <span className="mr-auto text-muted-foreground">
-            Retirer {name} et ses {accountsCount} compte{accountsCount > 1 ? "s" : ""} ?
+            {t("accounts.banks.removeConfirm", {
+              name,
+              accounts: tn("accounts.banks.count", accountsCount),
+            })}
           </span>
           <Button variant="outline" size="sm" onClick={() => setConfirming(false)}>
-            Annuler
+            {t("common.cancel")}
           </Button>
           <Button
             variant="destructive"
@@ -251,7 +264,7 @@ function EnableBankingRow({
             onClick={() => unlink.mutate()}
             disabled={unlink.isPending}
           >
-            {unlink.isPending ? "Retrait…" : "Retirer"}
+            {unlink.isPending ? t("accounts.banks.removing") : t("accounts.banks.remove")}
           </Button>
         </div>
       )}

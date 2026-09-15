@@ -8,9 +8,9 @@ import {
   type HoldingResponse,
   type LoanResponse,
 } from "@/api";
+import { useT } from "@/i18n";
 import {
-  TRANSACTION_CATEGORIES,
-  TYPE_LABELS,
+  TRANSACTION_CATEGORY_KEYS,
   accountValue,
   categoryLabel,
   cleanName,
@@ -20,6 +20,7 @@ import {
   longDate,
   monthYear,
   shortDate,
+  typeLabel,
 } from "@/lib/accounts";
 import { fmt } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -43,6 +44,7 @@ interface Props {
  * loan schedule, positions or movements — two lines per row, no table.
  */
 export function AccountDetailSheet({ account, onClose }: Props) {
+  useT();
   return (
     <BottomSheet open={account !== null} onOpenChange={(open) => !open && onClose()}>
       <BottomSheetContent>
@@ -51,7 +53,7 @@ export function AccountDetailSheet({ account, onClose }: Props) {
             <BottomSheetHeader>
               <BottomSheetTitle>{cleanName(account.name)}</BottomSheetTitle>
               <BottomSheetDescription>
-                {TYPE_LABELS[account.type]}
+                {typeLabel(account.type)}
                 {account.institution_name ? ` · ${account.institution_name}` : ""}
               </BottomSheetDescription>
               <div
@@ -75,16 +77,17 @@ export function AccountDetailSheet({ account, onClose }: Props) {
 }
 
 function Detail({ account }: { account: BankAccountResponse }) {
+  const { t } = useT();
   if (groupOf(account.type) === "loan") {
     return account.loan ? (
       <LoanDetail loan={account.loan} />
     ) : (
-      <Empty>Ta banque ne donne pas le détail de ce prêt.</Empty>
+      <Empty>{t("accounts.detail.noLoanDetail")}</Empty>
     );
   }
   if (hasHoldings(account.type)) return <Holdings accountId={account.id} />;
   if (hasTransactions(account.type)) return <Transactions accountId={account.id} />;
-  return <Empty>Aucun détail disponible pour ce compte.</Empty>;
+  return <Empty>{t("accounts.detail.noDetail")}</Empty>;
 }
 
 function Empty({ children }: { children: React.ReactNode }) {
@@ -94,6 +97,7 @@ function Empty({ children }: { children: React.ReactNode }) {
 /* ── Loan ─────────────────────────────────────────────────────────────── */
 
 function LoanDetail({ loan }: { loan: LoanResponse }) {
+  const { t, tn } = useT();
   const progress =
     loan.nb_payments_done !== null && loan.nb_payments_total
       ? (loan.nb_payments_done / loan.nb_payments_total) * 100
@@ -101,23 +105,34 @@ function LoanDetail({ loan }: { loan: LoanResponse }) {
   const rows: [string, string][] = [];
   if (loan.next_payment_amount && loan.next_payment_date)
     rows.push([
-      "Prochaine mensualité",
-      `${fmt.eur(loan.next_payment_amount)} le ${longDate(loan.next_payment_date)}`,
+      t("accounts.loan.nextPayment"),
+      t("accounts.loan.amountOnDate", {
+        amount: fmt.eur(loan.next_payment_amount),
+        date: longDate(loan.next_payment_date),
+      }),
     ]);
-  else if (loan.next_payment_amount) rows.push(["Mensualité", fmt.eur(loan.next_payment_amount)]);
-  if (loan.used_amount !== null) rows.push(["Reste à rembourser", fmt.eur(loan.used_amount)]);
-  if (loan.total_amount !== null) rows.push(["Montant emprunté", fmt.eur(loan.total_amount)]);
-  if (loan.rate !== null) rows.push(["Taux", `${loan.rate.toFixed(2).replace(".", ",")} %`]);
+  else if (loan.next_payment_amount)
+    rows.push([t("accounts.loan.payment"), fmt.eur(loan.next_payment_amount)]);
+  if (loan.used_amount !== null)
+    rows.push([t("accounts.loan.remaining"), fmt.eur(loan.used_amount)]);
+  if (loan.total_amount !== null)
+    rows.push([t("accounts.loan.borrowed"), fmt.eur(loan.total_amount)]);
+  if (loan.rate !== null)
+    rows.push([
+      t("accounts.loan.rate"),
+      t("accounts.loan.rateValue", { rate: fmt.num(loan.rate) }),
+    ]);
   if (loan.nb_payments_left !== null)
-    rows.push(["Mensualités restantes", `${loan.nb_payments_left}`]);
-  if (loan.maturity_date) rows.push(["Fin du prêt", monthYear(loan.maturity_date)]);
-  if (loan.insurance_amount) rows.push(["Assurance par mois", fmt.eur(loan.insurance_amount)]);
+    rows.push([t("accounts.loan.paymentsLeft"), `${loan.nb_payments_left}`]);
+  if (loan.maturity_date) rows.push([t("accounts.loan.end"), monthYear(loan.maturity_date)]);
+  if (loan.insurance_amount)
+    rows.push([t("accounts.loan.insurance"), fmt.eur(loan.insurance_amount)]);
   if (loan.deferred)
     rows.push([
-      "Remboursement",
+      t("accounts.loan.repayment"),
       loan.start_repayment_date
-        ? `pas encore commencé · à partir de ${monthYear(loan.start_repayment_date)}`
-        : "pas encore commencé",
+        ? t("accounts.loan.notStartedFrom", { date: monthYear(loan.start_repayment_date) })
+        : t("accounts.loan.notStarted"),
     ]);
 
   return (
@@ -139,7 +154,9 @@ function LoanDetail({ loan }: { loan: LoanResponse }) {
             <div className="h-full bg-primary" style={{ width: `${progress}%` }} />
           </div>
           <div className="text-xs text-muted-foreground">
-            {loan.nb_payments_done} mensualités payées sur {loan.nb_payments_total}
+            {tn("accounts.loan.progress", loan.nb_payments_done ?? 0, {
+              total: loan.nb_payments_total ?? 0,
+            })}
           </div>
         </div>
       )}
@@ -150,12 +167,14 @@ function LoanDetail({ loan }: { loan: LoanResponse }) {
 /* ── Positions ────────────────────────────────────────────────────────── */
 
 function Holdings({ accountId }: { accountId: string }) {
+  const { t } = useT();
   const holdings = useAccountHoldings(accountId);
   const updateTer = useUpdateHoldingTer(accountId);
 
-  if (holdings.isLoading) return <Empty>Chargement…</Empty>;
-  if (holdings.isError) return <Empty>Impossible de charger les positions.</Empty>;
-  if (!holdings.data || holdings.data.length === 0) return <Empty>Aucune position.</Empty>;
+  if (holdings.isLoading) return <Empty>{t("common.loading")}</Empty>;
+  if (holdings.isError) return <Empty>{t("accounts.holdings.loadFailed")}</Empty>;
+  if (!holdings.data || holdings.data.length === 0)
+    return <Empty>{t("accounts.holdings.empty")}</Empty>;
 
   return (
     <ul className="divide-y rounded-md border">
@@ -167,6 +186,7 @@ function Holdings({ accountId }: { accountId: string }) {
 }
 
 function HoldingRow({ h, onTer }: { h: HoldingResponse; onTer: (ter: number) => void }) {
+  const { t, tn } = useT();
   const cost = h.quantity * h.unit_price;
   const gain = cost > 0 ? h.current_value - cost : null;
   return (
@@ -177,7 +197,10 @@ function HoldingRow({ h, onTer }: { h: HoldingResponse; onTer: (ter: number) => 
       </div>
       <div className="mt-0.5 flex items-center justify-between gap-3 text-xs text-muted-foreground">
         <span className="min-w-0 truncate">
-          {fmt.num(h.quantity)} part{h.quantity > 1 ? "s" : ""} · achetées {fmt.eur(h.unit_price)}
+          {t("accounts.holdings.summary", {
+            units: tn("accounts.holdings.units", h.quantity, { count: fmt.num(h.quantity) }),
+            price: fmt.eur(h.unit_price),
+          })}
         </span>
         {gain !== null && (
           <span
@@ -191,11 +214,11 @@ function HoldingRow({ h, onTer }: { h: HoldingResponse; onTer: (ter: number) => 
         )}
       </div>
       <div className="mt-1 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-        <span>Frais annuels du fonds</span>
+        <span>{t("accounts.holdings.fees")}</span>
         <DataField
           value={h.ter}
           source={h.ter_source}
-          formatValue={(v) => (typeof v === "number" ? `${(v * 100).toFixed(2)} %` : String(v))}
+          formatValue={(v) => (typeof v === "number" ? fmt.pct(v) : String(v))}
           editable
           inputStep="0.0001"
           inputMin="0"
@@ -211,20 +234,21 @@ function HoldingRow({ h, onTer }: { h: HoldingResponse; onTer: (ter: number) => 
 /* ── Movements ────────────────────────────────────────────────────────── */
 
 function Transactions({ accountId }: { accountId: string }) {
+  const { t } = useT();
   const txs = useAccountTransactions(accountId, 50);
   const updateCategory = useUpdateTransactionCategory(accountId);
 
-  if (txs.isLoading) return <Empty>Chargement…</Empty>;
-  if (txs.isError) return <Empty>Impossible de charger les mouvements.</Empty>;
-  if (!txs.data || txs.data.length === 0) return <Empty>Aucun mouvement.</Empty>;
+  if (txs.isLoading) return <Empty>{t("common.loading")}</Empty>;
+  if (txs.isError) return <Empty>{t("accounts.transactions.loadFailed")}</Empty>;
+  if (!txs.data || txs.data.length === 0) return <Empty>{t("accounts.transactions.empty")}</Empty>;
 
   return (
     <ul className="divide-y rounded-md border">
-      {txs.data.map((t) => (
+      {txs.data.map((tx) => (
         <TransactionRow
-          key={t.id}
-          t={t}
-          onCategory={(category) => updateCategory.mutate({ transactionId: t.id, category })}
+          key={tx.id}
+          tx={tx}
+          onCategory={(category) => updateCategory.mutate({ transactionId: tx.id, category })}
         />
       ))}
     </ul>
@@ -232,37 +256,38 @@ function Transactions({ accountId }: { accountId: string }) {
 }
 
 function TransactionRow({
-  t,
+  tx,
   onCategory,
 }: {
-  t: BankTransactionResponse;
+  tx: BankTransactionResponse;
   onCategory: (category: string) => void;
 }) {
+  const { t } = useT();
   return (
     <li className="px-3 py-2 text-sm">
       <div className="flex items-baseline justify-between gap-3">
-        <span className="min-w-0 truncate">{t.description || "—"}</span>
+        <span className="min-w-0 truncate">{tx.description || "—"}</span>
         <span
           className={cn(
             "shrink-0 font-mono tabular",
-            t.amount >= 0 ? "text-[hsl(var(--gain))]" : "text-[hsl(var(--loss))]",
+            tx.amount >= 0 ? "text-[hsl(var(--gain))]" : "text-[hsl(var(--loss))]",
           )}
         >
-          {fmt.signedEur(t.amount)}
+          {fmt.signedEur(tx.amount)}
         </span>
       </div>
       <div className="mt-0.5 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-        <span>{shortDate(t.transaction_date)}</span>
+        <span>{shortDate(tx.transaction_date)}</span>
         <select
-          aria-label="Catégorie"
-          value={t.category ?? ""}
+          aria-label={t("accounts.transactions.category")}
+          value={tx.category ?? ""}
           onChange={(e) => e.target.value && onCategory(e.target.value)}
           className="max-w-[60%] cursor-pointer truncate rounded border-none bg-transparent text-right text-xs text-muted-foreground hover:text-foreground focus:outline-none"
         >
-          {!t.category && <option value="">{categoryLabel(null)}</option>}
-          {Object.entries(TRANSACTION_CATEGORIES).map(([key, label]) => (
+          {!tx.category && <option value="">{categoryLabel(null)}</option>}
+          {TRANSACTION_CATEGORY_KEYS.map((key) => (
             <option key={key} value={key}>
-              {label}
+              {categoryLabel(key)}
             </option>
           ))}
         </select>

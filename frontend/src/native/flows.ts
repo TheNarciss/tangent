@@ -11,6 +11,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { NavigateFunction } from "react-router-dom";
 
 import { API_URL, signInWithAppleToken, startAppleLogin, startGoogleLogin } from "@/api";
+import { t } from "@/i18n";
 
 import {
   APP_SCHEME,
@@ -41,7 +42,7 @@ export async function openExternalFlow(url: string, navigate: NavigateFunction):
   }
   const back = await TangentNative.authSession({ url, callbackScheme: APP_SCHEME });
   const search = searchOfReturn(back.url);
-  if (search === null) throw new Error("Retour inattendu du navigateur.");
+  if (search === null) throw new Error(t("system.flows.unexpectedReturn"));
   navigate({ pathname: "/", search }, { replace: true });
 }
 

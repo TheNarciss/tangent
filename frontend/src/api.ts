@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { t } from "@/i18n";
 import { clearProfile } from "@/lib/profile";
 
 export const API_URL =
@@ -915,11 +916,7 @@ export function useAuthProviders() {
 export async function startAppleLogin(): Promise<void> {
   const res = await fetch(`${API_URL}/auth/apple/authorize`, { credentials: "include" });
   if (!res.ok) {
-    throw new ApiError(
-      res.status,
-      "OAuthStartFailed",
-      "Impossible de démarrer la connexion Apple.",
-    );
+    throw new ApiError(res.status, "OAuthStartFailed", t("system.api.appleStartFailed"));
   }
   const data = (await res.json()) as OAuthAuthorizeResponse;
   window.location.href = data.authorization_url;
@@ -936,11 +933,7 @@ export async function startGoogleLogin(): Promise<void> {
     credentials: "include",
   });
   if (!res.ok) {
-    throw new ApiError(
-      res.status,
-      "OAuthStartFailed",
-      "Impossible de démarrer l'authentification Google.",
-    );
+    throw new ApiError(res.status, "OAuthStartFailed", t("system.api.googleStartFailed"));
   }
   const data = (await res.json()) as OAuthAuthorizeResponse;
   window.location.href = data.authorization_url;
@@ -954,7 +947,7 @@ export async function startGoogleAssociate(): Promise<void> {
     credentials: "include",
   });
   if (!res.ok) {
-    throw new ApiError(res.status, "OAuthAssociateFailed", "Impossible de lier le compte Google.");
+    throw new ApiError(res.status, "OAuthAssociateFailed", t("system.api.googleLinkFailed"));
   }
   const data = (await res.json()) as OAuthAuthorizeResponse;
   window.location.href = data.authorization_url;
@@ -1100,7 +1093,7 @@ export async function generateReviewNow(): Promise<void> {
     } catch {
       // keep "internal"
     }
-    throw new ApiError(500, "ReviewError", `La génération a échoué (${reason}).`);
+    throw new ApiError(500, "ReviewError", t("system.api.reviewFailed", { reason }));
   }
 }
 

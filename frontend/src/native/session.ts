@@ -11,6 +11,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { App } from "@capacitor/app";
 
 import { exchangeAppCode } from "@/api";
+import { t } from "@/i18n";
 
 import { isNative, parseAppReturn, takeVerifier } from "./bridge";
 
@@ -23,11 +24,11 @@ export async function completeAppReturn(
   const back = parseAppReturn(url);
   if (!back) return;
   if ("error" in back && back.error) {
-    throw new Error(`Connexion échouée (${back.error}).`);
+    throw new Error(t("system.session.failed", { error: back.error }));
   }
   if (!("code" in back) || !back.code) return;
   const secret = verifier ?? takeVerifier();
-  if (!secret) throw new Error("Connexion à reprendre depuis le début.");
+  if (!secret) throw new Error(t("system.session.restart"));
   await exchangeAppCode(back.code, secret);
   await qc.invalidateQueries({ queryKey: ["user", "me"] });
 }

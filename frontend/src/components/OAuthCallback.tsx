@@ -2,6 +2,8 @@ import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "react-router-dom";
 
+import { useT } from "@/i18n";
+
 /** Detects ?oauth=success or ?oauth_error=NNN in the URL after the Google
  *  OAuth callback (cf ADR-014). Cleans the URL and triggers a user refetch
  *  so the App promotes from AuthScreen to Dashboard immediately. */
@@ -10,6 +12,7 @@ export function OAuthCallbackHandler() {
   const navigate = useNavigate();
   const { pathname, search } = useLocation();
   const hasRun = useRef(false);
+  const { t } = useT();
 
   useEffect(() => {
     if (hasRun.current) return;
@@ -30,12 +33,9 @@ export function OAuthCallbackHandler() {
       // Show a friendly message; nothing fancy yet
       // (codes : 400 = email non vérifié / state invalide, 409 = sub déjà pris,
       //  401 = pas loggé pour /associate, etc.)
-      window.alert(
-        `Connexion échouée (${errorCode}). ` +
-          "Réessaie, ou contacte le support si le problème persiste.",
-      );
+      window.alert(t("system.oauth.failed", { code: errorCode }));
     }
-  }, [qc, navigate, pathname, search]);
+  }, [qc, navigate, pathname, search, t]);
 
   return null;
 }

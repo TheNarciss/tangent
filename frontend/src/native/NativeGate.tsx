@@ -3,6 +3,7 @@ import { App } from "@capacitor/app";
 
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/Logo";
+import { useT } from "@/i18n";
 
 import { TangentNative, isNative } from "./bridge";
 
@@ -17,18 +18,19 @@ export function NativeGate({ children }: { children: ReactNode }) {
   const [locked, setLocked] = useState(isNative());
   const [asking, setAsking] = useState(false);
   const leftAt = useRef<number | null>(null);
+  const { t } = useT();
 
   const unlock = useCallback(async () => {
     setAsking(true);
     try {
-      const result = await TangentNative.unlock({ reason: "Déverrouiller Tangent" });
+      const result = await TangentNative.unlock({ reason: t("system.gate.unlockReason") });
       setLocked(!result.success);
     } catch {
       setLocked(true);
     } finally {
       setAsking(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!isNative()) return;
@@ -55,11 +57,11 @@ export function NativeGate({ children }: { children: ReactNode }) {
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-background px-6">
       <Logo size={64} />
       <div className="text-center">
-        <p className="text-lg font-semibold">Tangent est verrouillé</p>
-        <p className="text-sm text-muted-foreground">Face ID ou ton code protège ton patrimoine.</p>
+        <p className="text-lg font-semibold">{t("system.gate.locked")}</p>
+        <p className="text-sm text-muted-foreground">{t("system.gate.protects")}</p>
       </div>
       <Button onClick={() => void unlock()} disabled={asking} className="w-full max-w-xs">
-        {asking ? "Vérification…" : "Déverrouiller"}
+        {asking ? t("system.gate.checking") : t("system.gate.unlock")}
       </Button>
     </div>
   );

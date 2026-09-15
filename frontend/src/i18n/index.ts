@@ -11,9 +11,13 @@
  * re-renders when the language changes.
  */
 import { account } from "./messages/account";
+import { accounts } from "./messages/accounts";
 import { auth } from "./messages/auth";
 import { common } from "./messages/common";
+import { dashboard } from "./messages/dashboard";
 import { nav } from "./messages/nav";
+import { spending } from "./messages/spending";
+import { system } from "./messages/system";
 import { getLocale, useLocale, type Locale } from "./locale";
 
 export {
@@ -28,8 +32,26 @@ export {
 } from "./locale";
 export type { Locale, LocalePreference } from "./locale";
 
-const FR = { ...common.fr, ...nav.fr, ...auth.fr, ...account.fr };
-const EN: Record<MessageKey, string> = { ...common.en, ...nav.en, ...auth.en, ...account.en };
+const FR = {
+  ...common.fr,
+  ...nav.fr,
+  ...auth.fr,
+  ...account.fr,
+  ...dashboard.fr,
+  ...system.fr,
+  ...accounts.fr,
+  ...spending.fr,
+};
+const EN: Record<MessageKey, string> = {
+  ...common.en,
+  ...nav.en,
+  ...auth.en,
+  ...account.en,
+  ...dashboard.en,
+  ...system.en,
+  ...accounts.en,
+  ...spending.en,
+};
 
 export type MessageKey = keyof typeof FR;
 type Vars = Record<string, string | number>;
