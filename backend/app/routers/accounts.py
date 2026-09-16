@@ -622,6 +622,10 @@ async def _do_sync(user: User, session: AsyncSession, locale: Locale = "fr") -> 
     await session.commit()
 
     if not results:
+        # No live provider: the demo account (ADR-035) holds accounts that no
+        # bank refreshes, and that is not a failure to show in red.
+        if await accounts_repo.list_accounts(session, user.id):
+            return SyncReport(success=True, synced_at=now)
         raise HTTPException(status_code=400, detail=t(locale, "errors.no_bank"))
 
     failures = [r.error or r.provider for r in results if not r.success]

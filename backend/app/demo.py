@@ -31,6 +31,10 @@ from .auth import User, UserCreate
 from .auth.manager import UserManager, _password_helper
 from .auth.oauth_models import OAuthAccount
 from .auth.terms_version import CURRENT_TERMS_VERSION
+from .finance import risk_profile
+from .repositories import account_holdings as holdings_repo
+from .repositories import bank_accounts as accounts_repo
+from .repositories import profile as profile_repo
 from .repositories import snapshots as snapshots_repo
 
 logger = logging.getLogger(__name__)
@@ -212,6 +216,8 @@ async def seed(
         synced_at=datetime.now(UTC),
     )
     await persist_sync_result(session, user.id, result)
+    await _profile(session, user.id, today)
+    await _fund_fees(session, user.id)
 
     # Sixty days of readings: a gentle rise, one contribution a month, so that
     # performance, drawdown and « depuis hier » have something to say.
@@ -232,6 +238,40 @@ async def seed(
     await session.commit()
     logger.info("demo: compte %s prêt (%s)", email, user.id)
     return user.id
+
+
+# Annual fees of the two funds (their KIDs), so « Frais réels » can measure something.
+FUND_FEES = {WORLD: 0.0038, SP500: 0.0015}
+
+
+async def _profile(session: AsyncSession, user_id: uuid.UUID, today: date) -> None:
+    """A filled-in profile: without it every verdict says « incomplet »."""
+    level = risk_profile.resolve(3)
+    await profile_repo.update(
+        session,
+        user_id,
+        {
+            "birth_date": date(today.year - 31, 4, 12),
+            "household_status": "single",
+            "children": 0,
+            "fiscal_shares": 1.0,
+            "rfr_n_minus_2": 29_400.0,  # twelve months of the salary seen on the account
+            "risk_level": level.level,
+            "target_annual_return": level.target_annual_return,
+            "max_annual_volatility": level.max_annual_volatility,
+            "monthly_dca": 300.0,
+            "horizon_years": 10,
+            "goal_amount": 50_000.0,
+        },
+    )
+
+
+async def _fund_fees(session: AsyncSession, user_id: uuid.UUID) -> None:
+    for row in await accounts_repo.list_accounts(session, user_id):
+        for holding in await holdings_repo.list_holdings(session, user_id, row.id):
+            ter = FUND_FEES.get(holding.ticker)
+            if ter is not None:
+                await holdings_repo.update_ter(session, user_id, holding.id, ter, source="api")
 
 
 async def _main() -> int:
