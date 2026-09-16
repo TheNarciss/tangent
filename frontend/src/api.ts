@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { t } from "@/i18n";
+import { getLocale, t } from "@/i18n";
 import { clearProfile } from "@/lib/profile";
 
 export const API_URL =
@@ -271,10 +271,18 @@ export interface LoginRequest {
 /* ── HTTP client ────────────────────────────────────────────────────── */
 
 export async function http<T>(path: string, init?: RequestInit): Promise<T> {
+  // Defaults first, then whatever the caller passed (a Content-Type override
+  // for form bodies, an Accept for SSE…) wins. Accept-Language tells the
+  // backend which language to answer in (error messages, emails).
+  const headers = new Headers({
+    "Content-Type": "application/json",
+    "Accept-Language": getLocale(),
+  });
+  new Headers(init?.headers).forEach((value, name) => headers.set(name, value));
   const res = await fetch(`${API_URL}${path}`, {
     credentials: "include", // CRITICAL: send/receive auth cookies cross-origin
-    headers: { "Content-Type": "application/json" },
     ...init,
+    headers,
   });
   if (!res.ok) {
     // Backend errors return {detail, type}; surface both for typed handling upstream.
@@ -330,7 +338,10 @@ export function useLogin() {
       const res = await fetch(`${API_URL}/auth/login`, {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Accept-Language": getLocale(),
+        },
         body,
       });
       if (!res.ok) {
@@ -531,6 +542,7 @@ export async function getPowensWebviewUrl(platform: "web" | "app" = "web"): Prom
   // Powens initiate is on /auth/powens/* (ADR-020 Powens exception, not /api/*)
   const powensRes = await fetch(`${BACKEND_BASE}/auth/powens/initiate?platform=${platform}`, {
     credentials: "include",
+    headers: { "Accept-Language": getLocale() },
   });
   if (!powensRes.ok) {
     let detail = "Powens initiation failed";
@@ -914,7 +926,10 @@ export function useAuthProviders() {
  * backend, which opens the session and redirects to /?oauth=success.
  */
 export async function startAppleLogin(): Promise<void> {
-  const res = await fetch(`${API_URL}/auth/apple/authorize`, { credentials: "include" });
+  const res = await fetch(`${API_URL}/auth/apple/authorize`, {
+    credentials: "include",
+    headers: { "Accept-Language": getLocale() },
+  });
   if (!res.ok) {
     throw new ApiError(res.status, "OAuthStartFailed", t("system.api.appleStartFailed"));
   }
@@ -931,6 +946,7 @@ export async function startAppleLogin(): Promise<void> {
 export async function startGoogleLogin(): Promise<void> {
   const res = await fetch(`${API_URL}/auth/google/authorize`, {
     credentials: "include",
+    headers: { "Accept-Language": getLocale() },
   });
   if (!res.ok) {
     throw new ApiError(res.status, "OAuthStartFailed", t("system.api.googleStartFailed"));
@@ -945,6 +961,7 @@ export async function startGoogleLogin(): Promise<void> {
 export async function startGoogleAssociate(): Promise<void> {
   const res = await fetch(`${API_URL}/auth/associate/google/authorize`, {
     credentials: "include",
+    headers: { "Accept-Language": getLocale() },
   });
   if (!res.ok) {
     throw new ApiError(res.status, "OAuthAssociateFailed", t("system.api.googleLinkFailed"));
@@ -1072,7 +1089,7 @@ export async function generateReviewNow(): Promise<void> {
   const res = await fetch(`${API_URL}/reviews/generate`, {
     method: "POST",
     credentials: "include",
-    headers: { Accept: "text/event-stream" },
+    headers: { Accept: "text/event-stream", "Accept-Language": getLocale() },
   });
   if (!res.ok) {
     let detail = `${res.status} ${res.statusText}`;
@@ -1175,7 +1192,10 @@ export function useSpending(months = 6) {
 
 /** Everything the account holds and computes, as one JSON file (for debugging). */
 export async function exportEverything(): Promise<Blob> {
-  const res = await fetch(`${API_URL}/export`, { credentials: "include" });
+  const res = await fetch(`${API_URL}/export`, {
+    credentials: "include",
+    headers: { "Accept-Language": getLocale() },
+  });
   if (!res.ok) throw new ApiError(res.status, "HttpError", `${res.status} ${res.statusText}`);
   return res.blob();
 }

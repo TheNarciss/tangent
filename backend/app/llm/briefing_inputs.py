@@ -22,6 +22,7 @@ from ..errors import AppError
 from ..finance import macro, market_leads, performance, picks
 from ..finance import verdicts as verdicts_engine
 from ..finance.performance import Performance, Point
+from ..i18n import as_locale
 from ..models import MarketLead, PicksResponse, Verdict, Wealth
 from ..repositories import bank_transactions as tx_repo
 from ..repositories import reviews as reviews_repo
@@ -93,7 +94,12 @@ async def collect_user(
     since = today - timedelta(days=HISTORY_DAYS)
     history = [p for p in points if p.day >= since]
     verdicts = verdicts_engine.compute_all(
-        wealth, profile, monthly_spending=monthly_spending, monthly_saved=monthly_saved, perf=perf
+        wealth,
+        profile,
+        monthly_spending=monthly_spending,
+        monthly_saved=monthly_saved,
+        perf=perf,
+        locale=as_locale(profile.locale),
     ).verdicts
     try:
         spending: SpendingResponse | None = await build_spending(

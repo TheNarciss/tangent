@@ -37,6 +37,7 @@ from ..finance import (
     withdrawal,
 )
 from ..finance.wealth_summary import build_summary as build_wealth_summary
+from ..i18n import Locale, current_locale
 from ..models import Wealth
 from ..repositories import account_holdings as holdings_repo
 from ..repositories import bank_accounts as accounts_repo
@@ -58,6 +59,7 @@ async def export_everything(
     wealth: Wealth = Depends(get_user_wealth),
     user: User = Depends(current_active_user),
     session: AsyncSession = Depends(get_session),
+    locale: Locale = Depends(current_locale),
 ) -> dict[str, Any]:
     """The whole account, data and computed results, as one JSON document."""
     profile = await profile_repo.get_or_create(session, user.id)
@@ -94,6 +96,7 @@ async def export_everything(
             monthly_spending=await tx_repo.monthly_outflow(session, user.id),
             monthly_saved=await tx_repo.monthly_inflow_to_savings(session, user.id),
             perf=await performance_for(session, user.id),
+            locale=locale,
         )
 
     async def projection_section() -> Any:
@@ -112,7 +115,7 @@ async def export_everything(
         "accounts": accounts,
         "holdings": holdings,
         "recent_transactions": transactions,
-        "dashboard": lambda: run_in_threadpool(dashboard.build, wealth=wealth),
+        "dashboard": lambda: run_in_threadpool(dashboard.build, wealth=wealth, locale=locale),
         "timeseries": lambda: run_in_threadpool(timeseries.build, wealth=wealth),
         "verdicts": verdicts_section,
         "projection": projection_section,

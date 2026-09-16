@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..auth import User, current_active_user
 from ..db.engine import get_session
 from ..finance import risk_profile
+from ..i18n import Locale, current_locale, t
 from ..repositories import profile as profile_repo
 
 router = APIRouter(prefix="/profile", tags=["profile"])
@@ -36,6 +37,7 @@ class ProfileIn(BaseModel):
     default_broker: str | None = Field(default=None, max_length=50)
     ceilings_used: dict[str, Any] | None = None
     auto_review_enabled: bool | None = None
+    locale: Literal["fr", "en"] | None = None
 
 
 class ProfileOut(ProfileIn):
@@ -58,13 +60,16 @@ def _to_out(prof) -> ProfileOut:
         default_broker=prof.default_broker,
         ceilings_used=prof.ceilings_used or {},
         auto_review_enabled=prof.auto_review_enabled,
+        locale=prof.locale,
     )
 
 
 @router.get("/risk-levels", response_model=list[risk_profile.RiskLevel])
-async def get_risk_levels(user: User = Depends(current_active_user)):
+async def get_risk_levels(
+    user: User = Depends(current_active_user), locale: Locale = Depends(current_locale)
+):
     """Slider positions with their labels and derived constraints (YAML-backed)."""
-    return risk_profile.levels()
+    return risk_profile.levels(locale)
 
 
 @router.get("", response_model=ProfileOut)
@@ -82,6 +87,7 @@ async def update_profile(
     body: ProfileIn,
     user: User = Depends(current_active_user),
     session: AsyncSession = Depends(get_session),
+    locale: Locale = Depends(current_locale),
 ):
     """Patch the profile. Only fields explicitly set in body are touched.
 
@@ -92,7 +98,7 @@ async def update_profile(
     if "auto_review_enabled" in updates and not user.is_superuser:
         raise HTTPException(
             status_code=403,
-            detail="Le briefing du matin est réservé aux administrateurs pour l'instant.",
+            detail=t(locale, "errors.briefing_admin_only"),
         )
     if updates.get("risk_level") is not None:
         lv = risk_profile.resolve(updates["risk_level"])

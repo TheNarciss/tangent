@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth.password_reset import request_reset, reset_password, verify_code
 from ..db.engine import get_session
+from ..i18n import Locale, current_locale, t
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -38,7 +39,7 @@ async def forgot_password(
     session: AsyncSession = Depends(get_session),
 ):
     ip = request.client.host if request.client else "?"
-    existed, _ = await request_reset(session, body.email)
+    existed, _ = await request_reset(session, body.email, locale=current_locale(request))
     logger.info(f"AUDIT PASSWORD_RESET_REQUESTED email={body.email} existed={existed} ip={ip}")
 
 
@@ -47,12 +48,13 @@ async def verify_reset_code(
     body: VerifyCodeIn,
     request: Request,
     session: AsyncSession = Depends(get_session),
+    locale: Locale = Depends(current_locale),
 ):
     ip = request.client.host if request.client else "?"
     token = await verify_code(session, body.email, body.code)
     if not token:
         logger.warning(f"AUDIT PASSWORD_RESET_CODE_INVALID email={body.email} ip={ip}")
-        raise HTTPException(status_code=400, detail="Code invalide ou expiré.")
+        raise HTTPException(status_code=400, detail=t(locale, "errors.reset_code_invalid"))
     logger.info(f"AUDIT PASSWORD_RESET_CODE_VERIFIED email={body.email} ip={ip}")
     return VerifyCodeOut(reset_token=token)
 
@@ -62,10 +64,11 @@ async def reset_password_endpoint(
     body: ResetPasswordIn,
     request: Request,
     session: AsyncSession = Depends(get_session),
+    locale: Locale = Depends(current_locale),
 ):
     ip = request.client.host if request.client else "?"
     ok = await reset_password(session, body.reset_token, body.new_password)
     if not ok:
         logger.warning(f"AUDIT PASSWORD_RESET_FAILED ip={ip}")
-        raise HTTPException(status_code=400, detail="Token invalide ou expiré.")
+        raise HTTPException(status_code=400, detail=t(locale, "errors.reset_token_invalid"))
     logger.info(f"AUDIT PASSWORD_RESET_COMPLETED ip={ip}")

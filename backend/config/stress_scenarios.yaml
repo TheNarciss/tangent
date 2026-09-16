@@ -137,82 +137,102 @@ fallback_class:
 scenarios:
   - id: gulf_1990
     label: "Guerre du Golfe et krach japonais (1990)"
+    label_en: "Gulf War and Japanese crash (1990)"
     window: { from: "1990-07-01", to: "1990-09-30" }
     start: "juillet 1990"
     end: "septembre 1990"
     description: "Le Japon perd la moitié de sa valeur sur 1990-92"
+    description_en: "Japan loses half its value over 1990-92"
     returns: { equity_world: -0.235, equity_world_usd: -0.203, bonds_euro: 0.0, fonds_euros: 0.0, cash: 0.0, gold: 0.143, equity_us_tech: -0.257 }   # or : en dollars : l'euro n'existait pas encore
 
   - id: ltcm_1998
     label: "Faillite de LTCM (1998)"
+    label_en: "Collapse of LTCM (1998)"
     window: { from: "1998-07-01", to: "1998-09-30" }
     start: "juillet 1998"
     end: "septembre 1998"
     description: "Chute rapide, remontée tout aussi rapide"
+    description_en: "A sharp fall, and just as sharp a recovery"
     returns: { equity_world: -0.181, equity_world_usd: -0.144, bonds_euro: 0.0, fonds_euros: 0.0, cash: 0.0, gold: -0.010, equity_us_tech: -0.008 }   # or : en dollars : l'euro n'existait pas encore
 
   - id: dotcom_2000
     label: "Éclatement de la bulle internet (2000-2003)"
+    label_en: "Bursting of the dot-com bubble (2000-2003)"
     window: { from: "2000-08-01", to: "2003-03-31" }
     start: "août 2000"
     end: "mars 2003"
     description: "Trente et un mois de glissade, la pire baisse des quarante dernières années pour un Européen"
+    description_en: "Thirty-one months of slide, the worst fall of the last forty years for a European"
     returns: { equity_world: -0.560, equity_world_usd: -0.440, bonds_euro: 0.16, fonds_euros: 0.12, cash: 0.08, gold: 0.002, equity_us_tech: -0.807 }
 
   - id: gfc_2008
     label: "Crise financière (2007-2009)"
+    label_en: "Financial crisis (2007-2009)"
     window: { from: "2007-10-01", to: "2009-03-31" }
     start: "octobre 2007"
     end: "mars 2009"
     description: "Les obligations et le dollar ont amorti le choc"
+    description_en: "Bonds and the dollar cushioned the blow"
     returns: { equity_world: -0.513, equity_world_usd: -0.564, bonds_euro: 0.06, fonds_euros: 0.06, cash: 0.05, gold: 0.396, equity_us_tech: -0.463 }
 
   - id: euro_2011
     label: "Crise de la dette en zone euro (2011)"
+    label_en: "Eurozone debt crisis (2011)"
     window: { from: "2011-04-01", to: "2011-09-30" }
     start: "avril 2011"
     end: "septembre 2011"
     description: "Risque souverain domestique : l'Italie et l'Espagne perdent 10 à 15 %"
+    description_en: "Domestic sovereign risk: Italy and Spain lose 10 to 15 %"
     returns: { equity_world: -0.177, equity_world_usd: -0.162, bonds_euro: 0.03, fonds_euros: 0.02, cash: 0.01, gold: 0.240, equity_us_tech: -0.166 }
 
   - id: china_2015
     label: "Chine et pétrole (2015-2016)"
+    label_en: "China and oil (2015-2016)"
     window: { from: "2015-04-01", to: "2016-02-29" }
     start: "avril 2015"
     end: "février 2016"
     description: "Deux corrections de 10 % en six mois"
+    description_en: "Two 10 % corrections in six months"
     returns: { equity_world: -0.226, equity_world_usd: -0.170, bonds_euro: 0.0, fonds_euros: 0.01, cash: 0.0, gold: -0.022, equity_us_tech: -0.165 }
 
   - id: q4_2018
     label: "Quatrième trimestre 2018"
+    label_en: "Fourth quarter of 2018"
     window: { from: "2018-09-01", to: "2018-12-31" }
     start: "septembre 2018"
     end: "décembre 2018"
     description: "Resserrement monétaire et guerre commerciale"
+    description_en: "Monetary tightening and trade war"
     returns: { equity_world: -0.168, equity_world_usd: -0.178, bonds_euro: 0.004, fonds_euros: 0.005, cash: 0.0, gold: 0.057, equity_us_tech: -0.217 }
 
   - id: covid_2020
     label: "Krach du COVID (février-mars 2020)"
+    label_en: "COVID crash (February-March 2020)"
     window: { from: "2020-02-19", to: "2020-03-23" }
     start: "19 février 2020"
     end: "23 mars 2020"
     # Le chiffre USD publié est quotidien (−34 %), l'euro est en fin de mois :
     # les deux ne sont pas comparables, donc pas d'effet devise affiché ici.
     description: "La baisse de 30 % la plus rapide de l'histoire"
+    description_en: "The fastest 30 % fall in history"
     returns: { equity_world: -0.336, equity_world_usd: -0.337, bonds_euro: -0.05, fonds_euros: 0.0, cash: 0.0, gold: -0.051, equity_us_tech: -0.278 }
 
   - id: inflation_2022
     label: "Inflation et remontée des taux (2022)"
+    label_en: "Inflation and rising rates (2022)"
     window: { from: "2022-01-01", to: "2022-10-31" }
     start: "janvier 2022"
     end: "octobre 2022"
     description: "Les deux jambes du 60/40 tombent ensemble, le seul régime d'inflation de la série"
+    description_en: "Both legs of the 60/40 fall together, the only inflation regime in the series"
     returns: { equity_world: -0.170, equity_world_usd: -0.226, bonds_euro: -0.17, fonds_euros: 0.0, cash: 0.0, gold: 0.088, equity_us_tech: -0.256 }
 
   - id: tariffs_2025
     label: "Droits de douane (2025)"
+    label_en: "Tariffs (2025)"
     window: { from: "2025-02-01", to: "2025-04-30" }
     start: "février 2025"
     end: "avril 2025"
     description: "C'est la devise, pas les actions, qui a fait la perte en euros"
+    description_en: "The currency, not equities, made the loss in euros"
     returns: { equity_world: -0.200, equity_world_usd: -0.156, bonds_euro: 0.0, fonds_euros: 0.0, cash: 0.0, gold: -0.017, equity_us_tech: -0.250 }

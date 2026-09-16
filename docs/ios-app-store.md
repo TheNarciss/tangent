@@ -17,7 +17,7 @@ Sur la VM, dans `backend/.env` : `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE
 
 ## 2. App Store Connect (appstoreconnect.apple.com)
 
-- **Nouvelle app** : nom Tangent, langue principale français, bundle `uk.riskybusinesses.tangent`, SKU libre.
+- **Nouvelle app** : nom Tangent, langue principale français, bundle `uk.riskybusinesses.tangent`, SKU libre. Ajouter l'anglais (Royaume-Uni) comme localisation de la fiche : l'app suit la langue du téléphone (ADR-036), la fiche doit exister dans les deux langues.
 - **Clé API** (Users and Access → Integrations → App Store Connect API) : rôle App Manager ; Key ID, Issuer ID, fichier `.p8` → secrets `APPSTORE_API_KEY_ID`, `APPSTORE_API_ISSUER_ID`, `APPSTORE_API_KEY_P8_B64`.
 - **Confidentialité de l'app** (App Privacy) : données collectées, liées à l'identité, sans suivi :
   adresse e-mail, informations financières (autres), identifiant utilisateur. Politique : `https://riskybusinesses.uk/legal/privacy.html`.

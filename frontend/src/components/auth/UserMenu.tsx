@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { startGoogleAssociate } from "@/api";
-import { useT } from "@/i18n";
+import { legalPath, useT } from "@/i18n";
 import { isNative } from "@/native/bridge";
 import { NAV_PATHS } from "@/components/Sidebar";
 
@@ -98,12 +98,12 @@ export function UserMenu() {
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-          <a href="/legal/terms.html" className="cursor-pointer">
+          <a href={legalPath("terms")} className="cursor-pointer">
             <span>{t("menu.terms")}</span>
           </a>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <a href="/legal/privacy.html" className="cursor-pointer">
+          <a href={legalPath("privacy")} className="cursor-pointer">
             <span>{t("menu.privacy")}</span>
           </a>
         </DropdownMenuItem>

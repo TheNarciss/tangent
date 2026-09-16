@@ -8,21 +8,26 @@
 levels:
   - level: 1
     label: "Prudent"
+    label_en: "Cautious"
     target_annual_return: 0.04
     max_annual_volatility: 0.05
   - level: 2
     label: "Plutôt prudent"
+    label_en: "Rather cautious"
     target_annual_return: 0.05
     max_annual_volatility: 0.08
   - level: 3
     label: "Équilibré"
+    label_en: "Balanced"
     target_annual_return: 0.06
     max_annual_volatility: 0.12
   - level: 4
     label: "Dynamique"
+    label_en: "Dynamic"
     target_annual_return: 0.07
     max_annual_volatility: 0.16
   - level: 5
     label: "Très dynamique"
+    label_en: "Very dynamic"
     target_annual_return: 0.075
     max_annual_volatility: 0.20
