@@ -7,7 +7,7 @@ import { ForgotPasswordFlow } from "@/components/auth/ForgotPasswordFlow";
 import { GoogleButton } from "@/components/auth/GoogleButton";
 import { AppleButton } from "@/components/auth/AppleButton";
 import { useAuthProviders } from "@/api";
-import { useT } from "@/i18n";
+import { legalPath, useT } from "@/i18n";
 import { OAuthCallbackHandler } from "@/components/OAuthCallback";
 
 type Mode = "login" | "register" | "forgot";
@@ -70,14 +70,14 @@ export function AuthScreen() {
         <p className="text-center text-xs text-muted-foreground">
           {t("auth.bySigningUp")}{" "}
           <a
-            href="/legal/terms.html"
+            href={legalPath("terms")}
             className="underline underline-offset-2 hover:text-foreground"
           >
             {t("auth.termsLink")}
           </a>{" "}
           {t("auth.andOur")}{" "}
           <a
-            href="/legal/privacy.html"
+            href={legalPath("privacy")}
             className="underline underline-offset-2 hover:text-foreground"
           >
             {t("auth.privacyLink")}

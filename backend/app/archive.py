@@ -40,6 +40,7 @@ from .errors import AppError
 from .finance import dashboard, macro, market, market_leads, picks
 from .finance import verdicts as verdicts_engine
 from .finance.wealth_summary import build_summary
+from .i18n import as_locale
 from .repositories import bank_transactions as tx_repo
 from .repositories import profile as profile_repo
 from .repositories import reviews as reviews_repo
@@ -157,6 +158,7 @@ async def user_payload(session: AsyncSession, user: User, *, when: datetime) -> 
             monthly_spending=monthly_spending,
             monthly_saved=monthly_saved,
             perf=perf,
+            locale=as_locale(profile.locale),
         )
         payload["verdicts"] = [v.model_dump(mode="json") for v in verdicts.verdicts]
     except AppError as exc:
@@ -164,7 +166,9 @@ async def user_payload(session: AsyncSession, user: User, *, when: datetime) -> 
         payload["verdicts_error"] = str(exc)
     try:
         # yfinance + numpy: off the loop, and a portfolio without positions is not an error here.
-        built = await asyncio.to_thread(dashboard.build, wealth=wealth)
+        built = await asyncio.to_thread(
+            dashboard.build, wealth=wealth, locale=as_locale(profile.locale)
+        )
         payload["dashboard"] = built.model_dump(mode="json")
     except AppError as exc:
         payload["dashboard"] = None

@@ -440,3 +440,30 @@ def test_system_prompt_tells_the_model_what_the_extra_data_is_for():
     assert "briefing d'hier" in sp.lower()
     assert "liste de l'année" in sp.lower()
     assert "pas de leçon de budget" in sp.lower()
+
+
+def test_system_prompt_follows_the_locale():
+    assert prompt_builder.system_prompt("fr") is prompt_builder.SYSTEM_PROMPT
+    en = prompt_builder.system_prompt("en")
+    assert en is prompt_builder.SYSTEM_PROMPT_EN
+    for heading in (
+        "# What moved for you",
+        "# What it means",
+        "# To do this week",
+        "# Leads to watch",
+        "# Sources",
+        "# Disclaimer",
+    ):
+        assert heading in en
+    assert "Nothing to do: keep up your contributions." in en
+    assert "Nothing notable last night." in en
+    assert "Livret A" in en and "PEA" in en
+
+
+def test_user_prompt_instructions_follow_the_locale():
+    snapshot = prompt_builder.build_anonymized_snapshot(_make_wealth(), _make_profile())
+    fr = prompt_builder.build_user_prompt(snapshot)
+    en = prompt_builder.build_user_prompt(snapshot, "en")
+    assert "écris le briefing" in fr
+    assert "write the briefing in English" in en
+    assert "écris le briefing" not in en

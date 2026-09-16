@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { acceptTerms, fetchTermsVersion, useLogout } from "@/api";
 import type { UserRead } from "@/api";
-import { useT } from "@/i18n";
+import { legalPath, useT } from "@/i18n";
 
 interface TermsGateProps {
   user: UserRead;
@@ -89,7 +89,7 @@ export function TermsGate({ user }: TermsGateProps) {
             <span className="text-sm leading-relaxed">
               {t("terms.iAccept")}{" "}
               <a
-                href="/legal/terms.html"
+                href={legalPath("terms")}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-medium underline underline-offset-2 hover:text-foreground"
@@ -98,7 +98,7 @@ export function TermsGate({ user }: TermsGateProps) {
               </a>{" "}
               {t("terms.andThe")}{" "}
               <a
-                href="/legal/privacy.html"
+                href={legalPath("privacy")}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-medium underline underline-offset-2 hover:text-foreground"

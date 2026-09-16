@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ChevronRight, FileText, Link2, LogOut, Shield, User as UserIcon } from "lucide-react";
 
 import { listOAuthAccounts, startGoogleAssociate, useCurrentUser, useLogout } from "@/api";
-import { useT } from "@/i18n";
+import { legalPath, useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 import {
   BottomSheet,
@@ -106,8 +106,8 @@ export function MoreSheet({ open, onOpenChange }: MoreSheetProps) {
 
           {/* Legal */}
           <div className="space-y-1 border-t border-border pt-4">
-            <MoreItemLink icon={FileText} label={t("menu.terms")} href="/legal/terms.html" />
-            <MoreItemLink icon={Shield} label={t("menu.privacy")} href="/legal/privacy.html" />
+            <MoreItemLink icon={FileText} label={t("menu.terms")} href={legalPath("terms")} />
+            <MoreItemLink icon={Shield} label={t("menu.privacy")} href={legalPath("privacy")} />
           </div>
 
           {/* Sign out */}

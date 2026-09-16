@@ -27,6 +27,7 @@ from ..db.models import BankAccount, EnableBankingSession
 from ..enablebanking import settings
 from ..enablebanking.aggregator import is_expired, sync_row
 from ..enablebanking.client import EnableBankingClient, EnableBankingError
+from ..i18n import Locale, current_locale, t
 from ..powens.crypto import decrypt_token, encrypt_token
 
 logger = logging.getLogger(__name__)
@@ -72,8 +73,12 @@ async def status(user: User = Depends(current_active_user)) -> dict[str, bool]:
 
 
 @router.get("/banks", response_model=list[BankOut])
-async def banks(country: str = "FR", user: User = Depends(current_active_user)) -> list[BankOut]:
-    _require_configured()
+async def banks(
+    country: str = "FR",
+    user: User = Depends(current_active_user),
+    locale: Locale = Depends(current_locale),
+) -> list[BankOut]:
+    _require_configured(locale)
     try:
         async with EnableBankingClient() as client:
             rows = await client.list_banks(country.upper())
@@ -83,9 +88,13 @@ async def banks(country: str = "FR", user: User = Depends(current_active_user)) 
 
 
 @router.post("/authorize", response_model=AuthorizeOut)
-async def authorize(body: AuthorizeIn, user: User = Depends(current_active_user)) -> AuthorizeOut:
+async def authorize(
+    body: AuthorizeIn,
+    user: User = Depends(current_active_user),
+    locale: Locale = Depends(current_locale),
+) -> AuthorizeOut:
     """Where to send the user so the bank asks for their consent."""
-    _require_configured()
+    _require_configured(locale)
     country = body.country.upper()
     try:
         async with EnableBankingClient() as client:
@@ -274,9 +283,11 @@ async def _revoke(row: EnableBankingSession) -> None:
         logger.warning("Enable Banking: révocation de %s échouée: %s", row.id, exc)
 
 
-def _require_configured() -> None:
+def _require_configured(locale: Locale = "fr") -> None:
     if not settings.is_configured:
-        raise HTTPException(status_code=503, detail="Enable Banking n'est pas configuré.")
+        raise HTTPException(
+            status_code=503, detail=t(locale, "errors.enablebanking_not_configured")
+        )
 
 
 def _sign_state(user_id: uuid.UUID, bank: str, country: str, platform: str = "web") -> str:

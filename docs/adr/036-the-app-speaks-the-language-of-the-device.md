@@ -27,6 +27,18 @@ Une solution maison, dans `frontend/src/i18n` :
 
 Les identifiants de routes (`/comptes`, `/placements`) restent en français : ce sont des adresses, pas du texte, et les liens partagés continuent de marcher.
 
+Le backend suit la même règle, avec le même module maison en Python (`app/i18n`, dictionnaires `messages/*.py`, un test vérifie que l'anglais reflète le français) :
+
+| Point | Choix |
+|---|---|
+| Langue d'une requête | l'en-tête `Accept-Language`, que le front envoie avec la langue affichée ; dépendance FastAPI `current_locale` |
+| Langue des tâches sans requête | `profiles.locale`, écrit par le front à chaque synchronisation du profil ; le briefing du matin et l'archive le lisent |
+| Verdicts | titres, phrases et actions par `t(locale, clé)` ; nombres en `€1,500` / `7.5%` en anglais |
+| Stress tests, crans de risque | `label_en` / `description_en` à côté du français dans les YAML, choisis à la lecture |
+| Briefing | un prompt système par langue, mêmes règles et même structure ; le texte généré est dans la langue de la personne |
+| Erreurs HTTP, e-mail de réinitialisation | par `t()` dans la langue de la requête |
+| Pages légales | `public/legal/en/` traduites ; les liens de l'app suivent la langue, chaque page renvoie vers son jumeau |
+
 ## Conséquences
 
 ### Positives
@@ -37,6 +49,6 @@ Les identifiants de routes (`/comptes`, `/placements`) restent en français : ce
 
 ### Négatives
 
-- Le choix de langue est local à l'appareil : le site et l'iPhone se règlent séparément (à faire suivre par le profil serveur quand le backend parlera anglais lui aussi : verdicts, briefing, e-mails).
+- Le choix de langue est local à l'appareil : le site et l'iPhone se règlent séparément ; le serveur retient la dernière langue synchronisée pour le briefing et l'archive, donc deux appareils dans deux langues se disputent celle du briefing.
 - Tout texte en dur qui reste dans un composant est invisible en anglais tant qu'il n'est pas passé par `t()` ; la conversion se fait écran par écran.
 - Pas de format de message riche (genre, ordinaux) ; si le besoin apparaît, il se traite au cas par cas.

@@ -24,6 +24,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..i18n import as_locale
 from ..models import OptimizerResponse, Wealth
 from ..repositories import profile as profile_repo
 from ..repositories import reviews as reviews_repo
@@ -99,7 +100,8 @@ async def generate_review_stream(
         picks=shared.picks,
         macro=shared.macro,
     )
-    user_prompt = prompt_builder.build_user_prompt(snapshot)
+    locale = as_locale(profile.locale)
+    user_prompt = prompt_builder.build_user_prompt(snapshot, locale)
 
     # 4. Stream Claude
     client = anthropic_client.get_client()
@@ -111,7 +113,7 @@ async def generate_review_stream(
         max_tokens=anthropic_client.BRIEFING_MAX_TOKENS,
         thinking=anthropic_client.BRIEFING_THINKING,  # type: ignore[arg-type]
         output_config={"effort": anthropic_client.BRIEFING_EFFORT},  # type: ignore[arg-type]
-        system=prompt_builder.SYSTEM_PROMPT,
+        system=prompt_builder.system_prompt(locale),
         messages=[{"role": "user", "content": user_prompt}],
         tools=[_WEB_SEARCH_TOOL],  # type: ignore[list-item]  # SDK strict TypedDict vs our dict
     ) as stream:

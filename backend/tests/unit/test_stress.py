@@ -353,3 +353,19 @@ def test_the_level_that_served_is_named(monkeypatch):
 
     borrowed = stress.Pocket("equity_japan", 1.0)
     assert stress.pocket_return_and_level(borrowed, scenario, {})[1] == "borrowed"
+
+
+def test_the_labels_follow_the_locale():
+    fr = {r.id: r for r in stress.compute(_wealth(equity=10_000))}
+    en = {r.id: r for r in stress.compute(_wealth(equity=10_000), locale="en")}
+    assert fr["gfc_2008"].label == "Crise financière (2007-2009)"
+    assert en["gfc_2008"].label == "Financial crisis (2007-2009)"
+    assert en["gfc_2008"].description == "Bonds and the dollar cushioned the blow"
+    assert en["gfc_2008"].pnl_pct == fr["gfc_2008"].pnl_pct
+    assert stress.compute(_wealth(equity=10_000), locale="fr") == list(fr.values())
+
+
+def test_every_scenario_has_an_english_label_and_description():
+    for s in stress.config().scenarios:
+        assert s.label_en and s.label_en != s.label
+        assert s.description_en and s.description_en != s.description

@@ -36,12 +36,13 @@ from ..db.models import ReviewBatch
 from ..deps import get_user_wealth
 from ..finance.gap_filler import engine as gap_filler_engine
 from ..finance.gap_filler.registry import GappableField
+from ..i18n import as_locale
 from ..repositories import bank_transactions as tx_repo
 from ..repositories import profile as profile_repo
 from ..repositories import review_batches as batches_repo
 from . import anthropic_client, briefing_inputs, cost_tracker
 from ._retry import retry_on_overload
-from .prompt_builder import SYSTEM_PROMPT, build_anonymized_snapshot, build_user_prompt
+from .prompt_builder import build_anonymized_snapshot, build_user_prompt, system_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +172,8 @@ async def submit_nightly_batch(
                 picks=shared.picks,
                 macro=shared.macro,
             )
-            user_prompt = build_user_prompt(snapshot)
+            locale = as_locale(profile.locale)
+            user_prompt = build_user_prompt(snapshot, locale)
 
             requests.append(
                 Request(
@@ -181,7 +183,7 @@ async def submit_nightly_batch(
                         max_tokens=anthropic_client.BRIEFING_MAX_TOKENS,
                         thinking=anthropic_client.BRIEFING_THINKING,  # type: ignore[typeddict-item]
                         output_config={"effort": anthropic_client.BRIEFING_EFFORT},  # type: ignore[typeddict-item]
-                        system=SYSTEM_PROMPT,
+                        system=system_prompt(locale),
                         messages=[{"role": "user", "content": user_prompt}],
                         tools=[anthropic_client.web_search_tool()],  # type: ignore[list-item]
                     ),

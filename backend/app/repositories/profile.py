@@ -46,6 +46,7 @@ async def update(session: AsyncSession, user_id: uuid.UUID, updates: dict) -> Pr
         "default_broker",
         "ceilings_used",
         "auto_review_enabled",
+        "locale",
     }
     for key, value in updates.items():
         if key in allowed_fields:

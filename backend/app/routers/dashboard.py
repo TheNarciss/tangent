@@ -6,6 +6,7 @@ from fastapi.concurrency import run_in_threadpool
 from ..deps import get_user_wealth
 from ..finance import dashboard, timeseries
 from ..finance.wealth_summary import build_summary as build_wealth_summary
+from ..i18n import Locale, current_locale
 from ..models import DashboardResponse, TimeseriesResponse, Wealth, WealthSummary
 
 router = APIRouter(tags=["analytics"])
@@ -35,6 +36,7 @@ async def read_dashboard(
     risk_free: float | None = Query(
         None, ge=0, le=0.20, description="Risk-free rate (fraction). Default: 0.025"
     ),
+    locale: Locale = Depends(current_locale),
 ) -> DashboardResponse:
     # yfinance + numpy work is blocking: keep it off the event loop.
     return await run_in_threadpool(
@@ -43,6 +45,7 @@ async def read_dashboard(
         historical_period=historical_period,
         risk_free=risk_free,
         wealth=wealth,
+        locale=locale,
     )
 
 

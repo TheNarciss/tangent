@@ -38,6 +38,7 @@ from ..db import get_session
 from ..db.models import BankAccount, EnableBankingSession, PowensCredential
 from ..enablebanking import aggregator as enablebanking_agg
 from ..finance.gap_filler.fields.transaction_category import CATEGORIES
+from ..i18n import Locale, current_locale, t
 from ..powens.aggregator import PowensAggregator
 from ..powens.client import PowensClient, PowensError
 from ..powens.crypto import decrypt_token
@@ -498,6 +499,7 @@ async def list_transactions(
 async def sync_accounts(
     user: User = Depends(current_active_user),
     session: AsyncSession = Depends(get_session),
+    locale: Locale = Depends(current_locale),
 ) -> SyncReport:
     """End-to-end sync. Returns cached result if < 5 min old.
 
@@ -509,7 +511,7 @@ async def sync_accounts(
         logger.info("sync_accounts user=%s: returning cached result", user.id)
         return cached.model_copy(update={"from_cache": True})
 
-    report = await _do_sync(user, session)
+    report = await _do_sync(user, session, locale)
     await sync_cache.set(user.id, report)
     return report
 
@@ -518,6 +520,7 @@ async def sync_accounts(
 async def refresh_accounts(
     user: User = Depends(current_active_user),
     session: AsyncSession = Depends(get_session),
+    locale: Locale = Depends(current_locale),
 ) -> SyncReport:
     """Force Powens to re-sync with the bank, then fetch the latest data.
 
@@ -575,7 +578,7 @@ async def refresh_accounts(
 
     # 3. Bypass cache and run a real sync
     await sync_cache.invalidate(user.id)
-    report = await _do_sync(user, session)
+    report = await _do_sync(user, session, locale)
     await sync_cache.set(user.id, report)
     return report
 
@@ -583,7 +586,7 @@ async def refresh_accounts(
 # ── Internal sync helper ────────────────────────────────────────────────────
 
 
-async def _do_sync(user: User, session: AsyncSession) -> SyncReport:
+async def _do_sync(user: User, session: AsyncSession, locale: Locale = "fr") -> SyncReport:
     """Actual sync logic — no cache check, always hits the providers.
 
     Powens when the user has a credential, then every live Enable Banking
@@ -619,7 +622,7 @@ async def _do_sync(user: User, session: AsyncSession) -> SyncReport:
     await session.commit()
 
     if not results:
-        raise HTTPException(status_code=400, detail="Aucune banque connectée.")
+        raise HTTPException(status_code=400, detail=t(locale, "errors.no_bank"))
 
     failures = [r.error or r.provider for r in results if not r.success]
     if len(failures) == len(results):

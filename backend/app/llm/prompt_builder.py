@@ -18,6 +18,7 @@ from typing import Any
 
 from ..db.models import Profile
 from ..finance.performance import Performance, Point
+from ..i18n import Locale
 from ..models import MarketLead, OptimizerResponse, PicksResponse, Verdict, Wealth
 from ..routers.spending import SpendingResponse
 
@@ -60,6 +61,49 @@ Liste de toutes les URLs citées : - [Nom court](URL)
 # Avertissement
 Une phrase sobre : ce briefing informe, il ne constitue pas un conseil en investissement.
 """
+
+SYSTEM_PROMPT_EN: str = """Every morning you write a short briefing for a saver living in France who invests regularly (monthly contributions into index funds and regulated savings accounts such as the Livret A, sometimes with a loan running) and who has no financial background. They do not want to become a trader: they want to know whether something concerns them, and otherwise to be reassured. You address them as "you", you write in plain English, without jargon, Greek letters or ratios. You keep the French names of their products (Livret A, LDDS, PEA, PER, assurance-vie, fonds euros): those are the words they see at their bank.
+
+What you do:
+1. You look at what moved in THEIR wealth since yesterday or this week (their funds, their savings accounts, their loan instalments). The daily readings supplied in the data (portfolio value yesterday, 7 days ago, 30 days ago, contributions deducted) are your first source for the figures; web_search serves to explain the move with recent prices and news (24-72 h), not to guess the figure. You say "your World fund" or the fund's name, never the ticker alone.
+2. You explain what it means for them, in one or two sentences per point, with an order of magnitude in euros rather than in percent when that speaks better.
+3. You say clearly whether there is anything to do. Almost always, the answer is "nothing": keep up the contributions. You never recommend buying or selling a line because of the day's news. An action is only suggested for a structural reason (a savings account reaching its ceiling, an unusual loan instalment, a missed contribution, a tax rule that changes) and you present it as a lead, not an order.
+
+Constraints:
+- You use web_search before any statement about markets or the news, favouring sources from the last 24-72 hours, and you cite your sources as Markdown links: [Short name](URL). You always paraphrase, never copy word for word.
+- No tour of indices, currencies and rates: you only mention a market if it explains a move in THEIR funds.
+- No expected return, volatility, Sharpe, correlation, efficient frontier. No list of recommendations per line.
+- If you are not sure of a figure, you say so.
+- Yesterday's briefing is supplied for continuity: you do not repeat it, you say what has changed since.
+- "The list of the year" and its watchlist are supplied for information: you never turn them into a buy or sell order; you only point out, as a fact, if a line they hold has just entered or left it.
+- Spending and monthly savings serve to put their contributions in context; no budget lecture, no breakdown by category unless it explains a missed contribution.
+- 250 to 500 words, clean Markdown.
+
+MANDATORY structure (use exactly these headings):
+
+# What moved for you
+Two to four sentences: the notable moves in their funds and savings accounts since yesterday or this week, in euros when possible, with sources. If nothing notable happened, say so in one sentence.
+
+# What it means
+A simple explanation of the cause (a rate rise, a company's results, a political decision…) and of what it changes or does not change for a saver who contributes every month.
+
+# To do this week
+By default a single line: "Nothing to do: keep up your contributions." Otherwise, one or two concrete leads, each with its structural reason. The method's verdicts supplied in the data are already computed: an amber or red verdict is the lead to put forward first, with its amount in euros as given; you do not recompute and you do not contradict a green verdict.
+
+# Leads to watch
+The data may contain a raw list of "market leads" collected overnight: Polymarket bets that moved, executives buying their own company's shares, large managers opening or closing a line. Most of it is noise, and that is intended: you do the sorting. You keep zero to three, the ones that may concern a saver in index funds (rates, a recession, inflation, a sector or a region they hold), and you say in one sentence what each one tells and why to watch it. A lead is something to follow, never an order to buy or sell, and you only name a company as a declared fact, not as an idea. If nothing deserves attention, a single line: "Nothing notable last night." If the data contains no leads, you omit this section.
+
+# Sources
+List of every URL cited: - [Short name](URL)
+
+# Disclaimer
+One sober sentence: this briefing informs, it is not investment advice.
+"""
+
+
+def system_prompt(locale: Locale) -> str:
+    """The briefing's system prompt in the person's language (``SYSTEM_PROMPT`` is the French one)."""
+    return SYSTEM_PROMPT_EN if locale == "en" else SYSTEM_PROMPT
 
 
 def _age_from(birth_date: date | None) -> int | None:
@@ -288,12 +332,15 @@ def _serialize_optimizer(opt: OptimizerResponse | None) -> dict[str, Any] | None
 _STATUS_FR = {"green": "vert", "amber": "orange", "red": "rouge", "unknown": "incomplet"}
 
 
-def build_user_prompt(snapshot: dict[str, Any]) -> str:
+def build_user_prompt(snapshot: dict[str, Any], locale: Locale = "fr") -> str:
     """Format the anonymized snapshot as a Markdown brief for Claude.
 
     Mirrors the structure of the snapshot dict; the model has been told via
-    the system prompt what sections to produce in return.
+    the system prompt what sections to produce in return. The figures keep
+    their French field names whatever the language; the sentences that
+    instruct the model follow ``locale``.
     """
+    en = locale == "en"
     lines: list[str] = []
     snapshot_at = snapshot["snapshot_at"]
     lines.append(f"# Données patrimoniales (snapshot {snapshot_at})")
@@ -399,12 +446,19 @@ def build_user_prompt(snapshot: dict[str, Any]) -> str:
         lines.append("")
 
     if snapshot.get("verdicts"):
-        lines.append("## Verdicts de la méthode (déjà calculés, à reprendre tels quels)")
+        lines.append(
+            "## The method's verdicts (already computed, to be taken as they are)"
+            if en
+            else "## Verdicts de la méthode (déjà calculés, à reprendre tels quels)"
+        )
         for v in snapshot["verdicts"]:
             status = _STATUS_FR.get(v["status"], v["status"])
             impact = v["impact_eur_per_year"]
             impact_txt = f" ({impact:,.0f} € par an en jeu)" if impact else ""
-            action = f" À faire : {v['action']}" if v["action"] else " Rien à faire."
+            if en:
+                action = f" To do: {v['action']}" if v["action"] else " Nothing to do."
+            else:
+                action = f" À faire : {v['action']}" if v["action"] else " Rien à faire."
             lines.append(f"- **{v['title']}** [{status}]{impact_txt} : {v['headline']}{action}")
         lines.append("")
 
@@ -416,11 +470,13 @@ def build_user_prompt(snapshot: dict[str, Any]) -> str:
         lines.append("## Liste de suivi (lignes qu'il surveille sans les détenir)")
         lines.append("- " + ", ".join(f"`{t}`" for t in snapshot["watchlist"]))
         lines.append("")
-    _render_picks(lines, snapshot.get("picks"))
+    _render_picks(lines, snapshot.get("picks"), en)
 
     if snapshot.get("market_leads"):
         lines.append(
-            "## Pistes de marché (brutes, collectées cette nuit — la plupart sont du bruit)"
+            "## Market leads (raw, collected overnight — most of them are noise)"
+            if en
+            else "## Pistes de marché (brutes, collectées cette nuit — la plupart sont du bruit)"
         )
         for lead in snapshot["market_leads"]:
             lines.append(
@@ -431,7 +487,9 @@ def build_user_prompt(snapshot: dict[str, Any]) -> str:
 
     if snapshot.get("previous_review"):
         lines.append(
-            "## Briefing d'hier (pour la continuité : ne le répète pas, dis ce qui a changé)"
+            "## Yesterday's briefing (for continuity: do not repeat it, say what has changed)"
+            if en
+            else "## Briefing d'hier (pour la continuité : ne le répète pas, dis ce qui a changé)"
         )
         lines.append("")
         lines.append(snapshot["previous_review"].strip())
@@ -439,12 +497,20 @@ def build_user_prompt(snapshot: dict[str, Any]) -> str:
 
     lines.append("---")
     lines.append("")
-    lines.append(
-        "En t'appuyant sur ces données ET sur l'actualité récente (utilise web_search pour "
-        "les cours de ses fonds et les nouvelles qui les concernent), écris le briefing au "
-        "format demandé dans le system prompt. Sois précis sur les chiffres réels "
-        "ci-dessus, ne réinvente rien."
-    )
+    if en:
+        lines.append(
+            "Drawing on these data AND on recent news (use web_search for the prices of their "
+            "funds and the news that concerns them), write the briefing in English, in the "
+            "format requested in the system prompt. Be precise about the real figures above, "
+            "invent nothing. The field names above are in French, as at their bank."
+        )
+    else:
+        lines.append(
+            "En t'appuyant sur ces données ET sur l'actualité récente (utilise web_search pour "
+            "les cours de ses fonds et les nouvelles qui les concernent), écris le briefing au "
+            "format demandé dans le system prompt. Sois précis sur les chiffres réels "
+            "ci-dessus, ne réinvente rien."
+        )
 
     return "\n".join(lines)
 
@@ -536,13 +602,19 @@ def _render_macro(lines: list[str], macro: dict[str, Any] | None) -> None:
     lines.append("")
 
 
-def _render_picks(lines: list[str], picks: dict[str, Any] | None) -> None:
+def _render_picks(lines: list[str], picks: dict[str, Any] | None, en: bool = False) -> None:
     if not picks:
         return
-    lines.append(
-        f"## « La liste de l'année » (règle publiée, revue {picks['review']}, "
-        f"arrêtée au {picks['as_of']}, prochaine revue {picks['next_review']} — information, pas une consigne)"
-    )
+    if en:
+        lines.append(
+            f'## "The list of the year" (published rule, review {picks["review"]}, '
+            f"as of {picks['as_of']}, next review {picks['next_review']} — information, not an instruction)"
+        )
+    else:
+        lines.append(
+            f"## « La liste de l'année » (règle publiée, revue {picks['review']}, "
+            f"arrêtée au {picks['as_of']}, prochaine revue {picks['next_review']} — information, pas une consigne)"
+        )
     lines.append("- Tenues : " + (", ".join(f"`{t}`" for t in picks["held"]) or "aucune"))
     if picks["bought"]:
         lines.append(
@@ -553,5 +625,9 @@ def _render_picks(lines: list[str], picks: dict[str, Any] | None) -> None:
             "- Sorties à la dernière revue : " + ", ".join(f"`{t}`" for t in picks["sold"])
         )
     if picks["guard_on"]:
-        lines.append("- Garde-fou actif : le marché baissait à la revue, la règle ne tient rien.")
+        lines.append(
+            "- Guard-rail on: the market was falling at the review, the rule holds nothing."
+            if en
+            else "- Garde-fou actif : le marché baissait à la revue, la règle ne tient rien."
+        )
     lines.append("")

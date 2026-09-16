@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import User, current_active_user, fastapi_users
 from ..deps import get_session, get_user_wealth
+from ..i18n import Locale, current_locale, t
 from ..llm import cost_tracker, review_generator
 from ..models import Wealth
 from ..repositories import reviews as reviews_repo
@@ -70,6 +71,7 @@ async def generate_review(
     wealth: Wealth = Depends(get_user_wealth),
     user: User = Depends(fastapi_users.current_user(active=True, superuser=True)),
     session: AsyncSession = Depends(get_session),
+    locale: Locale = Depends(current_locale),
 ) -> StreamingResponse:
     """Stream a freshly generated review as SSE.
 
@@ -85,14 +87,14 @@ async def generate_review(
     if not await cost_tracker.is_under_cap(session, today):
         raise HTTPException(
             status_code=503,
-            detail="Le budget LLM quotidien est atteint. Réessaye demain.",
+            detail=t(locale, "errors.llm_budget"),
         )
 
     existing = await reviews_repo.get_review_for_date(session, user.id, today)
     if existing is not None:
         raise HTTPException(
             status_code=409,
-            detail="Tu as déjà généré une review aujourd'hui. Reviens demain.",
+            detail=t(locale, "errors.review_already_today"),
         )
 
     async def event_stream() -> AsyncIterator[str]:

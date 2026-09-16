@@ -10,6 +10,7 @@ import numpy as np
 
 from ..data import ken_french
 from ..errors import DataSourceError, InsufficientHistoryError, PortfolioEmptyError
+from ..i18n import Locale
 from ..models import (
     AssetMetrics,
     DashboardResponse,
@@ -29,6 +30,7 @@ def build(
     historical_period: str = "5y",
     risk_free: float | None = None,
     wealth: "Wealth | None" = None,
+    locale: Locale = "fr",
 ) -> DashboardResponse:
     if wealth is None:
         raise PortfolioEmptyError("Wealth required for dashboard.")
@@ -97,7 +99,7 @@ def build(
     equity_curve = analytics.portfolio_value_series(prices, qty_by_ticker)
     pf_max_dd = analytics.max_drawdown(equity_curve)
 
-    stress_results = stress.compute(wealth)
+    stress_results = stress.compute(wealth, locale=locale)
 
     total_cost = sum(cost_by_ticker.values())
     assets = [

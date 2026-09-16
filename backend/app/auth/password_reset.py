@@ -29,6 +29,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db.models import PasswordResetToken
+from ..i18n import Locale
 from .models import User
 
 logger = logging.getLogger(__name__)
@@ -52,7 +53,9 @@ def _gen_code() -> str:
     return f"{secrets.randbelow(1_000_000):06d}"
 
 
-async def request_reset(session: AsyncSession, email: str) -> tuple[bool, str | None]:
+async def request_reset(
+    session: AsyncSession, email: str, locale: Locale = "fr"
+) -> tuple[bool, str | None]:
     """Generate a code and email it. Returns (user_existed, plaintext_code_for_logging).
 
     Always sleeps CONSTANT_TIME_DELAY_S to mitigate timing attacks. The caller
@@ -84,7 +87,9 @@ async def request_reset(session: AsyncSession, email: str) -> tuple[bool, str | 
         from ..email import send_password_reset_code
 
         try:
-            await asyncio.to_thread(send_password_reset_code, email, code, CODE_LIFETIME // 60)
+            await asyncio.to_thread(
+                send_password_reset_code, email, code, CODE_LIFETIME // 60, locale
+            )
         except Exception:
             logger.exception("Email send failed for reset request to %s", email)
             # Don't raise — we still pretend success to the caller (anti-enumeration).

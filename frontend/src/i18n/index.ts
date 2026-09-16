@@ -95,6 +95,11 @@ export function tn(base: string, count: number, vars?: Vars): string {
   return t(key, { count, ...vars });
 }
 
+/** The static legal page in the current language: French at the root, English under /legal/en/. */
+export function legalPath(page: "terms" | "privacy" | "about"): string {
+  return getLocale() === "en" ? `/legal/en/${page}.html` : `/legal/${page}.html`;
+}
+
 /** `t` plus a subscription: the component re-renders when the language changes. */
 export function useT() {
   useLocale();

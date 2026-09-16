@@ -91,6 +91,9 @@ class Profile(Base):
     horizon_years: Mapped[int | None] = mapped_column(Integer, default=None)
     goal_amount: Mapped[float | None] = mapped_column(Float, default=None)  # € d'aujourd'hui
     default_broker: Mapped[str | None] = mapped_column(String(50), default=None)
+    # The language the person reads the app in ("fr" | "en"), written by the
+    # frontend at each sync; the nightly jobs speak it. None = French (ADR-036).
+    locale: Mapped[str | None] = mapped_column(String(2), default=None)
 
     # Ceilings utilisés par enveloppe — stocké en JSONB pour flexibilité
     # Ex: {"livret_a": 5000, "ldds": 0, "lep": 0, "pel": 0, "livret_a_jeune": 1000}

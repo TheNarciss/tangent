@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..auth import User, current_active_user
 from ..deps import get_session, get_user_wealth
 from ..finance import verdicts
+from ..i18n import Locale, current_locale
 from ..models import VerdictsResponse, Wealth
 from ..repositories import bank_transactions as tx_repo
 from ..repositories import profile as profile_repo
@@ -19,6 +20,7 @@ async def read_verdicts(
     wealth: Wealth = Depends(get_user_wealth),
     user: User = Depends(current_active_user),
     session: AsyncSession = Depends(get_session),
+    locale: Locale = Depends(current_locale),
 ) -> VerdictsResponse:
     """One status, one sentence, one amount and one action per technique.
 
@@ -35,4 +37,5 @@ async def read_verdicts(
         monthly_spending=spending,
         monthly_saved=saved,
         perf=perf,
+        locale=locale,
     )

@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from ..db.models import Profile
 from ..errors import ConfigurationError, UnknownBrokerError
+from ..i18n import Locale, t
 from ..models import Verdict, VerdictsResponse, Wealth
 from . import classification, envelopes, fees, macro, performance, references, risk_profile
 
@@ -141,16 +142,18 @@ def config() -> VerdictsConfig:
     return _CONFIG
 
 
-def _eur(value: float) -> str:
-    """1234.5 → « 1 235 € » (narrow no-break space as thousands separator)."""
+def _eur(value: float, locale: Locale = "fr") -> str:
+    """1234.5 → « 1 235 € » (narrow no-break space as thousands separator); « €1,235 » in English."""
+    if locale == "en":
+        return f"€{value:,.0f}"
     return f"{value:,.0f} €".replace(",", " ")
 
 
-def _join(names: list[str]) -> str:
+def _join(names: list[str], locale: Locale = "fr") -> str:
     """'A, B et C' — so one sentence works with two funds or with five."""
     if len(names) == 1:
         return names[0]
-    return f"{', '.join(names[:-1])} et {names[-1]}"
+    return t(locale, "verdicts.join.and", head=", ".join(names[:-1]), last=names[-1])
 
 
 def _by_priority(verdicts: list[Verdict]) -> list[Verdict]:
@@ -167,9 +170,16 @@ def _by_priority(verdicts: list[Verdict]) -> list[Verdict]:
     )
 
 
-def _pct(fraction: float, digits: int = 2) -> str:
-    """0.0092 → « 0,92 % » ; with digits=0, 0.30 → « 30 % »."""
+def _pct(fraction: float, digits: int = 2, locale: Locale = "fr") -> str:
+    """0.0092 → « 0,92 % » ; with digits=0, 0.30 → « 30 % » ; « 0.92% » in English."""
+    if locale == "en":
+        return f"{fraction * 100:.{digits}f}%"
     return f"{fraction * 100:.{digits}f} %".replace(".", ",")
+
+
+def _lines(n: int, locale: Locale) -> str:
+    """« 3 lignes » / « 1 ligne » — the count with its noun."""
+    return t(locale, "verdicts.fees.lines.many" if n > 1 else "verdicts.fees.lines.one", n=n)
 
 
 def fees_verdict(
@@ -177,6 +187,7 @@ def fees_verdict(
     broker_fees: fees.BrokerFees,
     monthly_contribution: float,
     thresholds: FeesThresholds | None = None,
+    locale: Locale = "fr",
 ) -> Verdict:
     """« Frais réels » : what the user's lines cost per year, all layers summed.
 
@@ -187,6 +198,7 @@ def fees_verdict(
     holding, shown once a year in euros.
     """
     cfg = thresholds or config().fees
+    title = t(locale, "verdicts.fees.title")
 
     lines: list[dict[str, Any]] = []
     uncovered: list[dict[str, Any]] = []
@@ -216,12 +228,9 @@ def fees_verdict(
     if positions_total <= 0:
         return Verdict(
             id="fees",
-            title="Frais réels",
+            title=title,
             status="unknown",
-            headline=(
-                "Aucune ligne de placement connue : connecte un PEA, un compte-titres "
-                "ou une assurance vie pour mesurer ce que tes placements te coûtent."
-            ),
+            headline=t(locale, "verdicts.fees.headline.no_lines"),
             details={"uncovered_accounts": uncovered},
         )
 
@@ -264,34 +273,51 @@ def fees_verdict(
         n = len(missing)
         return Verdict(
             id="fees",
-            title="Frais réels",
+            title=title,
             status="unknown",
-            headline=(
-                f"Il manque les frais annuels (TER) de {n} ligne{'s' if n > 1 else ''}, "
-                f"soit {_pct(1 - coverage)} de tes placements : impossible de mesurer "
-                "ce qu'ils te coûtent."
+            headline=t(
+                locale,
+                "verdicts.fees.headline.missing_ter",
+                lines=_lines(n, locale),
+                share=_pct(1 - coverage, locale=locale),
             ),
-            action="Renseigne le TER de ces lignes dans Comptes (ouvre le compte, puis la ligne).",
+            action=t(locale, "verdicts.fees.action.missing_ter"),
             details=details,
         )
 
     # "au moins" as soon as something is missing: an unknown TER or an unknown
     # broker both mean the real cost is above what we can show.
-    at_least = "au moins " if (missing or broker_fees.placeholder) else ""
-    base = f"Tes placements te coûtent {at_least}{_pct(total_pct)} par an, soit {_eur(total)}"
+    at_least = t(locale, "verdicts.fees.at_least") if (missing or broker_fees.placeholder) else ""
+    base = t(
+        locale,
+        "verdicts.fees.base",
+        at_least=at_least,
+        pct=_pct(total_pct, locale=locale),
+        total=_eur(total, locale),
+    )
     to_complete: list[str] = []
     if missing:
-        to_complete.append(f"le TER de {len(missing)} ligne{'s' if len(missing) > 1 else ''}")
+        to_complete.append(
+            t(locale, "verdicts.fees.complete.ter", lines=_lines(len(missing), locale))
+        )
     if broker_fees.placeholder:
-        to_complete.append("ta banque (ses frais ne sont pas comptés)")
-    complete = f" Renseigne {' et '.join(to_complete)} pour affiner." if to_complete else ""
+        to_complete.append(t(locale, "verdicts.fees.complete.broker"))
+    complete = (
+        t(
+            locale,
+            "verdicts.fees.complete",
+            items=t(locale, "verdicts.fees.complete.join").join(to_complete),
+        )
+        if to_complete
+        else ""
+    )
 
     if total_pct <= cfg.green_max:
         return Verdict(
             id="fees",
-            title="Frais réels",
+            title=title,
             status="green",
-            headline=base + " : c'est bas, rien à changer.",
+            headline=t(locale, "verdicts.fees.headline.green", base=base),
             impact_eur_per_year=0.0,
             action=complete.strip() or None,
             details=details,
@@ -299,30 +325,28 @@ def fees_verdict(
     if total_pct <= cfg.amber_max:
         return Verdict(
             id="fees",
-            title="Frais réels",
+            title=title,
             status="amber",
-            headline=(
-                base + f" : la même somme en PEA en ligne avec un ETF monde coûterait "
-                f"{_eur(reference_eur)}."
+            headline=t(
+                locale,
+                "verdicts.fees.headline.amber",
+                base=base,
+                reference=_eur(reference_eur, locale),
             ),
             impact_eur_per_year=saving,
-            action=(
-                f"Compare ton courtier et tes fonds : {_eur(saving)} par an d'écart avec la "
-                "référence." + complete
+            action=t(
+                locale, "verdicts.fees.action.amber", saving=_eur(saving, locale), complete=complete
             ),
             details=details,
         )
     return Verdict(
         id="fees",
-        title="Frais réels",
+        title=title,
         status="red",
-        headline=(
-            base + f", soit {_eur(saving)} de plus par an qu'un PEA en ligne avec un ETF monde."
-        ),
+        headline=t(locale, "verdicts.fees.headline.red", base=base, saving=_eur(saving, locale)),
         impact_eur_per_year=saving,
-        action=(
-            "Change de courtier ou remplace les fonds les plus chers par un ETF indiciel : "
-            f"c'est {_eur(saving)} par an à récupérer." + complete
+        action=t(
+            locale, "verdicts.fees.action.red", saving=_eur(saving, locale), complete=complete
         ),
         details=details,
     )
@@ -365,6 +389,7 @@ def next_euro_verdict(
     profile: Profile,
     monthly_spending: float | None,
     thresholds: NextEuroThresholds | None = None,
+    locale: Locale = "fr",
 ) -> Verdict:
     """« Où placer le prochain euro » : the envelope sequencing rule (étude §8.1).
 
@@ -374,7 +399,7 @@ def next_euro_verdict(
     stay visible as opportunities (LEP, PER) in the details.
     """
     cfg = thresholds or config().next_euro
-    title = "Où placer le prochain euro"
+    title = t(locale, "verdicts.next_euro.title")
     envs = envelopes.config().envelopes
 
     if not wealth.envelopes and not wealth.investment_accounts and not wealth.checking_accounts:
@@ -382,8 +407,8 @@ def next_euro_verdict(
             id="next_euro",
             title=title,
             status="unknown",
-            headline="Aucun compte connecté : impossible de dire où ton prochain euro sera le mieux placé.",
-            action="Connecte ta banque dans Comptes.",
+            headline=t(locale, "verdicts.next_euro.headline.nothing"),
+            action=t(locale, "verdicts.next_euro.action.nothing"),
         )
 
     age = _age(profile.birth_date)
@@ -417,15 +442,20 @@ def next_euro_verdict(
     target = cfg.precaution_months * monthly_spending if monthly_spending else None
     months_covered = liquid / monthly_spending if monthly_spending else None
     precaution_short = target is not None and liquid < target
+    precaution_label = t(locale, "verdicts.next_euro.step.precaution.label")
+    months_txt = f"{months_covered:.1f}" if months_covered is not None else ""
+    target_months_txt = f"{cfg.precaution_months:g}"
     if monthly_spending is None:
         steps.append(
             _step(
                 "precaution",
-                "Épargne de précaution",
+                precaution_label,
                 "unknown",
-                f"{_eur(liquid)} sur tes livrets ; tes dépenses mensuelles ne sont pas encore "
-                "connues (aucun débit synchronisé sur 90 jours), la cible de 3 mois ne peut "
-                "pas être calculée.",
+                t(
+                    locale,
+                    "verdicts.next_euro.step.precaution.unknown",
+                    liquid=_eur(liquid, locale),
+                ),
             )
         )
     elif precaution_short:
@@ -433,10 +463,16 @@ def next_euro_verdict(
         steps.append(
             _step(
                 "precaution",
-                "Épargne de précaution",
+                precaution_label,
                 "red" if months_covered < cfg.precaution_min_months else "amber",
-                f"{_eur(liquid)} sur tes livrets, soit {months_covered:.1f} mois de dépenses ; "
-                f"la cible est {cfg.precaution_months:g} mois, {_eur(target)}.",
+                t(
+                    locale,
+                    "verdicts.next_euro.step.precaution.short",
+                    liquid=_eur(liquid, locale),
+                    months=months_txt,
+                    target_months=target_months_txt,
+                    target=_eur(target, locale),
+                ),
             )
         )
     else:
@@ -444,10 +480,16 @@ def next_euro_verdict(
         steps.append(
             _step(
                 "precaution",
-                "Épargne de précaution",
+                precaution_label,
                 "green",
-                f"{_eur(liquid)} sur tes livrets, {months_covered:.1f} mois de dépenses : "
-                f"la cible de {cfg.precaution_months:g} mois ({_eur(target)}) est couverte.",
+                t(
+                    locale,
+                    "verdicts.next_euro.step.precaution.green",
+                    liquid=_eur(liquid, locale),
+                    months=months_txt,
+                    target_months=target_months_txt,
+                    target=_eur(target, locale),
+                ),
             )
         )
 
@@ -456,14 +498,15 @@ def next_euro_verdict(
     livret_a = envs.get("livret_a")
     lep_gain = 0.0
     movable = 0.0
+    lep_label = t(locale, "verdicts.next_euro.step.lep.label")
     if lep is not None and livret_a is not None:
         if lep_eligible is None:
             steps.append(
                 _step(
                     "lep",
-                    "LEP",
+                    lep_label,
                     "unknown",
-                    "Éligibilité au LEP inconnue : renseigne ton âge, ton foyer et ton revenu fiscal dans Profil.",
+                    t(locale, "verdicts.next_euro.step.lep.unknown"),
                 )
             )
         elif lep_eligible:
@@ -484,12 +527,16 @@ def next_euro_verdict(
                 steps.append(
                     _step(
                         "lep",
-                        "LEP",
+                        lep_label,
                         "amber",
-                        f"Tu as droit au LEP ({_pct(lep.rate_pct)} net) : {_eur(movable)} de tes livrets "
-                        f"peuvent y aller, {_eur(lep_gain)} de plus par an"
-                        + ("" if lep_acc else ", il faut l'ouvrir dans ta banque")
-                        + ".",
+                        t(
+                            locale,
+                            "verdicts.next_euro.step.lep.amber",
+                            rate=_pct(lep.rate_pct, locale=locale),
+                            movable=_eur(movable, locale),
+                            gain=_eur(lep_gain, locale),
+                            open="" if lep_acc else t(locale, "verdicts.next_euro.step.lep.open"),
+                        ),
                         lep_gain,
                     )
                 )
@@ -497,33 +544,39 @@ def next_euro_verdict(
                 steps.append(
                     _step(
                         "lep",
-                        "LEP",
+                        lep_label,
                         "green",
-                        "Ton LEP est au plafond ou tes livrets sont vides : rien à déplacer.",
+                        t(locale, "verdicts.next_euro.step.lep.full"),
                     )
                 )
         else:
             steps.append(
                 _step(
                     "lep",
-                    "LEP",
+                    lep_label,
                     "green",
-                    "Pas éligible au LEP (revenu fiscal au-dessus du plafond).",
+                    t(locale, "verdicts.next_euro.step.lep.ineligible"),
                 )
             )
 
     # 3. Long terme : PEA
     pea_gain = 0.0
+    pea_label = t(locale, "verdicts.next_euro.step.pea.label")
     if has_pea:
         room = max(0.0, cfg.pea_ceiling_eur - pea_value)
         steps.append(
             _step(
                 "pea",
-                "PEA",
+                pea_label,
                 "green" if room > 0 else "amber",
-                f"Ton PEA vaut {_eur(pea_value)} ; il reste {_eur(room)} avant le plafond de versements."
+                t(
+                    locale,
+                    "verdicts.next_euro.step.pea.room",
+                    value=_eur(pea_value, locale),
+                    room=_eur(room, locale),
+                )
                 if room > 0
-                else "Ton PEA est au plafond de versements : le long terme continue en assurance vie ou en CTO.",
+                else t(locale, "verdicts.next_euro.step.pea.full"),
             )
         )
     else:
@@ -531,14 +584,21 @@ def next_euro_verdict(
         steps.append(
             _step(
                 "pea",
-                "PEA",
+                pea_label,
                 "amber",
-                "Pas de PEA : c'est l'enveloppe la moins taxée pour des actions à long terme "
-                "(17,2 % au lieu de 30 % après 5 ans), et son horloge de 5 ans ne démarre qu'à l'ouverture."
-                + (
-                    f" Sur {_eur(cto_value + dca_year)} de CTO et de versements, environ {_eur(pea_gain)} par an."
-                    if pea_gain > 0
-                    else ""
+                t(
+                    locale,
+                    "verdicts.next_euro.step.pea.none",
+                    gain=(
+                        t(
+                            locale,
+                            "verdicts.next_euro.step.pea.none_gain",
+                            base=_eur(cto_value + dca_year, locale),
+                            gain=_eur(pea_gain, locale),
+                        )
+                        if pea_gain > 0
+                        else ""
+                    ),
                 ),
                 pea_gain if pea_gain > 0 else None,
             )
@@ -547,13 +607,14 @@ def next_euro_verdict(
     # 4. PER : only above the 30 % bracket
     per_ceiling = None
     per_gain = 0.0
+    per_label = t(locale, "verdicts.next_euro.step.per.label")
     if tmi is None:
         steps.append(
             _step(
                 "per",
-                "PER",
+                per_label,
                 "unknown",
-                "Tranche d'imposition inconnue : renseigne ton revenu fiscal et ton foyer dans Profil.",
+                t(locale, "verdicts.next_euro.step.per.unknown"),
             )
         )
     else:
@@ -567,19 +628,30 @@ def next_euro_verdict(
             steps.append(
                 _step(
                     "per",
-                    "PER",
+                    per_label,
                     "green" if has_per else "amber",
-                    f"Tu es dans la tranche à {_pct(tmi, 0)} : chaque euro versé sur un PER te rend "
-                    f"{_pct(tmi, 0)} d'impôt, jusqu'à {_eur(per_ceiling)} par an. "
-                    + (
-                        f"Sur {_eur(per_base)} de versements, {_eur(per_gain)} d'impôt en moins."
-                        if has_per or dca_year > 0
-                        else f"Soit {_eur(per_gain)} d'impôt en moins au plafond."
-                    )
-                    + (
-                        " Attention : bloqué jusqu'à la retraite, et seulement avec des frais de contrat sous 0,6 %."
-                        if not has_per
-                        else ""
+                    t(
+                        locale,
+                        "verdicts.next_euro.step.per.worth",
+                        tmi=_pct(tmi, 0, locale),
+                        ceiling=_eur(per_ceiling, locale),
+                        gain=(
+                            t(
+                                locale,
+                                "verdicts.next_euro.step.per.gain_on",
+                                base=_eur(per_base, locale),
+                                gain=_eur(per_gain, locale),
+                            )
+                            if has_per or dca_year > 0
+                            else t(
+                                locale,
+                                "verdicts.next_euro.step.per.gain_ceiling",
+                                gain=_eur(per_gain, locale),
+                            )
+                        ),
+                        warning=(
+                            "" if has_per else t(locale, "verdicts.next_euro.step.per.warning")
+                        ),
                     ),
                     per_gain if not has_per else None,
                 )
@@ -588,34 +660,45 @@ def next_euro_verdict(
             steps.append(
                 _step(
                     "per",
-                    "PER",
+                    per_label,
                     "green",
-                    f"Tu es dans la tranche à {_pct(tmi, 0)} : un PER déductible n'est pas intéressant en dessous de 30 %, garde la liquidité du PEA.",
+                    t(locale, "verdicts.next_euro.step.per.low", tmi=_pct(tmi, 0, locale)),
                 )
             )
 
     # ── Destination and overall status ────────────────────────────────────
     if precaution_short:
         if lep_eligible and (by_type.get("lep") is None or (by_type["lep"].headroom_eur or 0) > 0):
-            dest = "ton LEP" if by_type.get("lep") else "un LEP à ouvrir"
+            dest = t(
+                locale,
+                "verdicts.next_euro.dest.lep"
+                if by_type.get("lep")
+                else "verdicts.next_euro.dest.lep_open",
+            )
         elif by_type.get("livret_a") is not None and (by_type["livret_a"].headroom_eur or 0) > 0:
-            dest = "ton Livret A"
+            dest = t(locale, "verdicts.next_euro.dest.livret_a")
         elif by_type.get("ldds") is not None and (by_type["ldds"].headroom_eur or 0) > 0:
-            dest = "ton LDDS"
+            dest = t(locale, "verdicts.next_euro.dest.ldds")
         else:
-            dest = "un livret (Livret A ou LDDS)"
-        reason = f"ton épargne de précaution couvre {months_covered:.1f} mois de dépenses, la cible est {cfg.precaution_months:g}"
+            dest = t(locale, "verdicts.next_euro.dest.livret")
+        reason = t(
+            locale,
+            "verdicts.next_euro.reason.precaution",
+            months=months_txt,
+            target_months=target_months_txt,
+        )
         driving = steps[0]
     elif not has_pea:
-        dest = "un PEA à ouvrir"
-        reason = "c'est l'enveloppe la moins taxée pour le long terme et son horloge de 5 ans ne tourne pas encore"
+        dest = t(locale, "verdicts.next_euro.dest.pea_open")
+        reason = t(locale, "verdicts.next_euro.reason.pea_open")
         driving = next(st for st in steps if st["id"] == "pea")
     else:
-        dest = "ton PEA"
-        reason = (
-            "ta précaution est en place"
+        dest = t(locale, "verdicts.next_euro.dest.pea")
+        reason = t(
+            locale,
+            "verdicts.next_euro.reason.precaution_ok"
             if not precaution_short and monthly_spending
-            else "le long terme passe par le PEA"
+            else "verdicts.next_euro.reason.pea",
         )
         driving = next(st for st in steps if st["id"] == "pea")
 
@@ -625,25 +708,28 @@ def next_euro_verdict(
     if all(st["status"] == "unknown" for st in steps):
         status = "unknown"
 
-    headline = f"Ton prochain euro va dans {dest} : {reason}."
+    headline = t(locale, "verdicts.next_euro.headline", dest=dest, reason=reason)
     actions = [st for st in steps if st["status"] in ("amber", "red") and st is not driving]
     action: str | None = None
     if driving["status"] in ("amber", "red"):
         action = {
-            "precaution": f"Mets tes prochains versements sur {dest} jusqu'à {_eur(target or 0)}.",
-            "pea": "Ouvre un PEA chez un courtier en ligne, même avec 10 €, pour lancer les 5 ans.",
+            "precaution": t(
+                locale,
+                "verdicts.next_euro.action.precaution",
+                dest=dest,
+                target=_eur(target or 0, locale),
+            ),
+            "pea": t(locale, "verdicts.next_euro.action.pea_open"),
         }.get(driving["id"])
     elif actions:
         first = actions[0]
         action = {
-            "lep": f"Ouvre un LEP dans ta banque et bascules-y {_eur(movable)} de tes livrets.",
-            "per": "Étudie un PER en ligne à frais bas (contrat sous 0,6 %) pour la part de ton épargne que tu peux bloquer jusqu'à la retraite.",
-            "pea": "Ton PEA est plein : oriente le long terme vers une assurance vie en ligne ou un CTO.",
+            "lep": t(locale, "verdicts.next_euro.action.lep", movable=_eur(movable, locale)),
+            "per": t(locale, "verdicts.next_euro.action.per"),
+            "pea": t(locale, "verdicts.next_euro.action.pea_full"),
         }.get(first["id"])
     if not profile_complete:
-        action = (
-            action + " " if action else ""
-        ) + "Renseigne ton profil (âge, foyer, revenu fiscal) pour évaluer le LEP et le PER."
+        action = (action + " " if action else "") + t(locale, "verdicts.next_euro.action.profile")
     impact = (
         driving.get("impact_eur_per_year")
         if driving["status"] in ("amber", "red")
@@ -698,6 +784,7 @@ def risk_share_verdict(
     wealth: Wealth,
     profile: Profile,
     thresholds: RiskShareThresholds | None = None,
+    locale: Locale = "fr",
 ) -> Verdict:
     """« Part d'actions » : how much of the long-term pocket is in equities,
     against the share the profile's risk level puts on the market line,
@@ -708,7 +795,7 @@ def risk_share_verdict(
     valued as a whole, PEL) counts as non-equity.
     """
     cfg = thresholds or config().risk_share
-    title = "Part d'actions"
+    title = t(locale, "verdicts.risk_share.title")
 
     equity = sum(acc.positions_value for acc in wealth.investment_accounts if acc.positions)
     non_equity = sum(acc.value for acc in wealth.investment_accounts if not acc.positions)
@@ -721,11 +808,8 @@ def risk_share_verdict(
             id="risk_share",
             title=title,
             status="unknown",
-            headline=(
-                "Pas de poche long terme connue (PEA, compte-titres, assurance vie, PER) : "
-                "la part d'actions ne peut pas être mesurée."
-            ),
-            action="Connecte tes comptes d'investissement dans Comptes.",
+            headline=t(locale, "verdicts.risk_share.headline.no_pocket"),
+            action=t(locale, "verdicts.risk_share.action.no_pocket"),
         )
 
     level = profile.risk_level
@@ -734,11 +818,13 @@ def risk_share_verdict(
             id="risk_share",
             title=title,
             status="unknown",
-            headline=(
-                f"Tu as {_pct(equity / pocket, 0)} d'actions sur {_eur(pocket)} de placements long "
-                "terme, mais ton curseur prudent ↔ dynamique n'est pas réglé."
+            headline=t(
+                locale,
+                "verdicts.risk_share.headline.no_level",
+                share=_pct(equity / pocket, 0, locale),
+                pocket=_eur(pocket, locale),
             ),
-            action="Règle ton curseur dans Profil pour connaître la part qui te correspond.",
+            action=t(locale, "verdicts.risk_share.action.no_level"),
             details={"equity_eur": equity, "pocket_eur": pocket, "actual_share": equity / pocket},
         )
 
@@ -777,16 +863,20 @@ def risk_share_verdict(
     long_run = references.long_run_returns()
     if long_run:
         details["long_run"] = long_run
-    base = (
-        f"Tu as {_pct(actual, 0)} d'actions sur {_eur(pocket)} de placements long terme ; "
-        f"ton profil « {rl.label} » vise {_pct(target, 0)}"
+    base = t(
+        locale,
+        "verdicts.risk_share.base",
+        share=_pct(actual, 0, locale),
+        pocket=_eur(pocket, locale),
+        label=rl.label_en if locale == "en" else rl.label,
+        target=_pct(target, 0, locale),
     )
     if abs(gap) <= cfg.band:
         return Verdict(
             id="risk_share",
             title=title,
             status="green",
-            headline=base + " : tu es dans la bande, rien à changer.",
+            headline=t(locale, "verdicts.risk_share.headline.green", base=base),
             impact_eur_per_year=0.0,
             details=details,
         )
@@ -797,15 +887,15 @@ def risk_share_verdict(
             id="risk_share",
             title=title,
             status="red" if -gap >= cfg.red_gap else "amber",
-            headline=(
-                base + f" : {_eur(missing_eur)} de trop en produits de taux, soit environ "
-                f"{_eur(impact)} de rendement en moins par an."
+            headline=t(
+                locale,
+                "verdicts.risk_share.headline.low",
+                base=base,
+                missing=_eur(missing_eur, locale),
+                impact=_eur(impact, locale),
             ),
             impact_eur_per_year=impact,
-            action=(
-                f"Oriente tes prochains versements vers ton ETF monde jusqu'à {_pct(target, 0)} "
-                "d'actions ; pas besoin de vendre quoi que ce soit."
-            ),
+            action=t(locale, "verdicts.risk_share.action.low", target=_pct(target, 0, locale)),
             details=details,
         )
     excess_eur = gap * pocket
@@ -813,15 +903,15 @@ def risk_share_verdict(
         id="risk_share",
         title=title,
         status="red" if gap >= cfg.red_gap else "amber",
-        headline=(
-            base + f" : {_eur(excess_eur)} d'actions au-delà de ton profil. Une mauvaise année "
-            f"peut te coûter {_eur(bad_year_eur)} sur cette poche."
+        headline=t(
+            locale,
+            "verdicts.risk_share.headline.high",
+            base=base,
+            excess=_eur(excess_eur, locale),
+            bad_year=_eur(bad_year_eur, locale),
         ),
         impact_eur_per_year=None,
-        action=(
-            "Dirige tes prochains versements vers le fonds euros ou un livret plutôt que vers "
-            "les actions, ou monte ton curseur si tu assumes ces variations."
-        ),
+        action=t(locale, "verdicts.risk_share.action.high"),
         details=details,
     )
 
@@ -839,6 +929,7 @@ def savings_rate_verdict(
     profile: Profile,
     monthly_saved: float | None,
     thresholds: SavingsRateThresholds | None = None,
+    locale: Locale = "fr",
 ) -> Verdict:
     """« Taux d'épargne » : what goes to savings each month against income.
 
@@ -848,7 +939,7 @@ def savings_rate_verdict(
     Étude §1.1: at 20 years, 58 % of the final capital is contributions.
     """
     cfg = thresholds or config().savings_rate
-    title = "Taux d'épargne"
+    title = t(locale, "verdicts.savings_rate.title")
     rfr = profile.rfr_n_minus_2
     dca = float(profile.monthly_dca or 0.0)
 
@@ -857,11 +948,8 @@ def savings_rate_verdict(
             id="savings_rate",
             title=title,
             status="unknown",
-            headline=(
-                "Ton revenu fiscal n'est pas renseigné : le taux d'épargne ne peut pas être "
-                "calculé."
-            ),
-            action="Renseigne ton revenu fiscal de référence dans Profil.",
+            headline=t(locale, "verdicts.savings_rate.headline.no_income"),
+            action=t(locale, "verdicts.savings_rate.action.no_income"),
             details={"monthly_saved_observed_eur": monthly_saved, "monthly_dca_eur": dca},
         )
     income = rfr / 12.0
@@ -892,24 +980,37 @@ def savings_rate_verdict(
         "escalated_next_year_eur": escalated_next_year,
         "amber_min": cfg.amber_min,
     }
-    how = (
-        "d'après tes virements des 90 derniers jours"
+    how = t(
+        locale,
+        "verdicts.savings_rate.how.observed"
         if source == "observed"
-        else "d'après ton versement déclaré"
+        else "verdicts.savings_rate.how.declared",
     )
-    base = f"Tu épargnes {_eur(saved)} par mois, {_pct(rate, 0)} de ton revenu ({how})"
+    base = t(
+        locale,
+        "verdicts.savings_rate.base",
+        saved=_eur(saved, locale),
+        rate=_pct(rate, 0, locale),
+        how=how,
+    )
 
     if rate >= cfg.target:
         return Verdict(
             id="savings_rate",
             title=title,
             status="green",
-            headline=base
-            + f" : au-dessus des {_pct(cfg.target, 0)} visés, c'est ce qui fait le capital.",
+            headline=t(
+                locale,
+                "verdicts.savings_rate.headline.green",
+                base=base,
+                target=_pct(cfg.target, 0, locale),
+            ),
             impact_eur_per_year=0.0,
-            action=(
-                f"Programme une hausse automatique de {_pct(cfg.escalation, 0)} par an : "
-                f"{_eur(escalated_next_year)} par mois l'an prochain, sans y penser."
+            action=t(
+                locale,
+                "verdicts.savings_rate.action.green",
+                escalation=_pct(cfg.escalation, 0, locale),
+                next_year=_eur(escalated_next_year, locale),
             ),
             details=details,
         )
@@ -918,15 +1019,22 @@ def savings_rate_verdict(
         id="savings_rate",
         title=title,
         status=status,
-        headline=(
-            base + f" ; la cible est {_pct(cfg.target, 0)}, soit {_eur(target_eur)} par mois. "
-            f"L'écart vaut {_eur(at_horizon_gap)} dans {cfg.horizon_years} ans."
+        headline=t(
+            locale,
+            "verdicts.savings_rate.headline.below",
+            base=base,
+            target=_pct(cfg.target, 0, locale),
+            target_eur=_eur(target_eur, locale),
+            gap=_eur(at_horizon_gap, locale),
+            years=cfg.horizon_years,
         ),
         impact_eur_per_year=missing * 12.0,
-        action=(
-            f"Monte ton virement automatique de {_eur(missing)} par mois, ou par paliers : "
-            f"+{_pct(cfg.escalation, 0)} à chaque augmentation de salaire jusqu'à "
-            f"{_eur(target_eur)}."
+        action=t(
+            locale,
+            "verdicts.savings_rate.action.below",
+            missing=_eur(missing, locale),
+            escalation=_pct(cfg.escalation, 0, locale),
+            target_eur=_eur(target_eur, locale),
         ),
         details=details,
     )
@@ -947,8 +1055,8 @@ def goal_paths(
     sigma_m = sigma_annual / np.sqrt(12.0)
     drift_m = np.log1p(mu_annual) / 12.0 - sigma_m**2 / 2.0
     value = np.full(shocks.shape[0], float(initial))
-    for t in range(months):
-        value = value * np.exp(drift_m + sigma_m * shocks[:, t]) + monthly
+    for month in range(months):
+        value = value * np.exp(drift_m + sigma_m * shocks[:, month]) + monthly
     return value
 
 
@@ -990,6 +1098,7 @@ def goal_verdict(
     monthly_saved: float | None,
     thresholds: GoalThresholds | None = None,
     risk_thresholds: RiskShareThresholds | None = None,
+    locale: Locale = "fr",
 ) -> Verdict:
     """« Combien épargner pour ton objectif » : the inverse problem of the
     projection (étude §7.1, §8.1 point 7). The goal is in today's euros, so
@@ -1000,18 +1109,15 @@ def goal_verdict(
     cfg = thresholds or config().goal
     rcfg = risk_thresholds or config().risk_share
     inflation = macro.inflation()
-    title = "Épargne pour ton objectif"
+    title = t(locale, "verdicts.goal.title")
     goal = profile.goal_amount
     if not goal or goal <= 0:
         return Verdict(
             id="goal",
             title=title,
             status="unknown",
-            headline=(
-                "Tu n'as pas fixé d'objectif : donne une somme et une échéance dans Projection "
-                "et la méthode te dira combien épargner chaque mois."
-            ),
-            action="Fixe ton objectif dans Projection (« Mon objectif »).",
+            headline=t(locale, "verdicts.goal.headline.none"),
+            action=t(locale, "verdicts.goal.action.none"),
         )
     years = profile.horizon_years if profile.horizon_years else 10
     months = int(years * 12)
@@ -1058,20 +1164,24 @@ def goal_verdict(
         "inflation": inflation,
         "n_paths": cfg.n_paths,
     }
-    chances = f"{round(probability * 10):.0f} chances sur 10"
-    base = (
-        f"Avec {_eur(monthly)} par mois, tu as {chances} d'avoir {_eur(goal)} dans {years} ans, "
-        "en euros d'aujourd'hui"
+    chances = t(locale, "verdicts.goal.chances", n=f"{round(probability * 10):.0f}")
+    base = t(
+        locale,
+        "verdicts.goal.base",
+        monthly=_eur(monthly, locale),
+        chances=chances,
+        goal=_eur(goal, locale),
+        years=years,
     )
     if probability >= cfg.target_probability:
         return Verdict(
             id="goal",
             title=title,
             status="green",
-            headline=base + " : ton objectif est sur les rails.",
+            headline=t(locale, "verdicts.goal.headline.green", base=base),
             impact_eur_per_year=0.0,
             action=(
-                f"Garde le rythme ; {_eur(required)} par mois suffiraient pour 3 chances sur 4."
+                t(locale, "verdicts.goal.action.green", required=_eur(required, locale))
                 if required < monthly
                 else None
             ),
@@ -1081,24 +1191,24 @@ def goal_verdict(
         id="goal",
         title=title,
         status="amber" if probability >= cfg.amber_probability else "red",
-        headline=base + f" ; il faut {_eur(required)} par mois pour 3 chances sur 4.",
-        impact_eur_per_year=None,
-        action=(
-            f"Monte ton versement de {_eur(extra)} par mois, ou repousse l'échéance, "
-            "ou revois la somme visée."
+        headline=t(
+            locale, "verdicts.goal.headline.below", base=base, required=_eur(required, locale)
         ),
+        impact_eur_per_year=None,
+        action=t(locale, "verdicts.goal.action.below", extra=_eur(extra, locale)),
         details=details,
     )
 
 
-def _signed_pct(fraction: float) -> str:
+def _signed_pct(fraction: float, locale: Locale = "fr") -> str:
     """0.031 → « +3,10 % » : a return without its sign reads as a promise."""
-    return ("+" if fraction >= 0 else "−") + _pct(abs(fraction))
+    return ("+" if fraction >= 0 else "−") + _pct(abs(fraction), locale=locale)
 
 
 def performance_verdict(
     perf: performance.Performance | None,
     thresholds: PerformanceThresholds | None = None,
+    locale: Locale = "fr",
 ) -> Verdict:
     """« Ce que tes placements ont vraiment fait » : TWR against TRI (étude §7.7).
 
@@ -1109,7 +1219,7 @@ def performance_verdict(
     backtest, not this account's past.
     """
     cfg = thresholds or config().performance
-    title = "Ce que tes placements ont vraiment rapporté"
+    title = t(locale, "verdicts.performance.title")
     if perf is None or perf.days < cfg.min_days:
         started = perf.start.strftime("%d/%m/%Y") if perf else None
         missing = cfg.min_days - perf.days if perf else cfg.min_days
@@ -1118,13 +1228,9 @@ def performance_verdict(
             title=title,
             status="unknown",
             headline=(
-                f"L'historique de ton compte commence le {started} : encore {missing} jours "
-                "avant un rendement qui veut dire quelque chose."
+                t(locale, "verdicts.performance.headline.young", started=started, missing=missing)
                 if started
-                else (
-                    "L'historique de ton compte commence aujourd'hui. Tangent en enregistre "
-                    "la valeur chaque nuit ; le vrai rendement s'affichera dans un mois."
-                )
+                else t(locale, "verdicts.performance.headline.today")
             ),
             details={
                 "days": perf.days if perf else 0,
@@ -1148,29 +1254,32 @@ def performance_verdict(
         "index": perf.index,
     }
     since = perf.start.strftime("%d/%m/%Y")
-    twr_txt = _signed_pct(perf.twr) if perf.twr is not None else "—"
+    twr_txt = _signed_pct(perf.twr, locale) if perf.twr is not None else "—"
     if perf.irr is None or perf.behaviour_gap is None or perf.twr_annualized is None:
         return Verdict(
             id="performance",
             title=title,
             status="green",
-            headline=(
-                f"Depuis le {since}, tes placements ont fait {twr_txt}, versements mis à part."
-            ),
+            headline=t(locale, "verdicts.performance.headline.twr_only", since=since, twr=twr_txt),
             impact_eur_per_year=0.0,
             details=details,
         )
 
-    strategy = f"{_signed_pct(perf.twr_annualized)} par an pour tes fonds"
-    yours = f"{_signed_pct(perf.irr)} par an pour ton argent"
+    strategy = t(
+        locale, "verdicts.performance.strategy", twr=_signed_pct(perf.twr_annualized, locale)
+    )
+    yours = t(locale, "verdicts.performance.yours", irr=_signed_pct(perf.irr, locale))
     if perf.behaviour_gap >= cfg.gap_amber:
         return Verdict(
             id="performance",
             title=title,
             status="green",
-            headline=(
-                f"Depuis le {since} : {strategy}, {yours}. Le moment de tes versements "
-                "ne t'a rien coûté."
+            headline=t(
+                locale,
+                "verdicts.performance.headline.green",
+                since=since,
+                strategy=strategy,
+                yours=yours,
             ),
             impact_eur_per_year=0.0,
             details=details,
@@ -1180,15 +1289,17 @@ def performance_verdict(
         id="performance",
         title=title,
         status="amber",
-        headline=(
-            f"Depuis le {since} : {strategy}, mais seulement {yours}. Le calendrier de tes "
-            f"versements te coûte {_pct(abs(perf.behaviour_gap))} par an, soit {_eur(cost)}."
+        headline=t(
+            locale,
+            "verdicts.performance.headline.amber",
+            since=since,
+            strategy=strategy,
+            yours=yours,
+            gap=_pct(abs(perf.behaviour_gap), locale=locale),
+            cost=_eur(cost, locale),
         ),
         impact_eur_per_year=cost,
-        action=(
-            "Verse le même montant tous les mois, par virement automatique, plutôt qu'au "
-            "moment où le marché te semble bien orienté."
-        ),
+        action=t(locale, "verdicts.performance.action.amber"),
         details=details,
     )
 
@@ -1196,6 +1307,7 @@ def performance_verdict(
 def drawdown_verdict(
     perf: performance.Performance | None,
     thresholds: DrawdownThresholds | None = None,
+    locale: Locale = "fr",
 ) -> Verdict:
     """« Où tu en es par rapport à ton plus haut » (MiFID II art. 62).
 
@@ -1205,13 +1317,13 @@ def drawdown_verdict(
     fires on the drop that makes people sell, and says not to.
     """
     cfg = thresholds or config().drawdown
-    title = "Baisse depuis le plus haut"
+    title = t(locale, "verdicts.drawdown.title")
     if perf is None or not perf.index:
         return Verdict(
             id="drawdown",
             title=title,
             status="unknown",
-            headline="Pas encore d'historique : la baisse depuis le plus haut sera suivie ici.",
+            headline=t(locale, "verdicts.drawdown.headline.no_history"),
         )
     dd = perf.drawdown
     peak_day = perf.peak_day.strftime("%d/%m/%Y") if perf.peak_day else "?"
@@ -1243,10 +1355,14 @@ def drawdown_verdict(
             title=title,
             status="green",
             headline=(
-                f"Tes placements sont à {_pct(abs(dd))} de leur plus haut du {peak_day} : "
-                "rien d'anormal."
+                t(
+                    locale,
+                    "verdicts.drawdown.headline.near_peak",
+                    dd=_pct(abs(dd), locale=locale),
+                    peak_day=peak_day,
+                )
                 if dd < 0
-                else f"Tes placements sont à leur plus haut, atteint le {peak_day}."
+                else t(locale, "verdicts.drawdown.headline.at_peak", peak_day=peak_day)
             ),
             impact_eur_per_year=0.0,
             details=details,
@@ -1255,14 +1371,14 @@ def drawdown_verdict(
         id="drawdown",
         title=title,
         status="red" if abs(dd) >= cfg.red_at else "amber",
-        headline=(
-            f"Tes placements ont baissé de {_pct(abs(dd))} depuis leur plus haut du {peak_day}, "
-            f"soit {_eur(missing)}."
+        headline=t(
+            locale,
+            "verdicts.drawdown.headline.down",
+            dd=_pct(abs(dd), locale=locale),
+            peak_day=peak_day,
+            missing=_eur(missing, locale),
         ),
-        action=(
-            "Rien à faire, et surtout pas vendre : une baisse ne devient une perte qu'au "
-            "moment où on vend. Continue tes versements, ils achètent moins cher."
-        ),
+        action=t(locale, "verdicts.drawdown.action.down"),
         details=details,
     )
 
@@ -1270,6 +1386,7 @@ def drawdown_verdict(
 def diversification_verdict(
     wealth: Wealth,
     thresholds: DiversificationThresholds | None = None,
+    locale: Locale = "fr",
 ) -> Verdict:
     """« Répartition » : several lines on one index, and lines that are a bet on one thing.
 
@@ -1280,7 +1397,7 @@ def diversification_verdict(
     not a risk. Both are now read off what each line *is* (ADR-025).
     """
     cfg = thresholds or config().diversification
-    title = "Répartition"
+    title = t(locale, "verdicts.diversification.title")
 
     lines = [p for acc in wealth.investment_accounts for p in acc.positions if p.current_value > 0]
     total = sum(p.current_value for p in lines)
@@ -1289,10 +1406,7 @@ def diversification_verdict(
             id="diversification",
             title=title,
             status="unknown",
-            headline=(
-                "Aucune ligne de placement connue : impossible de dire si ta répartition "
-                "tient debout."
-            ),
+            headline=t(locale, "verdicts.diversification.headline.no_lines"),
         )
 
     classes = classification.classify_many([(p.label, p.isin) for p in lines])
@@ -1326,8 +1440,12 @@ def diversification_verdict(
         weight = sum(lines[i].current_value for i in members) / total
         duplicates.append({"index_label": index_label, "labels": names, "weight": weight})
         problems.append(
-            f"{_join(names)} suivent tous « {index_label} » : en garder plusieurs "
-            f"ne te protège pas plus qu'un seul."
+            t(
+                locale,
+                "verdicts.diversification.duplicates",
+                names=_join(names, locale),
+                index=index_label,
+            )
         )
     details["duplicates"] = duplicates
 
@@ -1338,11 +1456,11 @@ def diversification_verdict(
         if weight <= cfg.single_line_max or what.is_diversified:
             continue
         if what.kind == classification.STOCK:
-            why = "c'est une seule société"
+            why = t(locale, "verdicts.diversification.why.stock")
         elif what.index_label:
-            why = f"« {what.index_label} » ne couvre qu'un segment du marché"
+            why = t(locale, "verdicts.diversification.why.segment", index=what.index_label)
         else:
-            why = "on ne sait pas ce qu'il y a dedans"
+            why = t(locale, "verdicts.diversification.why.unknown")
         concentrated.append(
             {
                 "label": position.label,
@@ -1351,7 +1469,15 @@ def diversification_verdict(
                 "kind": what.kind,
             }
         )
-        problems.append(f"{position.label} pèse {_pct(weight, digits=0)} et {why}.")
+        problems.append(
+            t(
+                locale,
+                "verdicts.diversification.concentrated",
+                label=position.label,
+                weight=_pct(weight, digits=0, locale=locale),
+                why=why,
+            )
+        )
     details["concentrated"] = concentrated
 
     unknown = [lines[i].label for i, what in enumerate(classes) if not what.is_known]
@@ -1362,10 +1488,7 @@ def diversification_verdict(
             id="diversification",
             title=title,
             status="green",
-            headline=(
-                "Tes lignes ne font pas doublon et aucune ne concentre le risque : "
-                "rien à changer de ce côté."
-            ),
+            headline=t(locale, "verdicts.diversification.headline.green"),
             details=details,
         )
 
@@ -1374,10 +1497,7 @@ def diversification_verdict(
         title=title,
         status="amber",
         headline=problems[0],
-        action=(
-            "Oriente tes prochains versements plutôt que de vendre : "
-            "vendre coûte des frais et de l'impôt sur la plus-value."
-        ),
+        action=t(locale, "verdicts.diversification.action.amber"),
         details=details,
     )
 
@@ -1388,12 +1508,14 @@ def compute_all(
     monthly_spending: float | None = None,
     monthly_saved: float | None = None,
     perf: performance.Performance | None = None,
+    locale: Locale = "fr",
 ) -> VerdictsResponse:
     """Every verdict the method can give on this patrimony, in display order.
 
     `monthly_spending` is the average monthly debit on current accounts,
     `monthly_saved` the average monthly credit on savings and investment
-    accounts (repositories.bank_transactions); None when unknown.
+    accounts (repositories.bank_transactions); None when unknown. Every
+    sentence is written in `locale`.
     """
     try:
         _, broker_fees = fees.get(profile.default_broker)
@@ -1403,14 +1525,14 @@ def compute_all(
     monthly = float(profile.monthly_dca or 0.0)
     verdicts = _by_priority(
         [
-            drawdown_verdict(perf),
-            savings_rate_verdict(profile, monthly_saved),
-            goal_verdict(wealth, profile, monthly_saved),
-            next_euro_verdict(wealth, profile, monthly_spending),
-            risk_share_verdict(wealth, profile),
-            diversification_verdict(wealth),
-            fees_verdict(wealth, broker_fees, monthly),
-            performance_verdict(perf),
+            drawdown_verdict(perf, locale=locale),
+            savings_rate_verdict(profile, monthly_saved, locale=locale),
+            goal_verdict(wealth, profile, monthly_saved, locale=locale),
+            next_euro_verdict(wealth, profile, monthly_spending, locale=locale),
+            risk_share_verdict(wealth, profile, locale=locale),
+            diversification_verdict(wealth, locale=locale),
+            fees_verdict(wealth, broker_fees, monthly, locale=locale),
+            performance_verdict(perf, locale=locale),
         ]
     )
     logger.info("verdicts computed: %s", {v.id: v.status for v in verdicts})

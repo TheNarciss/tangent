@@ -14,6 +14,7 @@ import yaml
 from pydantic import BaseModel, Field, ValidationError
 
 from ..errors import ConfigurationError
+from ..i18n import Locale
 
 _PATH = Path(__file__).resolve().parent.parent.parent / "config" / "risk_levels.yaml"
 
@@ -21,6 +22,7 @@ _PATH = Path(__file__).resolve().parent.parent.parent / "config" / "risk_levels.
 class RiskLevel(BaseModel):
     level: int = Field(..., ge=1, le=5)
     label: str
+    label_en: str
     target_annual_return: float = Field(..., ge=0, le=2, description="fraction, 0.07 = 7 %/an")
     max_annual_volatility: float = Field(..., ge=0, le=1, description="fraction")
 
@@ -47,11 +49,14 @@ def _load() -> list[RiskLevel]:
     return levels
 
 
-def levels() -> list[RiskLevel]:
+def levels(locale: Locale = "fr") -> list[RiskLevel]:
+    """The slider positions, labelled in ``locale`` (``label`` carries the text)."""
     global _CONFIG
     if _CONFIG is None:
         _CONFIG = _load()
-    return _CONFIG
+    if locale == "fr":
+        return _CONFIG
+    return [lv.model_copy(update={"label": lv.label_en}) for lv in _CONFIG]
 
 
 def resolve(level: int) -> RiskLevel:

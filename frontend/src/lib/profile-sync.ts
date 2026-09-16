@@ -15,6 +15,7 @@
 import { useEffect, useRef } from "react";
 
 import { http } from "@/api";
+import { getLocale, useLocale } from "@/i18n";
 import { EMPTY_PROFILE, useProfile, type UserProfile } from "@/lib/profile";
 
 /** Mirrors ProfileIn / ProfileOut in backend/app/routers/profile.py */
@@ -33,6 +34,8 @@ interface BackendProfileDTO {
   default_broker?: string | null;
   ceilings_used?: Record<string, number> | null;
   auto_review_enabled?: boolean | null;
+  /** The language the device speaks; the server copy only serves the nightly jobs. */
+  locale?: "fr" | "en" | null;
 }
 
 function toBackendDTO(p: UserProfile): BackendProfileDTO {
@@ -51,6 +54,7 @@ function toBackendDTO(p: UserProfile): BackendProfileDTO {
     default_broker: p.default_broker ?? undefined,
     ceilings_used: p.ceilings_used as unknown as Record<string, number>,
     auto_review_enabled: p.auto_review_enabled,
+    locale: getLocale(),
   };
 }
 
@@ -72,12 +76,15 @@ function fromBackendDTO(dto: BackendProfileDTO): Partial<UserProfile> {
   if (dto.ceilings_used && Object.keys(dto.ceilings_used).length > 0)
     out.ceilings_used = dto.ceilings_used as unknown as UserProfile["ceilings_used"];
   if (dto.auto_review_enabled != null) out.auto_review_enabled = dto.auto_review_enabled;
+  // dto.locale is deliberately ignored: the device decides which language it speaks.
   return out;
 }
 
 /** Mount once near the root (App.tsx). */
 export function useProfileSync(enabled: boolean) {
   const [profile, setProfile] = useProfile();
+  // Subscribed so a language change re-sends the DTO (its `locale` field).
+  const locale = useLocale();
   const didPullRef = useRef(false);
 
   // Pull DB → local on first mount once authenticated
@@ -95,7 +102,8 @@ export function useProfileSync(enabled: boolean) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled]);
 
-  // Push every change (debounced) once the initial pull happened
+  // Push every change (debounced) once the initial pull happened; the locale
+  // is read inside toBackendDTO, listed here so a language switch pushes too.
   useEffect(() => {
     if (!enabled || !profile || !didPullRef.current) return;
     const handle = setTimeout(() => {
@@ -105,5 +113,5 @@ export function useProfileSync(enabled: boolean) {
       }).catch((err: unknown) => console.error("profile push failed", err));
     }, 500);
     return () => clearTimeout(handle);
-  }, [enabled, profile]);
+  }, [enabled, profile, locale]);
 }

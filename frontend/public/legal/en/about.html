@@ -1,15 +1,15 @@
 <!doctype html>
-<html lang="fr">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="index, follow" />
-    <title>À propos — Tangent</title>
+    <title>About — Tangent</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
     <meta
       name="description"
-      content="Tangent est un agrégateur patrimonial personnel : centralisez vos comptes bancaires, placements et prêts pour analyser votre allocation et vos performances."
+      content="Tangent is a personal wealth aggregator: bring your bank accounts, investments and loans together to analyse your allocation and your performance."
     />
     <style>
       :root {
@@ -88,93 +88,93 @@
       <header class="site">
         <a href="/" class="brand">Tangent</a>
         <span>
-          <a href="/legal/en/about.html" class="back" lang="en" hreflang="en">English version</a>
+          <a href="/legal/about.html" class="back" lang="fr" hreflang="fr">Version française</a>
           <span class="muted"> · </span>
-          <a href="/" class="back">← Application</a>
+          <a href="/" class="back">← App</a>
         </span>
       </header>
 
-      <h1>Votre patrimoine, lisible.</h1>
+      <h1>Your wealth, made legible.</h1>
       <p class="subtitle">
-        Tangent agrège vos comptes bancaires, placements et prêts en un tableau de bord clair —
-        et vous donne les outils pour analyser votre allocation, simuler des scénarios, et mesurer
-        votre performance dans le temps.
+        Tangent brings your bank accounts, investments and loans together in one clear dashboard —
+        and gives you the tools to analyse your allocation, simulate scenarios, and measure your
+        performance over time.
       </p>
 
-      <a href="/" class="cta">Accéder à l'application →</a>
+      <a href="/" class="cta">Open the app →</a>
 
-      <h2>Ce que vous pouvez faire</h2>
+      <h2>What you can do</h2>
       <div class="features">
         <div class="feature">
-          <h3>Agrégation DSP2</h3>
+          <h3>PSD2 aggregation</h3>
           <p>
-            Connectez vos banques via Powens (agréé ACPR) ou Enable Banking (DSP2). Mises à jour
-            automatiques de vos comptes, placements et prêts.
+            Connect your banks through Powens (authorised by the ACPR, the French banking
+            supervisor) or Enable Banking (PSD2). Your accounts, investments and loans update
+            automatically.
           </p>
         </div>
         <div class="feature">
-          <h3>Analyse de portefeuille</h3>
+          <h3>Portfolio analysis</h3>
           <p>
-            Allocation, corrélations, frontière efficiente, Sharpe, drawdown. Comprenez où votre
-            argent travaille.
+            Allocation, correlations, efficient frontier, Sharpe ratio, drawdown. Understand where
+            your money is working.
           </p>
         </div>
         <div class="feature">
           <h3>Projections</h3>
           <p>
-            Simulez l'évolution de votre patrimoine sur 10, 20, 30 ans avec différentes hypothèses
-            de rendement et d'inflation.
+            Simulate how your wealth evolves over 10, 20 or 30 years under different return and
+            inflation assumptions.
           </p>
         </div>
         <div class="feature">
           <h3>Stress tests</h3>
           <p>
-            Mesurez l'impact de scénarios extrêmes (krach, choc inflation, hausse de taux) sur
-            votre allocation actuelle.
+            Measure the impact of extreme scenarios (crash, inflation shock, rate rise) on your
+            current allocation.
           </p>
         </div>
         <div class="feature">
-          <h3>Multi-comptes</h3>
+          <h3>Multiple accounts</h3>
           <p>
-            Suivez ensemble PEA, CTO, livrets, comptes courants, et patrimoine non bancaire saisi
-            à la main.
+            Track your PEA, CTO (ordinary securities account), livrets (regulated savings
+            accounts), current accounts and manually entered non-bank assets together.
           </p>
         </div>
         <div class="feature">
-          <h3>Privé par défaut</h3>
+          <h3>Private by default</h3>
           <p>
-            Auto-hébergé, chiffrement au repos des jetons sensibles, isolation stricte entre
-            utilisateurs. Aucune pub, aucun tracking.
+            Self-hosted, sensitive tokens encrypted at rest, strict isolation between users. No
+            ads, no tracking.
           </p>
         </div>
         <div class="feature">
-          <h3>Sur iPhone</h3>
+          <h3>On iPhone</h3>
           <p>
-            La même application, dans l'App Store : même compte, mêmes données, verrouillée par
-            Face ID. Connexion par Google ou Apple.
+            The same app, on the App Store: same account, same data, locked with Face ID. Sign in
+            with Google or Apple.
           </p>
         </div>
       </div>
 
-      <h2>Stack technique</h2>
+      <h2>Technical stack</h2>
       <p>
         Backend Python 3.12 / FastAPI / PostgreSQL 16. Frontend React 18 / TypeScript / Vite.
-        Hébergement self-host avec Docker Compose, Caddy et Cloudflare Tunnel. Agrégation
-        bancaire <a href="https://www.powens.com/" target="_blank" rel="noopener">Powens</a> et
+        Self-hosted with Docker Compose, Caddy and Cloudflare Tunnel. Bank aggregation by
+        <a href="https://www.powens.com/" target="_blank" rel="noopener">Powens</a> and
         <a href="https://enablebanking.com/" target="_blank" rel="noopener">Enable Banking</a>
-        (DSP2). Application iPhone en Capacitor. Emails transactionnels via Resend.
+        (PSD2). iPhone app built with Capacitor. Transactional emails via Resend.
       </p>
 
       <h2>Important</h2>
       <p>
-        Tangent est un outil d'analyse personnel.
+        Tangent is a personal analysis tool.
         <strong>
-          Il ne constitue pas un conseil en investissement régulé au sens de l'article L. 541-1
-          du Code monétaire et financier.
+          It does not constitute regulated investment advice within the meaning of article
+          L. 541-1 of the Code monétaire et financier (the French Monetary and Financial Code).
         </strong>
-        Les analyses et projections sont indicatives — toute décision d'investissement vous
-        appartient. Voir les
-        <a href="/legal/terms.html">Conditions d'utilisation</a> pour le détail.
+        Analyses and projections are indicative — every investment decision is yours. See the
+        <a href="/legal/en/terms.html">Terms of Service</a> for details.
       </p>
 
       <h2>Contact</h2>
@@ -183,9 +183,9 @@
       </p>
 
       <footer class="site">
-        <a href="/legal/about.html">À propos</a>
-        <a href="/legal/terms.html">Conditions d'utilisation</a>
-        <a href="/legal/privacy.html">Politique de confidentialité</a>
+        <a href="/legal/en/about.html">About</a>
+        <a href="/legal/en/terms.html">Terms of Service</a>
+        <a href="/legal/en/privacy.html">Privacy Policy</a>
         <span class="spacer"></span>
         <span>© 2026 Tangent · Clément Gardair · Paris</span>
       </footer>

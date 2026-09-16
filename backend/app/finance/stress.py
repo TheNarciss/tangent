@@ -27,6 +27,7 @@ import yaml
 from pydantic import BaseModel, Field
 
 from ..errors import ConfigurationError
+from ..i18n import Locale
 from ..models import StressTestResult, Wealth
 from . import classification, episodes
 
@@ -60,10 +61,12 @@ class IndexSeries(BaseModel):
 class Scenario(BaseModel):
     id: str
     label: str
+    label_en: str
     window: Window | None = None
     start: str
     end: str
     description: str
+    description_en: str
     returns: dict[str, float]
 
     def ret(
@@ -310,8 +313,8 @@ def pocket_return_and_level(
     return value, "borrowed"
 
 
-def compute(wealth: Wealth) -> list[StressTestResult]:
-    """Every scenario, worst loss first, in € and in % of the patrimony."""
+def compute(wealth: Wealth, locale: Locale = "fr") -> list[StressTestResult]:
+    """Every scenario, worst loss first, in € and in % of the patrimony, labelled in ``locale``."""
     cfg = config()
     held = pockets(wealth, cfg)
     total = sum(p.amount for p in held)
@@ -333,8 +336,8 @@ def compute(wealth: Wealth) -> list[StressTestResult]:
         results.append(
             StressTestResult(
                 id=scenario.id,
-                label=scenario.label,
-                description=scenario.description,
+                label=scenario.label_en if locale == "en" else scenario.label,
+                description=(scenario.description_en if locale == "en" else scenario.description),
                 start=scenario.start,
                 end=scenario.end,
                 pnl_pct=loss_eur / total,
