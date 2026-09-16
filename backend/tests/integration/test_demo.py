@@ -48,4 +48,16 @@ async def test_seed_gives_a_person_with_accounts_positions_spending_and_readings
     spending = (await client.get("/api/spending?months=3")).json()
     assert spending["monthly_average"] and spending["monthly_average"] > 1000
     assert any(c["category"] == "loyer" for c in spending["categories"])
+
+    # A filled-in profile and known fund fees: the verdicts are not all « incomplet ».
+    profile = (await client.get("/api/profile")).json()
+    assert profile["rfr_n_minus_2"] == 29400 and profile["risk_level"] == 3
+    assert profile["goal_amount"] == 50000 and profile["horizon_years"] == 10
+    verdicts = (await client.get("/api/verdicts")).json()["verdicts"]
+    assert {v["id"]: v["status"] for v in verdicts}["fees"] != "unknown"
+    assert all(v["status"] != "unknown" for v in verdicts if v["id"] != "drawdown")
+
+    # No live bank behind the demo accounts: a sync is a quiet no-op, not a red line.
+    sync = await client.post("/api/accounts/sync")
+    assert sync.status_code == 200 and sync.json()["success"] is True
     client.cookies.clear()
