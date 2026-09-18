@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { getLocale, t } from "@/i18n";
 import { clearProfile } from "@/lib/profile";
+import { clearWidgetSnapshot } from "@/native/widget";
 
 export const API_URL =
   (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8000/api";
@@ -392,6 +393,7 @@ export function useLogout() {
       // Then wipe other cached data so next user doesn't see previous content.
       qc.removeQueries({ predicate: (q) => !(q.queryKey[0] === "user" && q.queryKey[1] === "me") });
       clearProfile();
+      void clearWidgetSnapshot();
       // Legacy: the expert knobs (CMA shrinkage, σ estimator, risk-free) went
       // with the Scanner (§8.3); drop what a previous version stored.
       try {

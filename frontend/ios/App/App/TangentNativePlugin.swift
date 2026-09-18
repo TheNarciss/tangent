@@ -3,10 +3,12 @@ import Capacitor
 import CryptoKit
 import Foundation
 import LocalAuthentication
+import WidgetKit
 
 /// What the web code cannot do by itself on the phone (ADR-035):
 /// unlock with Face ID, run an OAuth round trip in the system's secure
-/// browser, and Sign in with Apple through iOS. Registered by
+/// browser, Sign in with Apple through iOS, and hand the home-screen widget
+/// the one figure it shows. Registered by
 /// `TangentViewController`; typed on the JS side in src/native/bridge.ts.
 @objc(TangentNativePlugin)
 public class TangentNativePlugin: CAPPlugin, CAPBridgedPlugin {
@@ -16,7 +18,13 @@ public class TangentNativePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "unlock", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "authSession", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "appleSignIn", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setWidgetSnapshot", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "clearWidgetSnapshot", returnType: CAPPluginReturnPromise),
     ]
+
+    /// Shared with the widget extension; nothing else is written there.
+    private static let appGroup = "group.uk.riskybusinesses.tangent"
+    private static let widgetKey = "wealth"
 
     private var webSession: ASWebAuthenticationSession?
     private var appleFlow: AppleSignInFlow?
@@ -34,6 +42,47 @@ public class TangentNativePlugin: CAPPlugin, CAPBridgedPlugin {
         let reason = call.getString("reason") ?? "Déverrouiller Tangent"
         context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { ok, _ in
             call.resolve(["available": true, "success": ok])
+        }
+    }
+
+    // MARK: The home-screen widget
+
+    /// The Overview hands over what it displays, already written in the
+    /// person's language and number format; the widget only paints it.
+    @objc func setWidgetSnapshot(_ call: CAPPluginCall) {
+        guard let label = call.getString("label"), let value = call.getString("value") else {
+            call.reject("label et value sont attendus")
+            return
+        }
+        var payload: [String: Any] = [
+            "label": label,
+            "value": value,
+            "updatedAt": ISO8601DateFormatter().string(from: Date()),
+        ]
+        if let sub = call.getString("sub") { payload["sub"] = sub }
+        if let positive = call.getBool("positive") { payload["positive"] = positive }
+        guard let data = try? JSONSerialization.data(withJSONObject: payload),
+              let defaults = UserDefaults(suiteName: Self.appGroup)
+        else {
+            // No App Group on this build: the app works, it simply has no widget.
+            call.resolve(["written": false])
+            return
+        }
+        defaults.set(data, forKey: Self.widgetKey)
+        reloadWidgets()
+        call.resolve(["written": true])
+    }
+
+    /// Signing out takes the figures off the home screen with the session.
+    @objc func clearWidgetSnapshot(_ call: CAPPluginCall) {
+        UserDefaults(suiteName: Self.appGroup)?.removeObject(forKey: Self.widgetKey)
+        reloadWidgets()
+        call.resolve()
+    }
+
+    private func reloadWidgets() {
+        if #available(iOS 14.0, *) {
+            WidgetCenter.shared.reloadAllTimelines()
         }
     }
 

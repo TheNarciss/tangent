@@ -15,6 +15,15 @@ export interface TangentNativePlugin {
   authSession(options: { url: string; callbackScheme: string }): Promise<{ url: string }>;
   /** Sign in with Apple through iOS itself. */
   appleSignIn(options: { nonce: string }): Promise<{ identityToken: string }>;
+  /** Hand the home-screen widget the line the Overview shows. */
+  setWidgetSnapshot(options: {
+    label: string;
+    value: string;
+    sub?: string;
+    positive?: boolean;
+  }): Promise<{ written: boolean }>;
+  /** Take the figures off the home screen (sign-out). */
+  clearWidgetSnapshot(): Promise<void>;
 }
 
 export const TangentNative = registerPlugin<TangentNativePlugin>("TangentNative");
