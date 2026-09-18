@@ -15,7 +15,7 @@ dependencies = [
     "pyyaml>=6.0",
     "openpyxl>=3.1",           # classeurs .xlsx des sources externes (Damodaran, ADR-024)
     "xlrd>=2.0",               # classeur .xls historique de Shiller (ADR-024)
-    "httpx>=0.27",
+    "httpx[http2]>=0.27",     # http2 : APNs ne parle que ça (ADR-037)
     "python-dotenv>=1.0",
     # ─ DB & Auth (Phase 1-2) ─
     "sqlalchemy[asyncio]>=2.0",
