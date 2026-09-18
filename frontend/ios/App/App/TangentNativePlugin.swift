@@ -3,6 +3,7 @@ import Capacitor
 import CryptoKit
 import Foundation
 import LocalAuthentication
+import UserNotifications
 import WidgetKit
 
 /// What the web code cannot do by itself on the phone (ADR-035):
@@ -20,6 +21,8 @@ public class TangentNativePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "appleSignIn", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setWidgetSnapshot", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "clearWidgetSnapshot", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "requestPushPermission", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "pushStatus", returnType: CAPPluginReturnPromise),
     ]
 
     /// Shared with the widget extension; nothing else is written there.
@@ -43,6 +46,61 @@ public class TangentNativePlugin: CAPPlugin, CAPBridgedPlugin {
         context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { ok, _ in
             call.resolve(["available": true, "success": ok])
         }
+    }
+
+    // MARK: Notifications (« ton briefing est prêt », ADR-037)
+
+    /// Asks iOS, once, then waits for Apple's address for this phone. The web
+    /// side sends that address to the backend; refusing is an answer, not an
+    /// error, and the app carries on without it.
+    @objc func requestPushPermission(_ call: CAPPluginCall) {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
+            guard granted else {
+                call.resolve(["granted": false])
+                return
+            }
+            DispatchQueue.main.async {
+                UIApplication.shared.registerForRemoteNotifications()
+                self.awaitDeviceToken { token in
+                    call.resolve(["granted": true, "token": token ?? ""])
+                }
+            }
+        }
+    }
+
+    /// What iOS currently allows, and the address if we already have one.
+    @objc func pushStatus(_ call: CAPPluginCall) {
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            let granted = settings.authorizationStatus == .authorized
+                || settings.authorizationStatus == .provisional
+            call.resolve([
+                "granted": granted,
+                "askable": settings.authorizationStatus == .notDetermined,
+                "token": AppDelegate.deviceToken ?? "",
+            ])
+        }
+    }
+
+    /// The token arrives from the system a moment after registering.
+    private func awaitDeviceToken(timeout: TimeInterval = 10, then: @escaping (String?) -> Void) {
+        if let token = AppDelegate.deviceToken {
+            then(token)
+            return
+        }
+        var observer: NSObjectProtocol?
+        var finished = false
+        let finish: (String?) -> Void = { token in
+            guard !finished else { return }
+            finished = true
+            if let observer = observer { NotificationCenter.default.removeObserver(observer) }
+            then(token)
+        }
+        observer = NotificationCenter.default.addObserver(
+            forName: AppDelegate.deviceTokenChanged, object: nil, queue: .main
+        ) { note in
+            finish(note.object as? String)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + timeout) { finish(AppDelegate.deviceToken) }
     }
 
     // MARK: The home-screen widget

@@ -24,6 +24,10 @@ export interface TangentNativePlugin {
   }): Promise<{ written: boolean }>;
   /** Take the figures off the home screen (sign-out). */
   clearWidgetSnapshot(): Promise<void>;
+  /** Ask iOS for notifications, then wait for Apple's address for this phone. */
+  requestPushPermission(): Promise<{ granted: boolean; token?: string }>;
+  /** What iOS allows today, and the address if there is one. */
+  pushStatus(): Promise<{ granted: boolean; askable: boolean; token: string }>;
 }
 
 export const TangentNative = registerPlugin<TangentNativePlugin>("TangentNative");
