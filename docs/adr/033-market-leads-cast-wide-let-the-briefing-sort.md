@@ -69,6 +69,7 @@ Publiques, mais servies en PDF et en archives à parser, avec des montants par t
 
 - Polymarket, API Gamma : `https://gamma-api.polymarket.com/events?tag_slug=…`
 - SEC EDGAR : index quotidien par type de formulaire, fiches par CIK, dossiers de dépôt. La SEC demande un User-Agent identifié et au plus dix requêtes par seconde.
+- 2026-09-20 : trois sources ajoutées dans le même contrat — les Schedule 13D des activistes suivis (EDGAR, XML structuré), le positionnement hebdomadaire des spéculateurs (CFTC, Commitments of Traders, API Socrata) et les séries économiques de Kalshi (API publique). Réexaminés et toujours écartés : les élus américains (toujours du PDF, les jeux libres ont disparu) et les dirigeants AMF (le jeu data.gouv.fr est un tiers, arrêté en 2019).
 - L'index quotidien d'une journée paraît vers 02:00 UTC le lendemain, après le passage du job de 02:15 (Paris) ; un jour sans index répond 403. Le job relit donc les derniers jours à chaque passage, les dépôts déjà lus étant mémorisés (2026-09-20).
 - [ADR-024](024-external-data-sources.md) — sources externes, sans clé
 - [ADR-031](031-the-list-of-the-year.md) — une règle publiée, pas une opinion
