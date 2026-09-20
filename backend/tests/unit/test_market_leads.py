@@ -171,15 +171,77 @@ def test_markets_decode_the_string_encoded_prices_and_skip_closed_ones():
 # ── Rules ───────────────────────────────────────────────────────────────────
 
 
-def test_polymarket_leads_flag_the_weekly_move_and_the_leading_outcome():
-    rules = market_leads.PolymarketRules(tags=["fed"], min_volume_24h_usd=1000, min_week_move=0.3)
+def test_polymarket_leads_flag_the_largest_weekly_move_and_the_leading_outcome():
+    rules = market_leads.PolymarketRules(
+        tags=["fed"], min_volume_24h_usd=1000, min_week_move=0.3, min_days_to_resolution=0
+    )
     leads = market_leads._polymarket_leads(
         [polymarket.markets(GAMMA_EVENT)], rules, date(2026, 9, 15)
     )
     kinds = [(lead.kind, lead.detail) for lead in leads]
-    assert len([k for k, _ in kinds if k == "prediction_move"]) == 2
+    # Two rungs of the same event moved: one lead, the largest move.
+    moves = [d for k, d in kinds if k == "prediction_move"]
+    assert len(moves) == 1 and moves[0].startswith("« No change » : 12% de oui, -35 points")
     state = [d for k, d in kinds if k == "prediction_state"]
     assert state == ["Issue la plus probable : « Cut by 25 bps » à 87%, +34 points sur la semaine"]
+
+
+def _market(event: str, question: str, *, volume: float, end: str = "", move: float = 0.0):
+    return polymarket.Market(
+        event_id=event,
+        event_title=event,
+        event_slug=event,
+        question=question,
+        yes_price=0.5,
+        day_change=0.0,
+        week_change=move,
+        volume_24h_usd=volume,
+        end_date=end,
+        tags=(),
+    )
+
+
+def test_polymarket_ignores_bets_settled_within_days_and_fills_the_state_from_traded_ones():
+    rules = market_leads.PolymarketRules(
+        tags=[],
+        min_volume_24h_usd=1000,
+        min_week_move=0.3,
+        min_days_to_resolution=14,
+        max_state_leads=2,
+    )
+    today = date(2026, 9, 20)
+    events = [
+        [_market("Bitcoin above X on Sept 21?", "yes", volume=900_000, end="2026-09-21", move=0.5)],
+        [_market("Fed in October?", "hold", volume=50_000, end="2026-10-28T00:00:00Z", move=0.4)],
+        [_market("Thin market", "yes", volume=10, end="2027-01-01", move=0.9)],
+        [_market("Recession in 2027?", "yes", volume=20_000, move=0.1)],
+    ]
+    leads = market_leads._polymarket_leads(events, rules, today)
+    moves = [lead.title for lead in leads if lead.kind == "prediction_move"]
+    state = [lead.title for lead in leads if lead.kind == "prediction_state"]
+    assert moves == ["Fed in October?"]
+    # The daily bet and the thin market never enter the ranking, so the two
+    # state slots go to bets that are actually traded.
+    assert state == ["Fed in October?", "Recession in 2027?"]
+
+
+def test_insider_leads_look_back_over_the_days_the_sec_has_published(monkeypatch):
+    asked: list[date] = []
+    monkeypatch.setattr(
+        market_leads.edgar, "daily_index", lambda day, form: asked.append(day) or []
+    )
+    rules = market_leads.InsiderRules(index_lookback_days=3)
+    leads, state = market_leads.insider_leads(rules, {}, date(2026, 9, 20))
+    assert asked == [date(2026, 9, 17), date(2026, 9, 18), date(2026, 9, 19)]
+    assert leads == [] and state == {"seen": {}, "purchases": []}
+
+
+def test_daily_index_is_empty_when_the_sec_has_no_file_yet(monkeypatch):
+    def refuse(url, *, ttl_hours, cache=True):
+        raise market_leads.DataSourceError(f"{url} a répondu 403.")
+
+    monkeypatch.setattr(edgar.http, "get_text", refuse)
+    assert edgar.daily_index(date(2026, 9, 19), "4") == []
 
 
 def _purchase(symbol: str, owner: str, amount: float, filed: str) -> dict:

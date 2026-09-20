@@ -31,6 +31,9 @@ polymarket:
   min_volume_24h_usd: 25000
   # Une cote qui bouge d'au moins ça en une semaine, en points de probabilité.
   min_week_move: 0.15
+  # Un pari réglé dans moins de deux semaines (« Bitcoin au-dessus de X
+  # vendredi ? ») ne dit rien d'un horizon : il est ignoré.
+  min_days_to_resolution: 14
   # Les marchés les plus actifs sont donnés tels quels : l'état des attentes.
   max_state_leads: 8
 
@@ -42,6 +45,10 @@ insiders:
   cluster_days: 30               # fenêtre pour parler d'achats groupés
   min_insiders: 2                # dirigeants distincts pour un groupe
   keep_days: 45                  # mémoire des achats et des dépôts déjà lus
+  # La SEC publie l'index d'une journée vers 02:00 UTC le lendemain, après
+  # le passage du job : une journée se lit au plus tôt la deuxième nuit. Les
+  # dépôts déjà lus sont mémorisés, relire un index ne coûte qu'une requête.
+  index_lookback_days: 4
 
 funds:
   # Gérants suivis dans leurs 13F. Un CIK identifie un déclarant à la SEC.
@@ -57,8 +64,10 @@ funds:
     - { name: "Renaissance Technologies", cik: 1037389 }
     - { name: "Soros Fund Management", cik: 1029160 }
     - { name: "Viking Global", cik: 1103804 }
-    - { name: "Scion Asset Management", cik: 1649339 }
   min_position_usd: 100000000    # une ligne plus petite ne dit rien d'un tel gérant
   min_change_pct: 0.25           # variation du nombre de titres pour parler d'un mouvement
   max_leads_per_filing: 6
-  keep_days: 21                  # une piste 13F reste visible ce temps après le dépôt
+  # Une piste 13F reste visible ce temps après le dépôt. Un trimestre et
+  # quelques jours : le dernier tableau reste lisible jusqu'à ce que le
+  # suivant le remplace, daté du jour du dépôt.
+  keep_days: 100
