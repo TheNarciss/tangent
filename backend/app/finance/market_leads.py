@@ -1,9 +1,9 @@
 """« Pistes de marché » : ratisser large chaque nuit, laisser le briefing trier (ADR-033).
 
-Three sources of what people who commit money declare, none of them a
-« signal » anyone typed by hand: bets on Polymarket that moved, insiders
-buying their own company's shares on the open market, large funds opening
-or closing a line in their 13F. Every observation above the thresholds in
+Sources of what people who commit money declare, none of them a « signal »
+anyone typed by hand: bets on Polymarket that moved, insiders buying their
+own company's shares on the open market, large funds opening or closing a
+line in their 13F, known activists crossing 5 % of a company in a 13D. Every observation above the thresholds in
 `config/market_leads.yaml` becomes a lead, written to `data/market_leads.json`
 with the raw numbers. Most of it is noise, on purpose: the morning briefing
 reads the list and keeps zero to three, with the reason. Nothing here is a
@@ -69,10 +69,17 @@ class FundRules(BaseModel):
     keep_days: int = Field(21, ge=1)
 
 
+class ActivistRules(BaseModel):
+    followed: list[Manager]
+    keep_days: int = Field(30, ge=1)
+    index_lookback_days: int = Field(4, ge=1)
+
+
 class LeadsConfig(BaseModel):
     polymarket: PolymarketRules
     insiders: InsiderRules
     funds: FundRules
+    activists: ActivistRules
 
 
 @lru_cache(maxsize=1)
@@ -416,6 +423,72 @@ def _fund_diff(
     return [lead for _, lead in candidates[: rules.max_leads_per_filing]]
 
 
+# ── Activists (Schedule 13D) ────────────────────────────────────────────────
+
+
+def activist_leads(
+    rules: ActivistRules, state: dict[str, Any], today: date
+) -> tuple[list[MarketLead], dict[str, Any]]:
+    """Every initial 13D of the last days, kept when a followed activist is behind it.
+
+    A handful of filings a day, most of them micro-caps nobody follows: the
+    list of activists is the filter. The same index window as Form 4, the
+    same memory of filings already read, leads kept `keep_days`.
+    """
+    seen: dict[str, str] = dict(state.get("seen") or {})
+    kept: list[dict[str, Any]] = list(state.get("leads") or [])
+    floor = (today - timedelta(days=rules.keep_days)).isoformat()
+    seen = {k: v for k, v in seen.items() if v >= floor}
+    kept = [lead for lead in kept if (lead.get("observed_at") or "") >= floor]
+    followed = {m.cik: m.name for m in rules.followed}
+
+    for day in (today - timedelta(days=k) for k in range(rules.index_lookback_days, 0, -1)):
+        try:
+            entries = edgar.daily_index(day, "SCHEDULE 13D")
+        except DataSourceError as exc:
+            logger.warning("edgar index 13D %s: %s", day, exc)
+            continue
+        for entry in entries:
+            # One filing, one row per co-filer: the accession is the key.
+            if entry.accession in seen:
+                continue
+            seen[entry.accession] = entry.filed.isoformat()
+            try:
+                filing = edgar.schedule_13d(entry)
+            except DataSourceError as exc:
+                logger.info("schedule 13D %s: %s", entry.accession, exc)
+                continue
+            if filing is None:
+                continue
+            lead = _activist_lead(filing, followed, entry.filed)
+            if lead is not None:
+                kept.append(lead.model_dump())
+    return [MarketLead.model_validate(lead) for lead in kept], {"seen": seen, "leads": kept}
+
+
+def _activist_lead(
+    filing: edgar.Schedule13D, followed: dict[int, str], filed: date
+) -> MarketLead | None:
+    persons = [p for p in filing.persons if p.cik in followed]
+    if not persons or not filing.issuer:
+        return None
+    lead = max(persons, key=lambda p: p.percent)
+    name = followed[lead.cik]
+    return MarketLead(
+        source="edgar_13d",
+        kind="activist_stake",
+        title=f"{name} : {lead.percent:.1f} % de {filing.issuer.title()}",
+        detail=(
+            f"Déclaration 13D déposée le {filed.isoformat()}, seuil franchi le "
+            f"{filing.event_day or 'n/c'}, {lead.shares:,.0f} titres. Au-dessus de 5 %, "
+            "un activiste doit dire ce qu'il compte faire."
+        ),
+        url=filing.folder + "/",
+        observed_at=filed.isoformat(),
+        weight=0.8,
+    )
+
+
 # ── Store ───────────────────────────────────────────────────────────────────
 
 
@@ -448,6 +521,13 @@ def refresh(today: date | None = None) -> MarketLeadsResponse:
         leads.extend(found)
     except Exception:
         logger.exception("pistes: EDGAR 13F hors de portée")
+    try:
+        found, state["activists"] = activist_leads(
+            cfg.activists, state.get("activists") or {}, today
+        )
+        leads.extend(found)
+    except Exception:
+        logger.exception("pistes: EDGAR 13D hors de portée")
 
     leads.sort(key=lambda lead: -lead.weight)
     out = MarketLeadsResponse(

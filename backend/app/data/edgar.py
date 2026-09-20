@@ -1,10 +1,12 @@
 """SEC EDGAR: what insiders and large funds declare, read from the filings.
 
-Two forms, public and keyless. Form 4: an officer, director or 10 % holder
+Three forms, public and keyless. Form 4: an officer, director or 10 % holder
 bought or sold shares of their own company, filed within two business days.
 13F-HR: a manager above 100 M$ lists its US holdings, 45 days after each
-quarter. The daily index names every filing of a day by form type; a filing
-is one document, fetched on its own. The SEC asks for an identified
+quarter. Schedule 13D: whoever crosses 5 % of a company with an intent says
+so within five days, in structured XML since December 2024. The daily index
+names every filing of a day by form type; a filing is one document, fetched
+on its own. The SEC asks for an identified
 User-Agent and at most ten requests a second: `_paced` keeps under it.
 
 The XML inside a filing follows a fixed schema written by machines, so the
@@ -79,11 +81,16 @@ def daily_index(day: date, form: str) -> list[IndexEntry]:
 
 
 def parse_index(body: str, form: str) -> list[IndexEntry]:
-    """Lines of `form.YYYYMMDD.idx`: form type, company, CIK, date, file name — space-aligned."""
+    """Lines of `form.YYYYMMDD.idx`: form type, company, CIK, date, file name — space-aligned.
+
+    A form type may itself hold a space (« SCHEDULE 13D »), so it is matched
+    word by word; « SCHEDULE 13D/A » is another word and never matches it.
+    """
+    words = form.split()
     out: list[IndexEntry] = []
     for line in body.splitlines():
         parts = line.split()
-        if len(parts) < 5 or parts[0] != form:
+        if len(parts) < len(words) + 4 or parts[: len(words)] != words:
             continue
         path, filed, cik = parts[-1], parts[-2], parts[-3]
         if not (cik.isdigit() and filed.isdigit() and path.startswith("edgar/data/")):
@@ -91,7 +98,7 @@ def parse_index(body: str, form: str) -> list[IndexEntry]:
         out.append(
             IndexEntry(
                 form=form,
-                company=" ".join(parts[1:-3]),
+                company=" ".join(parts[len(words) : -3]),
                 cik=int(cik),
                 filed=date(int(filed[:4]), int(filed[4:6]), int(filed[6:8])),
                 path=path,
@@ -191,6 +198,78 @@ def _text(block: str, tag: str) -> str:
 
 def _flag(block: str, tag: str) -> bool:
     return _text(block, tag).lower() in {"1", "true"}
+
+
+# ── Schedule 13D ────────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class ReportingPerson:
+    name: str
+    cik: int  # 0 when the person has none
+    percent: float  # of the class, 14.7 for 14.7 %
+    shares: float
+
+
+@dataclass(frozen=True)
+class Schedule13D:
+    accession: str  # with dashes, as the index prints it
+    issuer: str
+    issuer_cik: int
+    cusip: str
+    event_day: str  # YYYY-MM-DD, when the threshold was crossed
+    persons: tuple[ReportingPerson, ...]
+
+    @property
+    def folder(self) -> str:
+        return (
+            f"{config().edgar.archives_url}/edgar/data/{self.issuer_cik}"
+            f"/{self.accession.replace('-', '')}"
+        )
+
+
+def schedule_13d(entry: IndexEntry) -> Schedule13D | None:
+    """One Schedule 13D, or None when the document is not the structured form."""
+    body = _get(f"{config().edgar.archives_url}/{entry.path}", ttl_hours=0, cache=False)
+    return parse_13d(body, accession=entry.accession)
+
+
+_SCHEDULE_13D = re.compile(r"<edgarSubmission[^>]*schedule13D.*?</edgarSubmission>", re.S)
+_PERSON = re.compile(r"<reportingPersonInfo>(.*?)</reportingPersonInfo>", re.S)
+
+
+def parse_13d(body: str, *, accession: str) -> Schedule13D | None:
+    found = _SCHEDULE_13D.search(body)
+    if found is None:
+        return None
+    doc = found.group(0)
+    persons: list[ReportingPerson] = []
+    for block in _PERSON.findall(doc):
+        try:
+            persons.append(
+                ReportingPerson(
+                    name=_text(block, "reportingPersonName"),
+                    cik=int(_text(block, "reportingPersonCIK") or 0),
+                    percent=float(_text(block, "percentOfClass") or 0),
+                    shares=float(_text(block, "aggregateAmountOwned") or 0),
+                )
+            )
+        except ValueError:
+            continue
+    return Schedule13D(
+        accession=accession,
+        issuer=_text(doc, "issuerName"),
+        issuer_cik=int(_text(doc, "issuerCIK") or 0),
+        cusip=_text(doc, "issuerCusipNumber"),
+        event_day=_iso_day(_text(doc, "dateOfEvent")),
+        persons=tuple(persons),
+    )
+
+
+def _iso_day(us: str) -> str:
+    """« 09/18/2026 », as the cover page writes it, to « 2026-09-18 »; anything else as is."""
+    found = re.fullmatch(r"(\d{2})/(\d{2})/(\d{4})", us.strip())
+    return f"{found.group(3)}-{found.group(1)}-{found.group(2)}" if found else us.strip()
 
 
 # ── 13F-HR ──────────────────────────────────────────────────────────────────

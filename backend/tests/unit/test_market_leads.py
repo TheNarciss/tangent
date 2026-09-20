@@ -86,6 +86,45 @@ TABLE_13F = """<informationTable xmlns="http://www.sec.gov/edgar/document/thirte
 </informationTable>
 """
 
+INDEX_13D = """Form Type   Company Name                                                  CIK         Date Filed  File Name
+---------------------------------------------------------------------------------------------------------------
+SCHEDULE 13D     Strategic Value Partners, LLC                                 1301912     20260918    edgar/data/1301912/0001193805-26-001000.txt
+SCHEDULE 13D/A   Some Amender                                                  1000002     20260918    edgar/data/1000002/0001000002-26-000002.txt
+SCHEDULE 13G     Some Passive                                                  1000003     20260918    edgar/data/1000003/0001000003-26-000003.txt
+"""
+
+SCHEDULE_13D = """<SEC-DOCUMENT>0001193805-26-001000.txt : 20260918
+<XML>
+<edgarSubmission xmlns="http://www.sec.gov/edgar/schedule13D" xmlns:com="http://www.sec.gov/edgar/common">
+  <formData>
+    <coverPageHeader>
+      <securitiesClassTitle>Common Stock</securitiesClassTitle>
+      <dateOfEvent>09/16/2026</dateOfEvent>
+      <issuerInfo>
+        <issuerCIK>0000807882</issuerCIK>
+        <issuerCusips><issuerCusipNumber>466367109</issuerCusipNumber></issuerCusips>
+        <issuerName>JACK IN THE BOX INC</issuerName>
+      </issuerInfo>
+    </coverPageHeader>
+    <reportingPersons>
+      <reportingPersonInfo>
+        <reportingPersonCIK>0001517137</reportingPersonCIK>
+        <reportingPersonName>Starboard Value LP</reportingPersonName>
+        <aggregateAmountOwned>1500000.00</aggregateAmountOwned>
+        <percentOfClass>7.90</percentOfClass>
+      </reportingPersonInfo>
+      <reportingPersonInfo>
+        <reportingPersonCIK>0001517138</reportingPersonCIK>
+        <reportingPersonName>Starboard Value GP LLC</reportingPersonName>
+        <aggregateAmountOwned>1500000.00</aggregateAmountOwned>
+        <percentOfClass>7.90</percentOfClass>
+      </reportingPersonInfo>
+    </reportingPersons>
+  </formData>
+</edgarSubmission>
+</XML>
+"""
+
 GAMMA_EVENT = {
     "id": "481717",
     "title": "Fed Decision in September?",
@@ -121,6 +160,65 @@ def test_index_keeps_the_exact_form_type_and_reads_names_with_spaces():
     assert entries[0].filed == date(2026, 9, 14)
     assert entries[0].accession == "0001023731-26-000151"
     assert entries[1].company.startswith("2025 Irrevocable")
+
+
+def test_index_matches_a_form_type_written_in_two_words():
+    entries = edgar.parse_index(INDEX_13D, "SCHEDULE 13D")
+    assert [(e.company, e.cik, e.accession) for e in entries] == [
+        ("Strategic Value Partners, LLC", 1301912, "0001193805-26-001000")
+    ]
+    assert edgar.parse_index(INDEX_13D, "SCHEDULE 13G")[0].company == "Some Passive"
+
+
+def test_13d_reads_issuer_event_day_and_every_reporting_person():
+    filing = edgar.parse_13d(SCHEDULE_13D, accession="0001193805-26-001000")
+    assert filing is not None
+    assert (filing.issuer, filing.issuer_cik, filing.cusip) == (
+        "JACK IN THE BOX INC",
+        807882,
+        "466367109",
+    )
+    assert filing.event_day == "2026-09-16"
+    assert [(p.name, p.cik, p.percent, p.shares) for p in filing.persons] == [
+        ("Starboard Value LP", 1517137, 7.9, 1_500_000.0),
+        ("Starboard Value GP LLC", 1517138, 7.9, 1_500_000.0),
+    ]
+    assert filing.folder.endswith("/edgar/data/807882/000119380526001000")
+    assert edgar.parse_13d("<html>an old free-form 13D</html>", accession="x") is None
+
+
+def test_activist_leads_keep_followed_filers_only_and_remember_the_filing(monkeypatch):
+    entries = edgar.parse_index(INDEX_13D, "SCHEDULE 13D")
+    monkeypatch.setattr(market_leads.edgar, "daily_index", lambda day, form: entries)
+    monkeypatch.setattr(
+        market_leads.edgar,
+        "schedule_13d",
+        lambda entry: edgar.parse_13d(SCHEDULE_13D, accession=entry.accession),
+    )
+    rules = market_leads.ActivistRules(
+        followed=[market_leads.Manager(name="Starboard Value", cik=1517137)],
+        index_lookback_days=2,
+    )
+    leads, state = market_leads.activist_leads(rules, {}, date(2026, 9, 20))
+    assert [lead.title for lead in leads] == ["Starboard Value : 7.9 % de Jack In The Box Inc"]
+    assert leads[0].kind == "activist_stake" and leads[0].observed_at == "2026-09-18"
+    assert "seuil franchi le 2026-09-16" in leads[0].detail
+    assert set(state["seen"]) == {"0001193805-26-001000"}
+
+    # A second night: the filing is remembered, the lead is kept, nothing is fetched.
+    monkeypatch.setattr(
+        market_leads.edgar, "schedule_13d", lambda entry: (_ for _ in ()).throw(AssertionError)
+    )
+    again, _ = market_leads.activist_leads(rules, state, date(2026, 9, 21))
+    assert [lead.title for lead in again] == [lead.title for lead in leads]
+
+    monkeypatch.setattr(
+        market_leads.edgar,
+        "schedule_13d",
+        lambda entry: edgar.parse_13d(SCHEDULE_13D, accession=entry.accession),
+    )
+    nobody = market_leads.ActivistRules(followed=[market_leads.Manager(name="X", cik=1)])
+    assert market_leads.activist_leads(nobody, {}, date(2026, 9, 20))[0] == []
 
 
 def test_form4_reads_issuer_owner_and_transactions_through_value_tags():
@@ -386,11 +484,15 @@ def test_refresh_survives_a_source_down_and_serves_from_memory(monkeypatch, tmp_
         lambda rules, state, today: (_ for _ in ()).throw(OSError("x")),
     )
     monkeypatch.setattr(market_leads, "fund_leads", lambda rules, state, today: ([], {"kept": 1}))
+    monkeypatch.setattr(market_leads, "activist_leads", lambda rules, state, today: ([], {}))
 
     out = market_leads.refresh(date(2026, 9, 15))
 
     assert [lead.title for lead in out.leads] == ["t"]
-    assert json.loads((tmp_path / "state.json").read_text()) == {"funds": {"kept": 1}}
+    assert json.loads((tmp_path / "state.json").read_text()) == {
+        "funds": {"kept": 1},
+        "activists": {},
+    }
     assert market_leads.load() is not None
     assert market_leads.load().leads[0].title == "t"
 

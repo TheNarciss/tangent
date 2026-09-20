@@ -1116,7 +1116,7 @@ export async function generateReviewNow(): Promise<void> {
 
 /* ── Market leads (ADR-033) ─────────────────────────────────────────── */
 
-export type MarketLeadSource = "polymarket" | "edgar_form4" | "edgar_13f";
+export type MarketLeadSource = "polymarket" | "edgar_form4" | "edgar_13f" | "edgar_13d";
 
 export interface MarketLead {
   source: MarketLeadSource;

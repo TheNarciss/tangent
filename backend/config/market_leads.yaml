@@ -64,6 +64,10 @@ funds:
     - { name: "Renaissance Technologies", cik: 1037389 }
     - { name: "Soros Fund Management", cik: 1029160 }
     - { name: "Viking Global", cik: 1103804 }
+    - { name: "Elliott Investment Management", cik: 1791786 }
+    - { name: "Norges Bank", cik: 1374170 }
+    - { name: "Fundsmith", cik: 1569205 }
+    - { name: "Baillie Gifford", cik: 1088875 }
   min_position_usd: 100000000    # une ligne plus petite ne dit rien d'un tel gérant
   min_change_pct: 0.25           # variation du nombre de titres pour parler d'un mouvement
   max_leads_per_filing: 6
@@ -71,3 +75,29 @@ funds:
   # quelques jours : le dernier tableau reste lisible jusqu'à ce que le
   # suivant le remplace, daté du jour du dépôt.
   keep_days: 100
+
+activists:
+  # Quiconque franchit 5 % d'une société avec une intention le déclare sous
+  # cinq jours (Schedule 13D). Une poignée de dépôts par jour, presque tous
+  # sur des micro-capitalisations : seuls les déclarants suivis ici font une
+  # piste. Un CIK identifie l'entité qui signe le dépôt.
+  followed:
+    - { name: "Elliott", cik: 1791786 }
+    - { name: "Starboard Value", cik: 1517137 }
+    - { name: "Carl Icahn", cik: 921669 }
+    - { name: "Trian", cik: 1345471 }
+    - { name: "ValueAct", cik: 1418814 }
+    - { name: "ValueAct", cik: 1464912 }
+    - { name: "JANA Partners", cik: 1998597 }
+    - { name: "Cevian Capital", cik: 1365341 }
+    - { name: "Engaged Capital", cik: 1559771 }
+    - { name: "Ancora", cik: 1836192 }
+    - { name: "Sachem Head", cik: 1582090 }
+    - { name: "Corvex", cik: 1535472 }
+    - { name: "Mantle Ridge", cik: 1695459 }
+    - { name: "Politan Capital", cik: 1885245 }
+    - { name: "Oasis Management", cik: 1317904 }
+    - { name: "Pershing Square", cik: 1336528 }
+    - { name: "Third Point", cik: 1040273 }
+  keep_days: 30                  # une prise de participation reste une piste ce temps
+  index_lookback_days: 4         # même fenêtre que les Form 4, même raison

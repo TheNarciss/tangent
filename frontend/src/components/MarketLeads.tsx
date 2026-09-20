@@ -57,7 +57,7 @@ export function MarketLeads() {
 
       {/* One filter row above everything it scopes. */}
       <div className="flex flex-wrap items-center gap-1 rounded-md border p-0.5 text-xs">
-        {(["all", "polymarket", "edgar_form4", "edgar_13f"] as const).map((key) => (
+        {(["all", "polymarket", "edgar_form4", "edgar_13f", "edgar_13d"] as const).map((key) => (
           <button
             key={key}
             type="button"
@@ -116,6 +116,7 @@ const SOURCE_KEYS: Record<MarketLeadSource, MessageKey> = {
   polymarket: "market.leads.source.polymarket",
   edgar_form4: "market.leads.source.edgar_form4",
   edgar_13f: "market.leads.source.edgar_13f",
+  edgar_13d: "market.leads.source.edgar_13d",
 };
 
 const KIND_KEYS: Record<string, MessageKey> = {
@@ -126,6 +127,7 @@ const KIND_KEYS: Record<string, MessageKey> = {
   fund_new_position: "market.leads.kind.fund_new_position",
   fund_exit: "market.leads.kind.fund_exit",
   fund_change: "market.leads.kind.fund_change",
+  activist_stake: "market.leads.kind.activist_stake",
 };
 
 function sourceLabel(source: MarketLeadSource): string {

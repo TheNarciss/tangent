@@ -91,11 +91,10 @@ const fr = {
     "Ce que ce n'est pas : un pronostic ni une promesse. L'historique est calculé sur les constituants d'aujourd'hui, donc flatté, et une année à −45 % reste possible. Si tu ne veux pas t'en occuper à chaque revue, ne prends pas cette poche : l'ETF monde suffit.",
 
   // ── Pistes de marché (MarketLeads.tsx) ────────────────────────────────
-  "market.leads.introBefore":
-    "Chaque nuit, Tangent lit trois sources publiques de ce que des gens ",
+  "market.leads.introBefore": "Chaque nuit, Tangent lit des sources publiques de ce que des gens ",
   "market.leads.introStrong": "font de leur argent",
   "market.leads.introAfter":
-    " : les paris qui bougent sur Polymarket, les dirigeants qui achètent l'action de leur propre société, les grands gérants qui ouvrent ou soldent une ligne. Tout ce qui dépasse un seuil est ici, sans tri.",
+    " : les paris qui bougent sur Polymarket, les dirigeants qui achètent l'action de leur propre société, les grands gérants qui ouvrent ou soldent une ligne, les activistes qui déclarent plus de 5 % d'une société. Tout ce qui dépasse un seuil est ici, sans tri.",
   "market.leads.noise":
     "C'est du bruit pour l'essentiel, et c'est voulu : ton briefing du matin en garde zéro à trois, avec la raison. Une piste est une chose à regarder, jamais un ordre d'acheter ou de vendre.",
   "market.leads.collected.one": "{count} piste collectée {when}.",
@@ -107,6 +106,7 @@ const fr = {
   "market.leads.source.polymarket": "Polymarket",
   "market.leads.source.edgar_form4": "SEC · dirigeants",
   "market.leads.source.edgar_13f": "SEC · gérants",
+  "market.leads.source.edgar_13d": "SEC · activistes",
   "market.leads.kind.prediction_move": "Cote qui a bougé",
   "market.leads.kind.prediction_state": "État des attentes",
   "market.leads.kind.insider_cluster": "Achats groupés",
@@ -114,6 +114,7 @@ const fr = {
   "market.leads.kind.fund_new_position": "Nouvelle ligne",
   "market.leads.kind.fund_exit": "Ligne soldée",
   "market.leads.kind.fund_change": "Ligne modifiée",
+  "market.leads.kind.activist_stake": "Plus de 5 %",
 
   "market.leads.emptySource":
     "Rien de cette source cette nuit : aucune observation n'a passé les seuils.",
@@ -224,10 +225,10 @@ const en: Record<keyof typeof fr, string> = {
     "What it is not: a forecast or a promise. The history is computed on today's constituents, so it is flattered, and a −45% year remains possible. If you do not want to deal with it at every review, skip this sleeve: the world ETF is enough.",
 
   // ── Market leads (MarketLeads.tsx) ────────────────────────────────────
-  "market.leads.introBefore": "Every night, Tangent reads three public sources of what people ",
+  "market.leads.introBefore": "Every night, Tangent reads public sources of what people ",
   "market.leads.introStrong": "do with their money",
   "market.leads.introAfter":
-    ": the odds moving on Polymarket, the executives buying their own company's shares, the large managers opening or closing a position. Everything above a threshold is here, unsorted.",
+    ": the odds moving on Polymarket, the executives buying their own company's shares, the large managers opening or closing a position, the activists declaring more than 5% of a company. Everything above a threshold is here, unsorted.",
   "market.leads.noise":
     "Most of it is noise, and that is deliberate: your morning briefing keeps zero to three of them, with the reason. A lead is something to look at, never an order to buy or sell.",
   "market.leads.collected.one": "{count} lead collected {when}.",
@@ -239,6 +240,7 @@ const en: Record<keyof typeof fr, string> = {
   "market.leads.source.polymarket": "Polymarket",
   "market.leads.source.edgar_form4": "SEC · insiders",
   "market.leads.source.edgar_13f": "SEC · managers",
+  "market.leads.source.edgar_13d": "SEC · activists",
   "market.leads.kind.prediction_move": "Odds that moved",
   "market.leads.kind.prediction_state": "State of expectations",
   "market.leads.kind.insider_cluster": "Cluster of purchases",
@@ -246,6 +248,7 @@ const en: Record<keyof typeof fr, string> = {
   "market.leads.kind.fund_new_position": "New position",
   "market.leads.kind.fund_exit": "Position closed",
   "market.leads.kind.fund_change": "Position changed",
+  "market.leads.kind.activist_stake": "Above 5%",
 
   "market.leads.emptySource":
     "Nothing from this source tonight: no observation passed the thresholds.",

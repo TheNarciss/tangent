@@ -612,8 +612,8 @@ class PicksTrackRecord(BaseModel):
 class MarketLead(BaseModel):
     """One thing worth a look, straight from a source; the briefing does the triage."""
 
-    source: str  # polymarket | edgar_form4 | edgar_13f
-    kind: str  # prediction_move | prediction_state | insider_cluster | insider_buy | fund_*
+    source: str  # polymarket | edgar_form4 | edgar_13f | edgar_13d
+    kind: str  # prediction_* | insider_cluster | insider_buy | fund_* | activist_stake
     title: str
     detail: str
     url: str
