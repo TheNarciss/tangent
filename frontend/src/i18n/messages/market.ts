@@ -67,6 +67,29 @@ const fr = {
   "market.picks.track.showTable": "Voir le tableau",
   "market.picks.track.year": "Année",
 
+  "market.picks.plain.title": "En clair",
+  "market.picks.plain.do":
+    "Concrètement : tu réserves 10 à 20 % de tes actions à cette poche, tu la répartis à parts égales sur les {count} titres ci-dessus, et tu n'y touches plus jusqu'au {date}. Ce jour-là, tu vends ce qui sort, tu achètes ce qui entre, et tu ne cherches pas à comprendre pourquoi : la règle ne le sait pas non plus.",
+  "market.picks.plain.doGuarded":
+    "Concrètement : aujourd'hui le frein est actif, la liste est vide et la poche reste en cash jusqu'au {date}. Il n'y a rien à acheter, et c'est voulu : c'est dans cette configuration que la méthode a le plus perdu par le passé.",
+  "market.picks.plain.pastBefore": "Ce que le passé dit : depuis {year}, ",
+  "market.picks.plain.perf.same":
+    "la règle a fait {cagr} par an, à peu près comme l'univers à poids égal ({universe})",
+  "market.picks.plain.perf.better":
+    "la règle a fait {cagr} par an, mieux que l'univers à poids égal ({universe})",
+  "market.picks.plain.perf.worse":
+    "la règle a fait {cagr} par an, moins que l'univers à poids égal ({universe})",
+  "market.picks.plain.pastAfter":
+    ". Sa pire chute a été de {drawdown}, contre {universeDrawdown} pour l'univers : c'est là qu'elle sert, plus que dans le rendement. ",
+  "market.picks.plain.negativeYears.one":
+    "{count} année sur {years} a été négative, la pire à {worst} en {worstYear}.",
+  "market.picks.plain.negativeYears.other":
+    "{count} années sur {years} ont été négatives, la pire à {worst} en {worstYear}.",
+  "market.picks.plain.cost":
+    "Ce que ça coûte : environ {turnover} des titres changent à chaque revue. Hors PEA, chaque vente gagnante est imposée ; dans un PEA, seuls les frais de courtage comptent. Le frein a été actif à {guarded} revues sur {reviews}.",
+  "market.picks.plain.not":
+    "Ce que ce n'est pas : un pronostic ni une promesse. L'historique est calculé sur les constituants d'aujourd'hui, donc flatté, et une année à −45 % reste possible. Si tu ne veux pas t'en occuper à chaque revue, ne prends pas cette poche : l'ETF monde suffit.",
+
   // ── Pistes de marché (MarketLeads.tsx) ────────────────────────────────
   "market.leads.introBefore":
     "Chaque nuit, Tangent lit trois sources publiques de ce que des gens ",
@@ -176,6 +199,29 @@ const en: Record<keyof typeof fr, string> = {
     "Return of each calendar year, round-trip costs deducted for the rule. Computed on today's constituents: flattered.",
   "market.picks.track.showTable": "Show the table",
   "market.picks.track.year": "Year",
+
+  "market.picks.plain.title": "In plain terms",
+  "market.picks.plain.do":
+    "Concretely: you set aside 10 to 20% of your equities for this sleeve, split it equally across the {count} stocks above, and leave it alone until {date}. On that day you sell what leaves, buy what enters, and do not try to understand why: the rule does not know either.",
+  "market.picks.plain.doGuarded":
+    "Concretely: the brake is on today, the list is empty and the sleeve stays in cash until {date}. There is nothing to buy, and that is the point: this is the configuration in which the method lost the most in the past.",
+  "market.picks.plain.pastBefore": "What the past says: since {year}, ",
+  "market.picks.plain.perf.same":
+    "the rule returned {cagr} a year, about the same as the equal-weight universe ({universe})",
+  "market.picks.plain.perf.better":
+    "the rule returned {cagr} a year, better than the equal-weight universe ({universe})",
+  "market.picks.plain.perf.worse":
+    "the rule returned {cagr} a year, less than the equal-weight universe ({universe})",
+  "market.picks.plain.pastAfter":
+    ". Its worst fall was {drawdown}, against {universeDrawdown} for the universe: that is where it helps, more than in the return. ",
+  "market.picks.plain.negativeYears.one":
+    "{count} year out of {years} was negative, the worst at {worst} in {worstYear}.",
+  "market.picks.plain.negativeYears.other":
+    "{count} years out of {years} were negative, the worst at {worst} in {worstYear}.",
+  "market.picks.plain.cost":
+    "What it costs: about {turnover} of the stocks change at each review. Outside a tax wrapper, every winning sale is taxed; inside one, only brokerage fees count. The brake was on at {guarded} reviews out of {reviews}.",
+  "market.picks.plain.not":
+    "What it is not: a forecast or a promise. The history is computed on today's constituents, so it is flattered, and a −45% year remains possible. If you do not want to deal with it at every review, skip this sleeve: the world ETF is enough.",
 
   // ── Market leads (MarketLeads.tsx) ────────────────────────────────────
   "market.leads.introBefore": "Every night, Tangent reads three public sources of what people ",
