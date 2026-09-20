@@ -20,11 +20,13 @@ from datetime import date
 import pandas as pd
 
 from . import (
+    cftc,
     damodaran,
     ecb,
     edgar,
     eurostat,
     fred,
+    kalshi,
     ken_french,
     lbma,
     openfigi,
@@ -160,6 +162,24 @@ def _edgar_form4() -> str:
     return "aucun index quotidien sur cinq jours"
 
 
+def _cftc() -> str:
+    weeks = cftc.positions("financial", "E-MINI S&P 500", weeks=52)
+    if not weeks:
+        return "aucune semaine pour l'E-mini S&P 500"
+    return (
+        f"E-mini S&P 500 au {weeks[0].day}: fonds à levier nets {weeks[0].net_share:+.0%} "
+        f"de l'intérêt ouvert, {len(weeks)} semaines"
+    )
+
+
+def _kalshi() -> str:
+    found = kalshi.markets("KXFEDDECISION")
+    if not found:
+        return "aucun marché ouvert sur la décision de la Fed"
+    top = max(found, key=lambda m: m.volume_24h)
+    return f"{len(found)} marchés ; le plus échangé : « {top.title} » à {top.yes_price:.0%}"
+
+
 def _edgar_13f() -> str:
     filings = edgar.filings_13f(1067983)  # Berkshire Hathaway
     if not filings:
@@ -212,6 +232,8 @@ PROBES: tuple[Probe, ...] = (
     Probe("polymarket", "Marchés Fed", _polymarket),
     Probe("edgar", "Form 4 du jour", _edgar_form4),
     Probe("edgar", "13F Berkshire", _edgar_13f),
+    Probe("cftc", "Positions S&P 500", _cftc),
+    Probe("kalshi", "Décision de la Fed", _kalshi),
 )
 
 

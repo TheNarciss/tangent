@@ -7,7 +7,7 @@ from datetime import date
 
 import pytest
 
-from app.data import edgar, polymarket
+from app.data import cftc, edgar, kalshi, polymarket
 from app.finance import market_leads
 from app.llm import prompt_builder
 from app.models import MarketLead
@@ -124,6 +124,65 @@ SCHEDULE_13D = """<SEC-DOCUMENT>0001193805-26-001000.txt : 20260918
 </edgarSubmission>
 </XML>
 """
+
+COT_ROWS = json.dumps(
+    [
+        {
+            "report_date_as_yyyy_mm_dd": "2026-09-15T00:00:00.000",
+            "lev_money_positions_long": "300000",
+            "lev_money_positions_short": "100000",
+            "open_interest_all": "2000000",
+        },
+        {  # the same week listed again for another exchange: ignored
+            "report_date_as_yyyy_mm_dd": "2026-09-15T00:00:00.000",
+            "lev_money_positions_long": "1",
+            "lev_money_positions_short": "1",
+            "open_interest_all": "1",
+        },
+        {
+            "report_date_as_yyyy_mm_dd": "2026-09-08T00:00:00.000",
+            "lev_money_positions_long": "150000",
+            "lev_money_positions_short": "200000",
+            "open_interest_all": "2000000",
+        },
+    ]
+)
+
+KALSHI_PAGE = json.dumps(
+    {
+        "markets": [
+            {
+                "ticker": "KXFEDDECISION-26OCT-H25",
+                "event_ticker": "KXFEDDECISION-26OCT",
+                "title": "Will the Fed hike by 25 bps in October 2026?",
+                "last_price_dollars": "0.5600",
+                "volume_24h_fp": "40000.00",
+                "open_interest_fp": "900000.00",
+                "close_time": "2026-10-28T18:00:00Z",
+            },
+            {
+                "ticker": "KXFEDDECISION-26OCT-N",
+                "event_ticker": "KXFEDDECISION-26OCT",
+                "title": "Will the Fed hold in October 2026?",
+                "last_price_dollars": "0",
+                "yes_bid_dollars": "0.40",
+                "yes_ask_dollars": "0.44",
+                "volume_24h_fp": "52000.00",
+                "open_interest_fp": "500000.00",
+                "close_time": "2026-10-28T18:00:00Z",
+            },
+            {
+                "ticker": "KXFEDDECISION-27APR-H25",
+                "event_ticker": "KXFEDDECISION-27APR",
+                "title": "Will the Fed hike in April 2027?",
+                "last_price_dollars": "0.1000",
+                "volume_24h_fp": "12.00",
+                "close_time": "2027-04-28T18:00:00Z",
+            },
+        ],
+        "cursor": "",
+    }
+)
 
 GAMMA_EVENT = {
     "id": "481717",
@@ -342,6 +401,87 @@ def test_daily_index_is_empty_when_the_sec_has_no_file_yet(monkeypatch):
     assert edgar.daily_index(date(2026, 9, 19), "4") == []
 
 
+def test_cot_rows_become_weeks_newest_first_and_a_duplicate_week_is_dropped():
+    weeks = cftc.parse_positions(COT_ROWS, "financial")
+    assert [(w.day, w.spec_long, w.spec_short) for w in weeks] == [
+        ("2026-09-15", 300_000.0, 100_000.0),
+        ("2026-09-08", 150_000.0, 200_000.0),
+    ]
+    assert weeks[0].net_share == 0.1 and weeks[1].net_share == -0.025
+
+
+def _week(day: str, net: float) -> cftc.Week:
+    return cftc.Week(
+        day=day, spec_long=1_000 * (1 + net), spec_short=1_000 * (1 - net), open_interest=2_000
+    )
+
+
+def test_positioning_flags_a_one_year_extreme_or_a_change_of_side_only():
+    rules = market_leads.PositioningRules(contracts=[], weeks=52, min_net_share=0.05)
+    gold = market_leads.Contract(name="GOLD", dataset="commodities", label="Or")
+    calm = [_week("2026-09-15", 0.10)] + [
+        _week(f"2026-0{i}-01", net) for i, net in ((1, 0.12), (2, 0.05), (3, 0.15), (4, 0.08))
+    ]
+    assert market_leads._positioning_lead(gold, calm, rules) is None
+
+    high = [_week("2026-09-15", 0.3), *calm[1:]]
+    lead = market_leads._positioning_lead(gold, high, rules)
+    assert lead is not None and lead.kind == "positioning_extreme"
+    assert lead.title == "Or : les spéculateurs jamais aussi acheteurs depuis un an"
+    assert "+30% de l'intérêt ouvert au 2026-09-15, contre +12%" in lead.detail
+    assert "gestion spéculative" in lead.detail
+
+    flip = [_week("2026-09-15", -0.08), _week("2026-09-08", 0.05), _week("2026-09-01", -0.20)]
+    lead = market_leads._positioning_lead(gold, flip + calm[1:], rules)
+    assert lead is not None and lead.kind == "positioning_flip"
+    assert lead.title == "Or : les spéculateurs passent vendeurs"
+
+    tiny = [_week("2026-09-15", 0.01)] + [_week("2026-08-01", 0.0)] * 4
+    assert market_leads._positioning_lead(gold, tiny, rules) is None
+    assert market_leads._positioning_lead(gold, high[:3], rules) is None  # too short
+
+
+def test_kalshi_markets_read_the_price_the_book_and_the_cursor():
+    page, cursor = kalshi.parse_markets(KALSHI_PAGE, "KXFEDDECISION")
+    assert cursor == ""
+    assert [(m.ticker, m.yes_price, m.volume_24h) for m in page] == [
+        ("KXFEDDECISION-26OCT-H25", 0.56, 40_000.0),
+        ("KXFEDDECISION-26OCT-N", 0.42, 52_000.0),
+        ("KXFEDDECISION-27APR-H25", 0.1, 12.0),
+    ]
+    assert page[0].url == "https://kalshi.com/markets/kxfeddecision"
+
+
+def test_kalshi_leads_remember_prices_and_read_the_move_a_week_later(monkeypatch):
+    page, _ = kalshi.parse_markets(KALSHI_PAGE, "KXFEDDECISION")
+    monkeypatch.setattr(market_leads.kalshi, "markets", lambda series: page)
+    rules = market_leads.KalshiRules(
+        series=["KXFEDDECISION"], min_volume_24h=1_000, min_week_move=0.15, max_state_leads=6
+    )
+    # First night: no memory, so only the state of expectations — the most
+    # traded market of the event, not the highest price. April is too thin.
+    leads, state = market_leads.kalshi_leads(rules, {}, date(2026, 9, 13))
+    assert [(lead.kind, lead.title) for lead in leads] == [
+        ("prediction_state", "Will the Fed hold in October 2026?")
+    ]
+    assert "à 42% de oui" in leads[0].detail and "92,000 $" in leads[0].detail
+    assert state["prices"]["KXFEDDECISION-26OCT-H25"] == {"2026-09-13": 0.56}
+
+    # A week later the hike went from 20 % to 56 %: a move, and the thin April market never counts.
+    state["prices"]["KXFEDDECISION-26OCT-H25"] = {"2026-09-13": 0.20}
+    leads, state = market_leads.kalshi_leads(rules, state, date(2026, 9, 20))
+    kinds = {lead.kind: lead for lead in leads}
+    assert kinds["prediction_move"].title == "Will the Fed hike by 25 bps in October 2026?"
+    assert kinds["prediction_move"].detail.startswith("56% de oui, +36 points en une semaine")
+    assert kinds["prediction_state"].title == "Will the Fed hold in October 2026?"
+    assert set(state["prices"]["KXFEDDECISION-26OCT-H25"]) == {"2026-09-13", "2026-09-20"}
+
+    # Memory is pruned: a price older than the window is forgotten.
+    state["prices"]["KXFEDDECISION-26OCT-H25"]["2026-08-01"] = 0.1
+    _, state = market_leads.kalshi_leads(rules, state, date(2026, 9, 21))
+    assert "2026-08-01" not in state["prices"]["KXFEDDECISION-26OCT-H25"]
+
+
 def _purchase(symbol: str, owner: str, amount: float, filed: str) -> dict:
     return {
         "accession": f"{symbol}-{owner}",
@@ -485,6 +625,8 @@ def test_refresh_survives_a_source_down_and_serves_from_memory(monkeypatch, tmp_
     )
     monkeypatch.setattr(market_leads, "fund_leads", lambda rules, state, today: ([], {"kept": 1}))
     monkeypatch.setattr(market_leads, "activist_leads", lambda rules, state, today: ([], {}))
+    monkeypatch.setattr(market_leads, "positioning_leads", lambda rules, today: [])
+    monkeypatch.setattr(market_leads, "kalshi_leads", lambda rules, state, today: ([], {}))
 
     out = market_leads.refresh(date(2026, 9, 15))
 
@@ -492,6 +634,7 @@ def test_refresh_survives_a_source_down_and_serves_from_memory(monkeypatch, tmp_
     assert json.loads((tmp_path / "state.json").read_text()) == {
         "funds": {"kept": 1},
         "activists": {},
+        "kalshi": {},
     }
     assert market_leads.load() is not None
     assert market_leads.load().leads[0].title == "t"

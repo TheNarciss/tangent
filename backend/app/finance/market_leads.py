@@ -1,9 +1,11 @@
 """« Pistes de marché » : ratisser large chaque nuit, laisser le briefing trier (ADR-033).
 
 Sources of what people who commit money declare, none of them a « signal »
-anyone typed by hand: bets on Polymarket that moved, insiders buying their
-own company's shares on the open market, large funds opening or closing a
-line in their 13F, known activists crossing 5 % of a company in a 13D. Every observation above the thresholds in
+anyone typed by hand: bets on Polymarket and Kalshi that moved, insiders
+buying their own company's shares on the open market, large funds opening
+or closing a line in their 13F, known activists crossing 5 % of a company
+in a 13D, futures speculators at a one-year extreme in the CFTC's weekly
+count. Every observation above the thresholds in
 `config/market_leads.yaml` becomes a lead, written to `data/market_leads.json`
 with the raw numbers. Most of it is noise, on purpose: the morning briefing
 reads the list and keeps zero to three, with the reason. Nothing here is a
@@ -22,7 +24,7 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, Field
 
-from ..data import edgar, polymarket
+from ..data import cftc, edgar, kalshi, polymarket
 from ..errors import ConfigurationError, DataSourceError
 from ..models import MarketLead, MarketLeadsResponse
 
@@ -75,11 +77,34 @@ class ActivistRules(BaseModel):
     index_lookback_days: int = Field(4, ge=1)
 
 
+class Contract(BaseModel):
+    name: str  # as the CFTC writes it
+    dataset: str = Field(pattern="^(financial|commodities)$")
+    label: str
+
+
+class PositioningRules(BaseModel):
+    contracts: list[Contract]
+    weeks: int = Field(52, ge=4)
+    min_net_share: float = Field(0.05, ge=0, le=1)
+
+
+class KalshiRules(BaseModel):
+    series: list[str]
+    min_volume_24h: float = Field(2_000, ge=0)
+    min_week_move: float = Field(0.15, ge=0, le=1)
+    min_days_to_resolution: int = Field(14, ge=0)
+    max_state_leads: int = Field(6, ge=0)
+    price_memory_days: int = Field(10, ge=8)
+
+
 class LeadsConfig(BaseModel):
     polymarket: PolymarketRules
     insiders: InsiderRules
     funds: FundRules
     activists: ActivistRules
+    positioning: PositioningRules
+    kalshi: KalshiRules
 
 
 @lru_cache(maxsize=1)
@@ -489,6 +514,180 @@ def _activist_lead(
     )
 
 
+# ── Futures positioning (CFTC) ──────────────────────────────────────────────
+
+_COT_URL = "https://publicreporting.cftc.gov/stories/s/Commitments-of-Traders/r4w3-av2u/"
+
+
+def positioning_leads(rules: PositioningRules, today: date) -> list[MarketLead]:
+    """Speculators at a one-year extreme, or changing side, contract by contract."""
+    out: list[MarketLead] = []
+    for contract in rules.contracts:
+        try:
+            weeks = cftc.positions(contract.dataset, contract.name, weeks=rules.weeks)
+        except DataSourceError as exc:
+            logger.warning("cftc %s: %s", contract.name, exc)
+            continue
+        lead = _positioning_lead(contract, weeks, rules)
+        if lead is not None:
+            out.append(lead)
+    return out
+
+
+def _positioning_lead(
+    contract: Contract, weeks: list[cftc.Week], rules: PositioningRules
+) -> MarketLead | None:
+    if len(weeks) < 4:
+        return None
+    latest, previous = weeks[0], weeks[1]
+    net, before = latest.net_share, previous.net_share
+    history = [w.net_share for w in weeks[1:]]
+    side = "acheteurs" if net > 0 else "vendeurs"
+    detail = (
+        f"Position nette des spéculateurs : {net:+.0%} de l'intérêt ouvert au {latest.day}, "
+        f"contre {before:+.0%} la semaine d'avant ({'fonds à levier' if contract.dataset == 'financial' else 'gestion spéculative'}, CFTC)."
+    )
+    if abs(net) >= rules.min_net_share and (net >= max(history) or net <= min(history)):
+        return MarketLead(
+            source="cftc",
+            kind="positioning_extreme",
+            title=f"{contract.label} : les spéculateurs jamais aussi {side} depuis un an",
+            detail=detail,
+            url=_COT_URL,
+            observed_at=latest.day,
+            weight=0.5,
+        )
+    if net * before < 0 and abs(net) >= rules.min_net_share:
+        return MarketLead(
+            source="cftc",
+            kind="positioning_flip",
+            title=f"{contract.label} : les spéculateurs passent {side}",
+            detail=detail,
+            url=_COT_URL,
+            observed_at=latest.day,
+            weight=0.4,
+        )
+    return None
+
+
+# ── Kalshi ──────────────────────────────────────────────────────────────────
+
+
+def kalshi_leads(
+    rules: KalshiRules, state: dict[str, Any], today: date
+) -> tuple[list[MarketLead], dict[str, Any]]:
+    """Bets that moved this week and the state of the most traded ones, with a price memory.
+
+    Kalshi does not say how far a price moved, so the state keeps each
+    market's price by day for `price_memory_days`; the move is against the
+    price a week ago. The first week only has states to give.
+    """
+    prices: dict[str, dict[str, float]] = {
+        t: dict(days) for t, days in (state.get("prices") or {}).items()
+    }
+    floor = (today - timedelta(days=rules.price_memory_days)).isoformat()
+    day = today.isoformat()
+    events: dict[str, list[kalshi.Market]] = {}
+    for series in rules.series:
+        try:
+            found = kalshi.markets(series)
+        except DataSourceError as exc:
+            logger.warning("kalshi %s: %s", series, exc)
+            continue
+        for m in found:
+            prices.setdefault(m.ticker, {})[day] = m.yes_price
+            events.setdefault(m.event_ticker, []).append(m)
+    prices = {
+        t: {d: p for d, p in days.items() if d >= floor}
+        for t, days in prices.items()
+        if any(d >= floor for d in days)
+    }
+    return _kalshi_leads(list(events.values()), prices, rules, today), {"prices": prices}
+
+
+def _week_ago(prices: dict[str, float], today: date) -> float | None:
+    """The price recorded a week ago, or the latest one before that."""
+    limit = (today - timedelta(days=7)).isoformat()
+    earlier = [d for d in prices if d <= limit]
+    return prices[max(earlier)] if earlier else None
+
+
+def _kalshi_leads(
+    events: list[list[kalshi.Market]],
+    prices: dict[str, dict[str, float]],
+    rules: KalshiRules,
+    today: date,
+) -> list[MarketLead]:
+    day = today.isoformat()
+    # An event is one question with several markets (hold, hike, cut…; or the
+    # rungs of a ladder): traded or not as a whole, settled as a whole.
+    kept: list[list[kalshi.Market]] = []
+    for markets in events:
+        markets = [
+            m
+            for m in markets
+            if not _closes_too_soon(m.close_time, rules.min_days_to_resolution, today)
+        ]
+        if markets and sum(m.volume_24h for m in markets) >= rules.min_volume_24h:
+            kept.append(markets)
+
+    def move(m: kalshi.Market) -> float:
+        old = _week_ago(prices.get(m.ticker, {}), today)
+        return m.yes_price - old if old is not None else 0.0
+
+    out: list[MarketLead] = []
+    for markets in kept:
+        m = max(markets, key=lambda m: abs(move(m)))
+        delta = move(m)
+        if abs(delta) >= rules.min_week_move:
+            out.append(
+                MarketLead(
+                    source="kalshi",
+                    kind="prediction_move",
+                    title=m.title,
+                    detail=(
+                        f"{m.yes_price:.0%} de oui, {delta * 100:+.0f} points en une semaine, "
+                        f"{m.volume_24h:,.0f} $ échangés en 24 h"
+                    ),
+                    url=m.url,
+                    observed_at=day,
+                    weight=min(1.0, abs(delta) / 0.5),
+                )
+            )
+    ranked = sorted(kept, key=lambda ms: -sum(m.volume_24h for m in ms))
+    for markets in ranked[: rules.max_state_leads]:
+        # The market people actually trade: on a ladder of thresholds, the
+        # contested rung; on a decision, the outcome in play. The highest
+        # price would name the lowest rung, at 99 %, and say nothing.
+        lead = max(markets, key=lambda m: m.volume_24h)
+        delta = move(lead)
+        out.append(
+            MarketLead(
+                source="kalshi",
+                kind="prediction_state",
+                title=lead.title,
+                detail=(
+                    f"Le marché le plus échangé de l'événement, à {lead.yes_price:.0%} de oui, "
+                    f"{delta * 100:+.0f} points sur la semaine, "
+                    f"{sum(m.volume_24h for m in markets):,.0f} $ échangés en 24 h sur l'événement"
+                ),
+                url=lead.url,
+                observed_at=day,
+                weight=0.3,
+            )
+        )
+    return out
+
+
+def _closes_too_soon(close_time: str, min_days: int, today: date) -> bool:
+    if not close_time:
+        return False
+    try:
+        return (date.fromisoformat(close_time[:10]) - today).days < min_days
+    except ValueError:
+        return False
+
+
 # ── Store ───────────────────────────────────────────────────────────────────
 
 
@@ -528,6 +727,15 @@ def refresh(today: date | None = None) -> MarketLeadsResponse:
         leads.extend(found)
     except Exception:
         logger.exception("pistes: EDGAR 13D hors de portée")
+    try:
+        leads.extend(positioning_leads(cfg.positioning, today))
+    except Exception:
+        logger.exception("pistes: CFTC hors de portée")
+    try:
+        found, state["kalshi"] = kalshi_leads(cfg.kalshi, state.get("kalshi") or {}, today)
+        leads.extend(found)
+    except Exception:
+        logger.exception("pistes: Kalshi hors de portée")
 
     leads.sort(key=lambda lead: -lead.weight)
     out = MarketLeadsResponse(
