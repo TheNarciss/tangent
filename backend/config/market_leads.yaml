@@ -101,3 +101,43 @@ activists:
     - { name: "Third Point", cik: 1040273 }
   keep_days: 30                  # une prise de participation reste une piste ce temps
   index_lookback_days: 4         # même fenêtre que les Form 4, même raison
+
+positioning:
+  # Positions hebdomadaires des grands intervenants sur les contrats à terme
+  # (CFTC, chaque vendredi pour le mardi) : les fonds à levier sur les
+  # contrats financiers, la gestion spéculative sur les matières premières.
+  # Piste quand leur position nette, en part de l'intérêt ouvert, est au
+  # plus haut ou au plus bas depuis un an, ou change de camp.
+  contracts:
+    - { name: "E-MINI S&P 500", dataset: financial, label: "S&P 500" }
+    - { name: "NASDAQ MINI", dataset: financial, label: "Nasdaq 100" }
+    - { name: "UST 10Y NOTE", dataset: financial, label: "Obligations US à 10 ans" }
+    - { name: "UST 2Y NOTE", dataset: financial, label: "Obligations US à 2 ans" }
+    - { name: "EURO FX", dataset: financial, label: "Euro contre dollar" }
+    - { name: "VIX FUTURES", dataset: financial, label: "Volatilité (VIX)" }
+    - { name: "BITCOIN", dataset: financial, label: "Bitcoin" }
+    - { name: "GOLD", dataset: commodities, label: "Or" }
+    - { name: "CRUDE OIL, LIGHT SWEET-WTI", dataset: commodities, label: "Pétrole WTI" }
+    - { name: "COPPER- #1", dataset: commodities, label: "Cuivre" }
+  weeks: 52                      # la fenêtre du « depuis un an »
+  min_net_share: 0.05            # en dessous, la position n'est pas un parti pris
+
+kalshi:
+  # Marché de prédiction régulé, lu série par série : la décision de la Fed,
+  # le CPI du mois, le chômage, l'emploi, le PIB, les hausses de l'année.
+  # Kalshi ne dit pas de combien une cote a bougé : le job mémorise les
+  # prix quelques jours et compare à une semaine plus tôt.
+  series:
+    - KXFEDDECISION
+    - KXRATEHIKE
+    - KXCPI
+    - KXCPIYOY
+    - KXCPICOREYOY
+    - KXU3
+    - KXPAYROLLS
+    - KXGDP
+  min_volume_24h: 2000           # en contrats d'un dollar ; Kalshi est plus petit que Polymarket
+  min_week_move: 0.15
+  min_days_to_resolution: 14
+  max_state_leads: 6
+  price_memory_days: 10

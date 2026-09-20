@@ -133,3 +133,18 @@ edgar:
   archives_url: "https://www.sec.gov/Archives"
   submissions_url: "https://data.sec.gov/submissions"
   min_seconds_between_requests: 0.12
+
+cftc:
+  # Commitments of Traders : chaque vendredi, les positions du mardi des
+  # grands intervenants sur les contrats à terme, par catégorie. Portail
+  # open data (Socrata), sans clé. Deux rapports : les contrats financiers
+  # (indices, taux, devises) et les matières premières.
+  base_url: "https://publicreporting.cftc.gov/resource"
+  financial_dataset: "gpe5-46if"     # Traders in Financial Futures, futures only
+  commodities_dataset: "72hh-3qpy"   # Disaggregated, futures only
+
+kalshi:
+  # Marché de prédiction régulé (CFTC), lu pour ses séries économiques :
+  # décision de la Fed, CPI du mois, emploi, PIB. Données de marché
+  # publiques sans clé ; les cotes sont des probabilités.
+  base_url: "https://api.elections.kalshi.com/trade-api/v2"
