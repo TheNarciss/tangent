@@ -45,6 +45,7 @@ export function Picks() {
     <div className="space-y-6">
       <Rule data={data} />
       {data.guard_on ? <GuardOn data={data} /> : <TheList data={data} />}
+      <PlainTerms data={data} />
       <Track data={data} />
     </div>
   );
@@ -169,6 +170,73 @@ function GuardOn({ data }: { data: PicksResponse }) {
           {t("market.picks.guard.toSell", { list: data.sold.join(", ") })}
         </p>
       )}
+    </section>
+  );
+}
+
+/* ── In plain terms ────────────────────────────────────────────────────── */
+
+/** Within one point a year, the rule and its universe did « about the same ». */
+const SAME_CAGR_BAND = 0.01;
+
+/**
+ * The conclusion, written from the numbers below: what to do with the list,
+ * what the track record says and does not say, what it costs. Four short
+ * paragraphs, each starting with what it answers, so the screen reads on a
+ * phone without the chart.
+ */
+function PlainTerms({ data }: { data: PicksResponse }) {
+  const { t, tn } = useT();
+  const track = data.track_record;
+  const gap = track.cagr - track.universe_cagr;
+  const perfKey: MessageKey =
+    Math.abs(gap) < SAME_CAGR_BAND
+      ? "market.picks.plain.perf.same"
+      : gap > 0
+        ? "market.picks.plain.perf.better"
+        : "market.picks.plain.perf.worse";
+  const negative = track.yearly.filter((r) => r.strategy < 0);
+  const worst = track.yearly.reduce((a, b) => (b.strategy < a.strategy ? b : a), track.yearly[0]);
+  return (
+    <section className="rounded-xl border bg-card p-4 md:p-6">
+      <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        {t("market.picks.plain.title")}
+      </div>
+      <div className="mt-2 space-y-2 text-sm">
+        <p>
+          {data.guard_on
+            ? t("market.picks.plain.doGuarded", { date: dateLabel(data.next_review) })
+            : t("market.picks.plain.do", {
+                count: data.held.length,
+                date: dateLabel(data.next_review),
+              })}
+        </p>
+        <p>
+          {t("market.picks.plain.pastBefore", { year: track.since.slice(0, 4) })}
+          {t(perfKey, {
+            cagr: fmt.signedPct(track.cagr),
+            universe: fmt.signedPct(track.universe_cagr),
+          })}
+          {t("market.picks.plain.pastAfter", {
+            drawdown: fmt.pct0(track.max_drawdown),
+            universeDrawdown: fmt.pct0(track.universe_max_drawdown),
+          })}
+          {worst &&
+            tn("market.picks.plain.negativeYears", negative.length, {
+              years: track.yearly.length,
+              worst: fmt.signedPct(worst.strategy),
+              worstYear: worst.year,
+            })}
+        </p>
+        <p>
+          {t("market.picks.plain.cost", {
+            turnover: fmt.pct0(track.turnover),
+            guarded: track.guarded_reviews,
+            reviews: track.reviews,
+          })}
+        </p>
+        <p className="text-muted-foreground">{t("market.picks.plain.not")}</p>
+      </div>
     </section>
   );
 }
