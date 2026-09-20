@@ -43,6 +43,7 @@ class PolymarketRules(BaseModel):
     tags: list[str]
     min_volume_24h_usd: float = Field(25_000, ge=0)
     min_week_move: float = Field(0.15, ge=0, le=1)
+    min_days_to_resolution: int = Field(14, ge=0)
     max_state_leads: int = Field(8, ge=0)
 
 
@@ -52,6 +53,7 @@ class InsiderRules(BaseModel):
     cluster_days: int = Field(30, ge=1)
     min_insiders: int = Field(2, ge=1)
     keep_days: int = Field(45, ge=1)
+    index_lookback_days: int = Field(4, ge=1)
 
 
 class Manager(BaseModel):
@@ -104,40 +106,57 @@ def polymarket_leads(rules: PolymarketRules, today: date) -> list[MarketLead]:
     return _polymarket_leads(list(seen.values()), rules, today)
 
 
+def _resolves_too_soon(m: polymarket.Market, rules: PolymarketRules, today: date) -> bool:
+    """A bet settled within days (« Bitcoin above X on Friday? ») says nothing about a horizon."""
+    if not m.end_date:
+        return False
+    try:
+        end = date.fromisoformat(m.end_date[:10])
+    except ValueError:
+        return False
+    return (end - today).days < rules.min_days_to_resolution
+
+
 def _polymarket_leads(
     events: list[list[polymarket.Market]], rules: PolymarketRules, today: date
 ) -> list[MarketLead]:
     day = today.isoformat()
-    out: list[MarketLead] = []
+    kept: list[list[polymarket.Market]] = []
     for markets in events:
-        for m in markets:
-            if m.volume_24h_usd < rules.min_volume_24h_usd:
-                continue
-            if abs(m.week_change) >= rules.min_week_move:
-                out.append(
-                    MarketLead(
-                        source="polymarket",
-                        kind="prediction_move",
-                        title=m.event_title,
-                        detail=(
-                            f"« {m.question} » : {m.yes_price:.0%} de oui, "
-                            f"{m.week_change * 100:+.0f} points en une semaine, "
-                            f"{m.volume_24h_usd:,.0f} $ échangés en 24 h"
-                        ),
-                        url=m.url,
-                        observed_at=day,
-                        weight=min(1.0, abs(m.week_change) / 0.5),
-                    )
+        markets = [
+            m
+            for m in markets
+            if m.volume_24h_usd >= rules.min_volume_24h_usd
+            and not _resolves_too_soon(m, rules, today)
+        ]
+        if markets:
+            kept.append(markets)
+
+    out: list[MarketLead] = []
+    # One move per event, the largest: a price ladder (« will it reach 70, 80,
+    # 90 k? ») moves on every rung at once and is still one piece of news.
+    for markets in kept:
+        m = max(markets, key=lambda m: abs(m.week_change))
+        if abs(m.week_change) >= rules.min_week_move:
+            out.append(
+                MarketLead(
+                    source="polymarket",
+                    kind="prediction_move",
+                    title=m.event_title,
+                    detail=(
+                        f"« {m.question} » : {m.yes_price:.0%} de oui, "
+                        f"{m.week_change * 100:+.0f} points en une semaine, "
+                        f"{m.volume_24h_usd:,.0f} $ échangés en 24 h"
+                    ),
+                    url=m.url,
+                    observed_at=day,
+                    weight=min(1.0, abs(m.week_change) / 0.5),
                 )
+            )
     # The state of expectations: the most traded events, their leading outcome.
-    ranked = sorted(
-        (ms for ms in events if ms),
-        key=lambda ms: -sum(m.volume_24h_usd for m in ms),
-    )
+    ranked = sorted(kept, key=lambda ms: -sum(m.volume_24h_usd for m in ms))
     for markets in ranked[: rules.max_state_leads]:
         lead = max(markets, key=lambda m: m.yes_price)
-        if lead.volume_24h_usd < rules.min_volume_24h_usd:
-            continue
         out.append(
             MarketLead(
                 source="polymarket",
@@ -185,11 +204,13 @@ def _purchases_of(filing: edgar.Form4, rules: InsiderRules) -> list[dict[str, An
 def insider_leads(
     rules: InsiderRules, state: dict[str, Any], today: date
 ) -> tuple[list[MarketLead], dict[str, Any]]:
-    """Read the last two index days, remember the purchases, return clusters and big buys.
+    """Read the last index days, remember the purchases, return clusters and big buys.
 
-    The state remembers which filings were already read (a filing is one
-    request, a thousand a day) and the purchases kept, both pruned after
-    `keep_days`.
+    The SEC publishes a day's index around 02:00 UTC the next morning, after
+    this job has run: a day is readable two nights later at the earliest, so
+    the window looks back `index_lookback_days` and the state remembers which
+    filings were already read (a filing is one request, a thousand a day).
+    Purchases and the memory of filings are both pruned after `keep_days`.
     """
     seen: dict[str, str] = dict(state.get("seen") or {})
     purchases: list[dict[str, Any]] = list(state.get("purchases") or [])
@@ -197,7 +218,7 @@ def insider_leads(
     seen = {k: v for k, v in seen.items() if v >= floor}
     purchases = [p for p in purchases if (p.get("filed") or "") >= floor]
 
-    for day in (today - timedelta(days=1), today):
+    for day in (today - timedelta(days=k) for k in range(rules.index_lookback_days, 0, -1)):
         try:
             entries = edgar.daily_index(day, "4")
         except DataSourceError as exc:

@@ -69,7 +69,10 @@ def daily_index(day: date, form: str) -> list[IndexEntry]:
     try:
         body = _get(url, ttl_hours=24)
     except DataSourceError as exc:
-        if "404" in str(exc):
+        # No index for a weekend, and none yet for a day the SEC has not
+        # closed: it answers 403, not 404, and publishes a day's index around
+        # 02:00 UTC the next morning.
+        if "404" in str(exc) or "403" in str(exc):
             return []
         raise
     return parse_index(body, form)
