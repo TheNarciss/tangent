@@ -640,3 +640,30 @@ class PicksResponse(BaseModel):
     indices: list[str]
     top: int
     track_record: PicksTrackRecord
+
+
+# ════════════════════════════════════════════════════════════════════════════
+#  Quotes — one line's own price, at the scale the user picked
+# ════════════════════════════════════════════════════════════════════════════
+
+
+class QuotePoint(BaseModel):
+    t: str  # ISO-8601 with the exchange's offset
+    close: float
+
+
+class QuoteHistoryResponse(BaseModel):
+    symbol: str
+    name: str | None
+    currency: str
+    scale: str  # 1d | 1w | 1m | 6m | 1y | 5y | max
+    interval: str  # the bar size Yahoo served, e.g. 5m, 1d, 1wk
+    points: list[QuotePoint]
+    previous_close: float | None  # the close before the window; None when Yahoo omits it
+
+
+class QuoteMatch(BaseModel):
+    symbol: str
+    name: str
+    exchange: str
+    kind: str  # equity | etf | index

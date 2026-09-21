@@ -12,6 +12,7 @@ Failures are reported via the application's exception hierarchy:
 
 import hashlib
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -118,3 +119,145 @@ def _write_disk(key: tuple[str, str], prices: pd.DataFrame) -> None:
                 old.unlink(missing_ok=True)
     except Exception:
         logger.warning("cache disque non inscriptible: %s", _DIR)
+
+
+# ─── One line's own quote: its history at a chosen scale, and a name search ──
+#
+# What the price sheet and the « Cours » tab read. Unlike `fetch_prices`, a
+# call here is about one symbol at one scale, and the intraday scales go
+# stale in minutes rather than hours, so they get their own short cache.
+
+
+@dataclass(frozen=True)
+class Scale:
+    """One button of the price sheet: the Yahoo period and bar size behind it."""
+
+    period: str
+    interval: str
+    ttl: timedelta
+
+
+SCALES: dict[str, Scale] = {
+    "1d": Scale("1d", "5m", timedelta(minutes=5)),
+    "1w": Scale("5d", "15m", timedelta(minutes=5)),
+    "1m": Scale("1mo", "1h", timedelta(minutes=15)),
+    "6m": Scale("6mo", "1d", timedelta(hours=1)),
+    "1y": Scale("1y", "1d", timedelta(hours=1)),
+    "5y": Scale("5y", "1wk", timedelta(hours=12)),
+    "max": Scale("max", "1mo", timedelta(hours=12)),
+}
+
+
+@dataclass(frozen=True)
+class Point:
+    t: str  # ISO-8601 with the exchange's offset
+    close: float
+
+
+@dataclass(frozen=True)
+class History:
+    symbol: str
+    name: str | None
+    currency: str
+    scale: str
+    interval: str
+    points: list[Point]
+    previous_close: float | None  # the close before the window, for the 1-day change
+
+
+@dataclass(frozen=True)
+class Match:
+    symbol: str
+    name: str
+    exchange: str
+    kind: str  # equity | etf | index
+
+
+_HISTORY: dict[tuple[str, str], tuple[datetime, History]] = {}
+_SEARCH: dict[str, tuple[datetime, list[Match]]] = {}
+_SEARCH_TTL = timedelta(hours=1)
+_KINDS = {"EQUITY": "equity", "ETF": "etf", "INDEX": "index"}
+
+
+def history(symbol: str, scale: str) -> History:
+    """One symbol's closes at one scale, from Yahoo, cached per scale.
+
+    Raises:
+        TickerNotFoundError: when the scale is unknown or Yahoo has no bars.
+        MarketDataError: when Yahoo fails.
+    """
+    spec = SCALES.get(scale)
+    if spec is None:
+        raise TickerNotFoundError(f"Échelle inconnue: {scale}")
+    key = (symbol, scale)
+    cached = _HISTORY.get(key)
+    if cached and datetime.now() - cached[0] < spec.ttl:
+        return cached[1]
+
+    try:
+        ticker = yf.Ticker(symbol)
+        bars = ticker.history(period=spec.period, interval=spec.interval, auto_adjust=True)
+        meta = ticker.history_metadata or {}
+    except Exception as exc:
+        logger.exception("yfinance failure for %s", symbol)
+        raise MarketDataError(f"Échec de la récupération Yahoo Finance: {exc}") from exc
+
+    closes = (
+        bars["Close"].dropna() if bars is not None and "Close" in bars else pd.Series(dtype=float)
+    )
+    if closes.empty:
+        raise TickerNotFoundError(f"Yahoo Finance ne connaît pas {symbol}.")
+
+    out = History(
+        symbol=str(meta.get("symbol") or symbol),
+        name=meta.get("longName") or meta.get("shortName") or None,
+        currency=str(meta.get("currency") or ""),
+        scale=scale,
+        interval=spec.interval,
+        points=[Point(t=ts.isoformat(), close=float(c)) for ts, c in closes.items()],
+        previous_close=_number(meta.get("chartPreviousClose") or meta.get("previousClose")),
+    )
+    _HISTORY[key] = (datetime.now(), out)
+    return out
+
+
+def search(query: str, *, limit: int = 8) -> list[Match]:
+    """Shares, funds and indices whose name or symbol matches, best first.
+
+    Yahoo's own search box, so a user finds « air liquide » the same way they
+    would on the site. Never raises: a failure is an empty list, which the
+    screen shows as « rien trouvé ».
+    """
+    q = " ".join(query.split()).lower()
+    if not q:
+        return []
+    cached = _SEARCH.get(q)
+    if cached and datetime.now() - cached[0] < _SEARCH_TTL:
+        return cached[1]
+    try:
+        quotes = yf.Search(q, max_results=limit * 2, news_count=0).quotes
+    except Exception:
+        logger.warning("recherche Yahoo en échec pour %r", q)
+        return []
+    out = parse_search(quotes, limit=limit)
+    _SEARCH[q] = (datetime.now(), out)
+    return out
+
+
+def parse_search(quotes: list[dict], *, limit: int = 8) -> list[Match]:
+    """Yahoo's raw matches → what the screen lists, listed instruments only."""
+    out: list[Match] = []
+    for q in quotes:
+        kind = _KINDS.get(str(q.get("quoteType") or ""))
+        symbol = str(q.get("symbol") or "").strip()
+        name = str(q.get("longname") or q.get("shortname") or "").strip()
+        if not kind or not symbol or not name:
+            continue
+        out.append(Match(symbol, name, str(q.get("exchDisp") or q.get("exchange") or ""), kind))
+        if len(out) == limit:
+            break
+    return out
+
+
+def _number(value: object) -> float | None:
+    return float(value) if isinstance(value, (int, float)) else None

@@ -5,6 +5,7 @@ const fr = {
   "nav.accounts": "Comptes",
   "nav.spending": "Dépenses",
   "nav.investments": "Placements",
+  "nav.quotes": "Cours",
   "nav.picks": "La liste de l'année",
   "nav.leads": "Pistes de marché",
   "nav.projection": "Projection",
@@ -18,6 +19,7 @@ const fr = {
   "view.spending.subtitle": "Ce qui entre et sort de tes comptes courants, mois par mois",
   "view.projection.subtitle": "Où tu en seras, en euros d'aujourd'hui",
   "view.investments.subtitle": "Ce que tu détiens, le risque que tu prends, des pistes",
+  "view.quotes.subtitle": "Le cours d'une action ou d'un fonds, à l'échelle que tu veux",
   "view.picks.subtitle":
     "Une règle publiée, pas une opinion : ce qu'elle dit d'acheter et de vendre",
   "view.leads.subtitle":
@@ -45,6 +47,7 @@ const en: Record<keyof typeof fr, string> = {
   "nav.accounts": "Accounts",
   "nav.spending": "Spending",
   "nav.investments": "Investments",
+  "nav.quotes": "Prices",
   "nav.picks": "This year's list",
   "nav.leads": "Market leads",
   "nav.projection": "Projection",
@@ -58,6 +61,7 @@ const en: Record<keyof typeof fr, string> = {
   "view.spending.subtitle": "What comes in and goes out of your current accounts, month by month",
   "view.projection.subtitle": "Where you will stand, in today's euros",
   "view.investments.subtitle": "What you hold, the risk you take, some leads",
+  "view.quotes.subtitle": "The price of a share or a fund, at the scale you want",
   "view.picks.subtitle": "A published rule, not an opinion: what it says to buy and sell",
   "view.leads.subtitle":
     "What those who put their own money in declare, raw, before the briefing sorts it",
