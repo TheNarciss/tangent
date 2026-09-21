@@ -1,5 +1,33 @@
 /** Market screens: « La liste de l'année » (Picks), « Pistes de marché » (MarketLeads), the briefing sheet (ReviewSheet). */
 const fr = {
+  // ── Cours (Quotes.tsx, QuoteChart.tsx) ────────────────────────────────
+  "market.quotes.intro":
+    "Cherche une action, un fonds ou un indice par son nom ou son symbole. Toucher une ligne de tes comptes ouvre le même graphique.",
+  "market.quotes.search.aria": "Chercher un instrument",
+  "market.quotes.search.placeholder": "Nom ou symbole, ex. Air Liquide, CW8.PA",
+  "market.quotes.search.searching": "Recherche…",
+  "market.quotes.search.none": "Rien trouvé sous ce nom.",
+  "market.quotes.kind.equity": "Action",
+  "market.quotes.kind.etf": "Fonds",
+  "market.quotes.kind.index": "Indice",
+  "market.quotes.scale.aria": "Échelle de temps",
+  "market.quotes.scale.1d": "1J",
+  "market.quotes.scale.1w": "1S",
+  "market.quotes.scale.1m": "1M",
+  "market.quotes.scale.6m": "6M",
+  "market.quotes.scale.1y": "1A",
+  "market.quotes.scale.5y": "5A",
+  "market.quotes.scale.max": "Max",
+  "market.quotes.change.day": "aujourd'hui",
+  "market.quotes.change.window": "sur la période",
+  "market.quotes.aria": "Cours de {symbol}",
+  "market.quotes.unavailable":
+    "Pas de cours pour cette ligne : Yahoo Finance ne la connaît pas sous ce symbole.",
+  "market.quotes.source":
+    "Cours Yahoo Finance, différés d'au moins quinze minutes. Ce n'est pas un conseil.",
+  "market.quotes.pinch": "Pince le graphique pour changer d'échelle.",
+  "market.quotes.open": "Voir le cours",
+
   // ── La liste de l'année (Picks.tsx) ───────────────────────────────────
   "market.picks.error":
     "La liste ne peut pas être calculée pour l'instant : une source ne répond pas.",
@@ -139,6 +167,34 @@ const fr = {
 };
 
 const en: Record<keyof typeof fr, string> = {
+  // ── Prices (Quotes.tsx, QuoteChart.tsx) ───────────────────────────────
+  "market.quotes.intro":
+    "Search a share, a fund or an index by name or symbol. Tapping a line in your accounts opens the same chart.",
+  "market.quotes.search.aria": "Search an instrument",
+  "market.quotes.search.placeholder": "Name or symbol, e.g. Air Liquide, CW8.PA",
+  "market.quotes.search.searching": "Searching…",
+  "market.quotes.search.none": "Nothing found under that name.",
+  "market.quotes.kind.equity": "Share",
+  "market.quotes.kind.etf": "Fund",
+  "market.quotes.kind.index": "Index",
+  "market.quotes.scale.aria": "Time scale",
+  "market.quotes.scale.1d": "1D",
+  "market.quotes.scale.1w": "1W",
+  "market.quotes.scale.1m": "1M",
+  "market.quotes.scale.6m": "6M",
+  "market.quotes.scale.1y": "1Y",
+  "market.quotes.scale.5y": "5Y",
+  "market.quotes.scale.max": "Max",
+  "market.quotes.change.day": "today",
+  "market.quotes.change.window": "over the period",
+  "market.quotes.aria": "Price of {symbol}",
+  "market.quotes.unavailable":
+    "No price for this line: Yahoo Finance does not know it under that symbol.",
+  "market.quotes.source":
+    "Yahoo Finance prices, delayed by at least fifteen minutes. This is not advice.",
+  "market.quotes.pinch": "Pinch the chart to change the scale.",
+  "market.quotes.open": "See the price",
+
   // ── The year's list (Picks.tsx) ───────────────────────────────────────
   "market.picks.error": "The list cannot be computed right now: a source is not responding.",
   "market.picks.errorNote":

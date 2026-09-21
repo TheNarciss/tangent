@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import {
   useAccountHoldings,
   useAccountTransactions,
@@ -33,6 +35,7 @@ import {
   BottomSheetTitle,
 } from "@/components/ui/bottom-sheet";
 import { DataField } from "@/components/ui/data-field";
+import { QuoteSheet, type QuoteRef } from "@/components/QuoteChart";
 
 interface Props {
   account: BankAccountResponse | null;
@@ -170,6 +173,7 @@ function Holdings({ accountId }: { accountId: string }) {
   const { t } = useT();
   const holdings = useAccountHoldings(accountId);
   const updateTer = useUpdateHoldingTer(accountId);
+  const [quote, setQuote] = useState<QuoteRef | null>(null);
 
   if (holdings.isLoading) return <Empty>{t("common.loading")}</Empty>;
   if (holdings.isError) return <Empty>{t("accounts.holdings.loadFailed")}</Empty>;
@@ -177,42 +181,66 @@ function Holdings({ accountId }: { accountId: string }) {
     return <Empty>{t("accounts.holdings.empty")}</Empty>;
 
   return (
-    <ul className="divide-y rounded-md border">
-      {holdings.data.map((h) => (
-        <HoldingRow key={h.id} h={h} onTer={(ter) => updateTer.mutate({ holdingId: h.id, ter })} />
-      ))}
-    </ul>
+    <>
+      <ul className="divide-y rounded-md border">
+        {holdings.data.map((h) => (
+          <HoldingRow
+            key={h.id}
+            h={h}
+            onOpen={() => setQuote({ symbol: h.ticker, isin: h.isin, label: h.label })}
+            onTer={(ter) => updateTer.mutate({ holdingId: h.id, ter })}
+          />
+        ))}
+      </ul>
+      <QuoteSheet quote={quote} onClose={() => setQuote(null)} />
+    </>
   );
 }
 
-function HoldingRow({ h, onTer }: { h: HoldingResponse; onTer: (ter: number) => void }) {
+function HoldingRow({
+  h,
+  onOpen,
+  onTer,
+}: {
+  h: HoldingResponse;
+  onOpen: () => void;
+  onTer: (ter: number) => void;
+}) {
   const { t, tn } = useT();
   const cost = h.quantity * h.unit_price;
   const gain = cost > 0 ? h.current_value - cost : null;
   return (
     <li className="px-3 py-2 text-sm">
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="min-w-0 truncate font-medium">{h.label || h.ticker}</span>
-        <span className="shrink-0 font-mono tabular">{fmt.eur(h.current_value)}</span>
-      </div>
-      <div className="mt-0.5 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-        <span className="min-w-0 truncate">
-          {t("accounts.holdings.summary", {
-            units: tn("accounts.holdings.units", h.quantity, { count: fmt.num(h.quantity) }),
-            price: fmt.eur(h.unit_price),
-          })}
-        </span>
-        {gain !== null && (
-          <span
-            className={cn(
-              "shrink-0 font-mono tabular",
-              gain >= 0 ? "text-[hsl(var(--gain))]" : "text-[hsl(var(--loss))]",
-            )}
-          >
-            {fmt.signedEur(gain)}
+      {/* The name and the figures open the price; the fee field below stays editable on its own. */}
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={`${t("market.quotes.open")} · ${h.label || h.ticker}`}
+        className="-mx-1 block w-[calc(100%+0.5rem)] rounded px-1 text-left transition-colors hover:bg-accent/40"
+      >
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="min-w-0 truncate font-medium">{h.label || h.ticker}</span>
+          <span className="shrink-0 font-mono tabular">{fmt.eur(h.current_value)}</span>
+        </div>
+        <div className="mt-0.5 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+          <span className="min-w-0 truncate">
+            {t("accounts.holdings.summary", {
+              units: tn("accounts.holdings.units", h.quantity, { count: fmt.num(h.quantity) }),
+              price: fmt.eur(h.unit_price),
+            })}
           </span>
-        )}
-      </div>
+          {gain !== null && (
+            <span
+              className={cn(
+                "shrink-0 font-mono tabular",
+                gain >= 0 ? "text-[hsl(var(--gain))]" : "text-[hsl(var(--loss))]",
+              )}
+            >
+              {fmt.signedEur(gain)}
+            </span>
+          )}
+        </div>
+      </button>
       <div className="mt-1 flex items-center justify-between gap-3 text-xs text-muted-foreground">
         <span>{t("accounts.holdings.fees")}</span>
         <DataField

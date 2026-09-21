@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { getLocale, t } from "@/i18n";
 import { clearProfile } from "@/lib/profile";
@@ -1143,6 +1143,65 @@ export function useMarketLeads() {
     staleTime: 60 * 60_000,
     retry: false,
     refetchInterval: (query) => (query.state.data ? false : 60_000),
+  });
+}
+
+/* ── Quotes: one line's own price ───────────────────────────────────── */
+
+export type QuoteScale = "1d" | "1w" | "1m" | "6m" | "1y" | "5y" | "max";
+/** Shortest first: the order of the buttons, and the direction a pinch walks. */
+export const QUOTE_SCALES: readonly QuoteScale[] = ["1d", "1w", "1m", "6m", "1y", "5y", "max"];
+
+export interface QuotePoint {
+  t: string; // ISO-8601 with the exchange's offset
+  close: number;
+}
+
+export interface QuoteHistory {
+  symbol: string;
+  name: string | null;
+  currency: string;
+  scale: QuoteScale;
+  interval: string; // the bar size served: 5m, 15m, 1h, 1d, 1wk, 1mo
+  points: QuotePoint[];
+  previous_close: number | null; // the close before the window, for the one-day change
+}
+
+export interface QuoteMatch {
+  symbol: string;
+  name: string;
+  exchange: string;
+  kind: "equity" | "etf" | "index";
+}
+
+/**
+ * The closes of one symbol at one scale. `isin` lets the backend fall back
+ * on the venue OpenFIGI names when Yahoo does not know the bank's ticker.
+ * The previous scale's curve stays on screen while the next one loads.
+ */
+export function useQuoteHistory(symbol: string | null, scale: QuoteScale, isin?: string | null) {
+  const params = new URLSearchParams({ symbol: symbol ?? "", scale });
+  if (isin) params.set("isin", isin);
+  return useQuery({
+    queryKey: ["quotes", "history", symbol, scale, isin ?? null],
+    queryFn: () => http<QuoteHistory>(`/quotes/history?${params}`),
+    enabled: symbol !== null && symbol !== "",
+    staleTime: 5 * 60_000,
+    retry: false,
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** Instruments matching a name or symbol; asks nothing under two characters. */
+export function useQuoteSearch(query: string) {
+  const q = query.trim();
+  return useQuery({
+    queryKey: ["quotes", "search", q.toLowerCase()],
+    queryFn: () => http<QuoteMatch[]>(`/quotes/search?q=${encodeURIComponent(q)}`),
+    enabled: q.length >= 2,
+    staleTime: 60 * 60_000,
+    retry: false,
+    placeholderData: keepPreviousData,
   });
 }
 
