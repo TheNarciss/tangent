@@ -2,6 +2,8 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 
 import { getLocale, t } from "@/i18n";
 import { clearProfile } from "@/lib/profile";
+import { disablePush } from "@/native/push";
+import { clearWidgetSnapshot } from "@/native/widget";
 
 export const API_URL =
   (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8000/api";
@@ -392,6 +394,8 @@ export function useLogout() {
       // Then wipe other cached data so next user doesn't see previous content.
       qc.removeQueries({ predicate: (q) => !(q.queryKey[0] === "user" && q.queryKey[1] === "me") });
       clearProfile();
+      void clearWidgetSnapshot();
+      void disablePush();
       // Legacy: the expert knobs (CMA shrinkage, σ estimator, risk-free) went
       // with the Scanner (§8.3); drop what a previous version stored.
       try {
@@ -1248,6 +1252,18 @@ export function useSpending(months = 6) {
     queryFn: () => http<SpendingResponse>(`/spending?months=${months}`),
     staleTime: 60_000,
   });
+}
+
+/* ── The phone, for the morning briefing's notification (ADR-037) ────── */
+
+/** Tell the backend where to reach this phone. The language comes from the header. */
+export async function registerDevice(token: string): Promise<void> {
+  await http<void>("/devices", { method: "POST", body: JSON.stringify({ token }) });
+}
+
+/** Signing out, or turning the notification off. */
+export async function forgetDevice(token: string): Promise<void> {
+  await http<void>(`/devices/${token}`, { method: "DELETE" });
 }
 
 /** Everything the account holds and computes, as one JSON file (for debugging). */

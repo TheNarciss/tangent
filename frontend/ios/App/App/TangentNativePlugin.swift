@@ -3,10 +3,13 @@ import Capacitor
 import CryptoKit
 import Foundation
 import LocalAuthentication
+import UserNotifications
+import WidgetKit
 
 /// What the web code cannot do by itself on the phone (ADR-035):
 /// unlock with Face ID, run an OAuth round trip in the system's secure
-/// browser, and Sign in with Apple through iOS. Registered by
+/// browser, Sign in with Apple through iOS, and hand the home-screen widget
+/// the one figure it shows. Registered by
 /// `TangentViewController`; typed on the JS side in src/native/bridge.ts.
 @objc(TangentNativePlugin)
 public class TangentNativePlugin: CAPPlugin, CAPBridgedPlugin {
@@ -16,7 +19,15 @@ public class TangentNativePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "unlock", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "authSession", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "appleSignIn", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setWidgetSnapshot", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "clearWidgetSnapshot", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "requestPushPermission", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "pushStatus", returnType: CAPPluginReturnPromise),
     ]
+
+    /// Shared with the widget extension; nothing else is written there.
+    private static let appGroup = "group.uk.riskybusinesses.tangent"
+    private static let widgetKey = "wealth"
 
     private var webSession: ASWebAuthenticationSession?
     private var appleFlow: AppleSignInFlow?
@@ -34,6 +45,102 @@ public class TangentNativePlugin: CAPPlugin, CAPBridgedPlugin {
         let reason = call.getString("reason") ?? "Déverrouiller Tangent"
         context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { ok, _ in
             call.resolve(["available": true, "success": ok])
+        }
+    }
+
+    // MARK: Notifications (« ton briefing est prêt », ADR-037)
+
+    /// Asks iOS, once, then waits for Apple's address for this phone. The web
+    /// side sends that address to the backend; refusing is an answer, not an
+    /// error, and the app carries on without it.
+    @objc func requestPushPermission(_ call: CAPPluginCall) {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
+            guard granted else {
+                call.resolve(["granted": false])
+                return
+            }
+            DispatchQueue.main.async {
+                UIApplication.shared.registerForRemoteNotifications()
+                self.awaitDeviceToken { token in
+                    call.resolve(["granted": true, "token": token ?? ""])
+                }
+            }
+        }
+    }
+
+    /// What iOS currently allows, and the address if we already have one.
+    @objc func pushStatus(_ call: CAPPluginCall) {
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            let granted = settings.authorizationStatus == .authorized
+                || settings.authorizationStatus == .provisional
+            call.resolve([
+                "granted": granted,
+                "askable": settings.authorizationStatus == .notDetermined,
+                "token": AppDelegate.deviceToken ?? "",
+            ])
+        }
+    }
+
+    /// The token arrives from the system a moment after registering.
+    private func awaitDeviceToken(timeout: TimeInterval = 10, then: @escaping (String?) -> Void) {
+        if let token = AppDelegate.deviceToken {
+            then(token)
+            return
+        }
+        var observer: NSObjectProtocol?
+        var finished = false
+        let finish: (String?) -> Void = { token in
+            guard !finished else { return }
+            finished = true
+            if let observer = observer { NotificationCenter.default.removeObserver(observer) }
+            then(token)
+        }
+        observer = NotificationCenter.default.addObserver(
+            forName: AppDelegate.deviceTokenChanged, object: nil, queue: .main
+        ) { note in
+            finish(note.object as? String)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + timeout) { finish(AppDelegate.deviceToken) }
+    }
+
+    // MARK: The home-screen widget
+
+    /// The Overview hands over what it displays, already written in the
+    /// person's language and number format; the widget only paints it.
+    @objc func setWidgetSnapshot(_ call: CAPPluginCall) {
+        guard let label = call.getString("label"), let value = call.getString("value") else {
+            call.reject("label et value sont attendus")
+            return
+        }
+        var payload: [String: Any] = [
+            "label": label,
+            "value": value,
+            "updatedAt": ISO8601DateFormatter().string(from: Date()),
+        ]
+        if let sub = call.getString("sub") { payload["sub"] = sub }
+        if let positive = call.getBool("positive") { payload["positive"] = positive }
+        guard let data = try? JSONSerialization.data(withJSONObject: payload),
+              let defaults = UserDefaults(suiteName: Self.appGroup)
+        else {
+            // No App Group on this build: the app works, it simply has no widget.
+            call.resolve(["written": false])
+            return
+        }
+        defaults.set(data, forKey: Self.widgetKey)
+        reloadWidgets()
+        call.resolve(["written": true])
+    }
+
+    /// Signing out takes the figures off the home screen with the session.
+    @objc func clearWidgetSnapshot(_ call: CAPPluginCall) {
+        UserDefaults(suiteName: Self.appGroup)?.removeObject(forKey: Self.widgetKey)
+        reloadWidgets()
+        call.resolve()
+    }
+
+    private func reloadWidgets() {
+        if #available(iOS 14.0, *) {
+            WidgetCenter.shared.reloadAllTimelines()
         }
     }
 
