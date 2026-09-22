@@ -1,5 +1,76 @@
 # Changelog
 
+## [1.4.0](https://github.com/TheNarciss/tangent/compare/v1.3.0...v1.4.0) (2026-09-22)
+
+
+### Features
+
+* **archive:** tout ce que l'app sait, écrit deux fois par jour et scellé ([#173](https://github.com/TheNarciss/tangent/issues/173)) ([edf357a](https://github.com/TheNarciss/tangent/commit/edf357a4337bd96222a779890394e96b69d533a5))
+* **auth:** la session telle que l'app iPhone en a besoin, sur le même backend ([#177](https://github.com/TheNarciss/tangent/issues/177)) ([c1d6fe8](https://github.com/TheNarciss/tangent/commit/c1d6fe8166beaac0cba501b142456c3f488f801e))
+* **auth:** Sign in with Apple, sur le site et depuis l'app iPhone ([#178](https://github.com/TheNarciss/tangent/issues/178)) ([903b339](https://github.com/TheNarciss/tangent/commit/903b339c90798a7a25f7e5bcbdd5cdb2e4ce8d18))
+* **banks:** Revolut par Enable Banking, un second agrégateur à côté de Powens ([#156](https://github.com/TheNarciss/tangent/issues/156)) ([acd14f8](https://github.com/TheNarciss/tangent/commit/acd14f8e3f01218d8ae96110c47e011914a981f8))
+* **briefing:** tout ce que l'app sait arrive au briefing ([#174](https://github.com/TheNarciss/tangent/issues/174)) ([88371c6](https://github.com/TheNarciss/tangent/commit/88371c6208de48bddbc5f20e212d015cd77b7b71))
+* **cours:** le cours d'une ligne à l'échelle choisie, et un onglet pour le chercher ([#198](https://github.com/TheNarciss/tangent/issues/198)) ([5a0a64e](https://github.com/TheNarciss/tangent/commit/5a0a64ec73981182e3e6a683ef056cce5c5482ae))
+* **depenses:** dans quoi l'argent part, mois par mois, et ce qui a bougé ([#166](https://github.com/TheNarciss/tangent/issues/166)) ([9aa929a](https://github.com/TheNarciss/tangent/commit/9aa929a6dc65a3d2136e457537d8460998451318))
+* **export:** l'export de données rend l'intégralité de l'archive, ouverte ([#175](https://github.com/TheNarciss/tangent/issues/175)) ([bdf8685](https://github.com/TheNarciss/tangent/commit/bdf8685c19049e3e9183a83fe1a7e9c5ea1d2084))
+* **export:** télécharger tout le compte en un fichier, données et calculs ([#137](https://github.com/TheNarciss/tangent/issues/137)) ([7d900be](https://github.com/TheNarciss/tangent/commit/7d900be666690fe6c276dccb40f2934c39afd5cb))
+* **i18n:** Aperçu, Comptes, banques, fiche de compte et Dépenses en anglais ([#187](https://github.com/TheNarciss/tangent/issues/187)) ([2999b95](https://github.com/TheNarciss/tangent/commit/2999b95621943bda722bcc444eeed4176b2228ed))
+* **i18n:** l'app suit la langue de l'appareil, français ou anglais (ADR-036) ([#186](https://github.com/TheNarciss/tangent/issues/186)) ([bfd4411](https://github.com/TheNarciss/tangent/commit/bfd44116d3e04d41f4eb912fc99f0ae6d8c08348))
+* **i18n:** le backend parle la langue de la personne (verdicts, briefing, e-mails, pages légales) ([#189](https://github.com/TheNarciss/tangent/issues/189)) ([2b9c620](https://github.com/TheNarciss/tangent/commit/2b9c620f487cf29cc3f6b1337049431a96575dc4))
+* **i18n:** Placements, liste, pistes, Méthode, Projection et Profil en anglais ([#188](https://github.com/TheNarciss/tangent/issues/188)) ([4071724](https://github.com/TheNarciss/tangent/commit/4071724fc0039044c32d9b06a93fdb4d09df16b7))
+* **ios:** compte de démonstration, compilation et TestFlight en CI, marche à suivre App Store ([#182](https://github.com/TheNarciss/tangent/issues/182)) ([0cb41f1](https://github.com/TheNarciss/tangent/commit/0cb41f1831a3252e424c69ba57444b5e20572a97))
+* **ios:** Google, Apple et les banques depuis l'app, par le navigateur système ([#180](https://github.com/TheNarciss/tangent/issues/180)) ([7c83b57](https://github.com/TheNarciss/tangent/commit/7c83b578dfc86725f43537d8ad295ce56824e2b8))
+* **ios:** la coque de l'app iPhone, Face ID, flou en arrière-plan, plugin natif ([#179](https://github.com/TheNarciss/tangent/issues/179)) ([2e18091](https://github.com/TheNarciss/tangent/commit/2e18091f9736e25dfef94b6c91a9a193c20def6f))
+* **leads:** le positionnement des spéculateurs (CFTC) et les paris Kalshi ([#196](https://github.com/TheNarciss/tangent/issues/196)) ([cc909f3](https://github.com/TheNarciss/tangent/commit/cc909f3b98edff24ff084e900082da3c47a261ce))
+* **leads:** les activistes qui déclarent plus de 5 % d'une société (13D) ([#195](https://github.com/TheNarciss/tangent/issues/195)) ([0fdfda7](https://github.com/TheNarciss/tangent/commit/0fdfda7c78cfbe1dfe599e9317abd51a60e7973d))
+* **llm:** un modèle par tâche — Opus 5 avec réflexion pour le briefing, Haiku 4.5 pour les catégories, Sonnet 5 pour le web ([#172](https://github.com/TheNarciss/tangent/issues/172)) ([b0e5269](https://github.com/TheNarciss/tangent/commit/b0e52695a02f447ea0b3d42f86fc1109bdb1f20c))
+* **momentum:** « La liste de l'année », une règle publiée sur un univers lu en direct ([#146](https://github.com/TheNarciss/tangent/issues/146)) ([276b2cb](https://github.com/TheNarciss/tangent/commit/276b2cb6d381bbe7287306722ba7afcb30a98ec2))
+* **momentum:** l'univers lu dans les positions du jour d'un ETF, plus Wikipédia ([#148](https://github.com/TheNarciss/tangent/issues/148)) ([8c36e9d](https://github.com/TheNarciss/tangent/commit/8c36e9dc5f49091b02485df91caf6cf0f06987fd))
+* **nav:** des groupes et des sous-vues, dépliés à la demande ([#145](https://github.com/TheNarciss/tangent/issues/145)) ([8573a7b](https://github.com/TheNarciss/tangent/commit/8573a7b6382ad5c79220e4f966965d457444ceda))
+* **picks:** écrire en clair ce que la liste de l'année demande et promet ([#194](https://github.com/TheNarciss/tangent/issues/194)) ([a209d78](https://github.com/TheNarciss/tangent/commit/a209d78845423b9060a881c80448ad2fef09e855))
+* **picks:** l'écran « La liste de l'année » en sous-onglet de Placements ([#147](https://github.com/TheNarciss/tangent/issues/147)) ([29bd2df](https://github.com/TheNarciss/tangent/commit/29bd2df90287cec487932dcf4b1a627f917b7e9b))
+* **pistes:** ratisser Polymarket et EDGAR chaque nuit, laisser le briefing trier ([#167](https://github.com/TheNarciss/tangent/issues/167)) ([fda8d9c](https://github.com/TheNarciss/tangent/commit/fda8d9cdbddd08ac10649b27a30af8c027423d54))
+* **pistes:** un écran « Pistes de marché » sous Placements ([#169](https://github.com/TheNarciss/tangent/issues/169)) ([6cb48f2](https://github.com/TheNarciss/tangent/commit/6cb48f292ac4e5c44e8430e6bddb3d80811f4c2d))
+* **placements:** replier les crises rejouées derrière un déroulant ([3fb0d71](https://github.com/TheNarciss/tangent/commit/3fb0d71b30f6244125dbefd8a0e9fc8f5c0520d0))
+* **probe:** sonder les séries d'indices quotidiennes de Yahoo ([c6bc1e7](https://github.com/TheNarciss/tangent/commit/c6bc1e722659f17b3ebf43bbdfa2ed5733434318))
+* **probe:** sonder les séries d'indices quotidiennes de Yahoo ([785e86e](https://github.com/TheNarciss/tangent/commit/785e86edbb1d0389ba5fc6f6ac7ccb0f8efb875f))
+* **references:** donner un métier aux sources qui n'en avaient pas ([57efb28](https://github.com/TheNarciss/tangent/commit/57efb28176c95d507d9ffe048304ce5fc13a331e))
+* **references:** donner un métier aux sources qui n'en avaient pas ([5b5431d](https://github.com/TheNarciss/tangent/commit/5b5431d626ac9f32f61b9eb54a8bd997c55269b2))
+* **spending:** la catégorie décidée par les codes de la banque, avant tout LLM ([#160](https://github.com/TheNarciss/tangent/issues/160)) ([0a6faa9](https://github.com/TheNarciss/tangent/commit/0a6faa958e248d989f9c7fee66cd05f48e4d2a89))
+* **spending:** suivre les dépenses des comptes courants, mois par mois ([#140](https://github.com/TheNarciss/tangent/issues/140)) ([3b5b481](https://github.com/TheNarciss/tangent/commit/3b5b4810785734c445b8768e32d78842c3b13b89))
+* **spending:** un onglet Dépenses, entrées et sorties comme une app de budget ([#142](https://github.com/TheNarciss/tangent/issues/142)) ([64fa3b9](https://github.com/TheNarciss/tangent/commit/64fa3b9b295dd2a3d3ae4474450736a2e3d3e978))
+* **spending:** une catégorie apprise des décisions passées, et un rattrapage à la demande ([#161](https://github.com/TheNarciss/tangent/issues/161)) ([d0525ba](https://github.com/TheNarciss/tangent/commit/d0525ba12cbff5d44571bc26d7c58ce4b46c374d))
+* **stress:** chercher la série la plus fine qui existe, sans table à tenir ([#136](https://github.com/TheNarciss/tangent/issues/136)) ([b8a647d](https://github.com/TheNarciss/tangent/commit/b8a647dcf95242304609bd9e1cf7fdbd2896563b))
+* **stress:** mesurer les crises sur un indice au lieu de recopier des chiffres ([#135](https://github.com/TheNarciss/tangent/issues/135)) ([7a0af3b](https://github.com/TheNarciss/tangent/commit/7a0af3be7f089270042ed076c039621adf969a30))
+* **ui:** un logo Tangent, dans l'onglet du navigateur et en tête de la barre latérale ([#176](https://github.com/TheNarciss/tangent/issues/176)) ([236d3cf](https://github.com/TheNarciss/tangent/commit/236d3cf0fcb794afc3203993f7daeea52c320cb2))
+
+
+### Bug Fixes
+
+* **auth:** la liste des comptes liés accepte Sign in with Apple ([#199](https://github.com/TheNarciss/tangent/issues/199)) ([67420ee](https://github.com/TheNarciss/tangent/commit/67420ee6518aee1e5e1a697361c9ec06bc243432))
+* **auth:** un compte créé par Google ou Apple n'a pas de mot de passe fantôme ([#184](https://github.com/TheNarciss/tangent/issues/184)) ([0d64c60](https://github.com/TheNarciss/tangent/commit/0d64c6089bcafe884708a3834a9919c6b4109c73))
+* **classes:** reconnaître les fonds tels que les banques les nomment ([8ea8587](https://github.com/TheNarciss/tangent/commit/8ea8587461ce3aef169174a211e730d03124705a))
+* **classes:** reconnaître les fonds tels que les banques les nomment ([cb2a6c6](https://github.com/TheNarciss/tangent/commit/cb2a6c68be43512c6812e984b99574dc25275936))
+* **comptes:** l'écran tient dans la largeur du téléphone ([#165](https://github.com/TheNarciss/tangent/issues/165)) ([0551452](https://github.com/TheNarciss/tangent/commit/055145291b752a48749d5f999ef2b8d000038cef))
+* **demo:** un profil complet et une synchronisation silencieuse pour le compte de démo ([#191](https://github.com/TheNarciss/tangent/issues/191)) ([85895bd](https://github.com/TheNarciss/tangent/commit/85895bd87b088ccf59e0a8f3b6300f2c63222ca2))
+* **enablebanking:** la clé d'un compte est l'empreinte du hash, pas ses 64 premiers caractères ([#162](https://github.com/TheNarciss/tangent/issues/162)) ([986dbe3](https://github.com/TheNarciss/tangent/commit/986dbe36ffdf868667d58e6c6df8e1d868b784a6))
+* **enablebanking:** le retour de la banque n'atteignait pas le backend ([#157](https://github.com/TheNarciss/tangent/issues/157)) ([3cbed3f](https://github.com/TheNarciss/tangent/commit/3cbed3f9efd563d83db17c81ab45916a226416fc))
+* **enablebanking:** un compte garde son identité d'un consentement à l'autre ([#159](https://github.com/TheNarciss/tangent/issues/159)) ([0448f58](https://github.com/TheNarciss/tangent/commit/0448f586375b592108a94481006e4c710b67b9a2))
+* **enablebanking:** une session ne liste que des identifiants de comptes ([#158](https://github.com/TheNarciss/tangent/issues/158)) ([4cdc088](https://github.com/TheNarciss/tangent/commit/4cdc088ea862868efc8f9203f32ffba448bf0222))
+* **leads:** lire les jours qu'EDGAR a publiés et laisser le bruit dehors ([#193](https://github.com/TheNarciss/tangent/issues/193)) ([8f706f1](https://github.com/TheNarciss/tangent/commit/8f706f19070cb74b1d7e0bf17aa302e218435ed5))
+* **llm:** catégoriser par lots de 25, ne jamais renvoyer une ligne déjà vue, compter au départ ([#168](https://github.com/TheNarciss/tangent/issues/168)) ([c133f27](https://github.com/TheNarciss/tangent/commit/c133f27f2680a314b509d470e1493eafb6a9250a))
+* **llm:** plafond LLM à un dollar par jour, tous utilisateurs confondus ([#171](https://github.com/TheNarciss/tangent/issues/171)) ([a1c88c0](https://github.com/TheNarciss/tangent/commit/a1c88c041993864cbe8330f130cd9dc1a5de909b))
+* **llm:** tout ce qui appelle le LLM est réservé aux administrateurs, avec un briefing à la demande ([#170](https://github.com/TheNarciss/tangent/issues/170)) ([5aa8d20](https://github.com/TheNarciss/tangent/commit/5aa8d2024fc30019b01e0157d68977bc3a495ec8))
+* **prod:** la liste servie depuis la mémoire, le dossier data inscriptible, le poller qui survit à un rollback ([#163](https://github.com/TheNarciss/tangent/issues/163)) ([208dda6](https://github.com/TheNarciss/tangent/commit/208dda6c607e285bedf3021d4b6c477008ec4869))
+* **spending:** un virement n'est interne que si son autre jambe existe ([#143](https://github.com/TheNarciss/tangent/issues/143)) ([566a32e](https://github.com/TheNarciss/tangent/commit/566a32e9a136e4eae7eb3813d7c0d6e6d7250035))
+* **stress:** nommer à nouveau les lignes rejouées comme le monde, et le niveau qui a servi ([#138](https://github.com/TheNarciss/tangent/issues/138)) ([f043f90](https://github.com/TheNarciss/tangent/commit/f043f9038fb693a0e2491341ffb5ff70f81fa7c7))
+
+
+### Performance Improvements
+
+* des écrans qui n'attendent plus Yahoo à chaque visite ([#150](https://github.com/TheNarciss/tangent/issues/150)) ([962d48b](https://github.com/TheNarciss/tangent/commit/962d48b4cfa093a2a03df494512258fd3b431d46))
+* **sources:** les séries parsées gardées en mémoire, les indices Yahoo lus en un appel ([#164](https://github.com/TheNarciss/tangent/issues/164)) ([3a8a58f](https://github.com/TheNarciss/tangent/commit/3a8a58f2863f37e541c8974b61cff4a890d3dd59))
+
 ## [1.3.0](https://github.com/TheNarciss/tangent/compare/v1.2.0...v1.3.0) (2026-09-09)
 
 > Trois entrées ont été ajoutées à la main : le tag a été posé alors que
