@@ -30,7 +30,7 @@ class OAuthAccountPublic(BaseModel):
     """Vue publique d'un compte OAuth lié — JAMAIS les tokens."""
 
     id: uuid.UUID
-    oauth_name: Literal["google"]
+    oauth_name: Literal["google", "apple"]
     account_email: str
 
 
