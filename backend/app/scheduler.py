@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -38,11 +38,13 @@ from .db.models import EnableBankingSession
 from .enablebanking import aggregator as enablebanking_agg
 from .finance import macro, market_leads, picks, stress
 from .llm import batch_poller, batch_submitter
+from .repositories import review_batches as batches_repo
 from .snapshot_job import record_all_users
 
 logger = logging.getLogger(__name__)
 
 _PARIS = ZoneInfo("Europe/Paris")
+NIGHTLY_AT = time(3, 0)  # the nightly batch: briefings and gap filling, Paris time
 
 
 async def _job_submit_nightly() -> None:
@@ -64,6 +66,36 @@ async def _job_submit_nightly() -> None:
                 )
         except Exception:
             logger.exception("Scheduler: nightly batch submit failed")
+
+
+def missed_tonight(now: datetime, last_submitted: datetime | None) -> bool:
+    """Whether tonight's batch was due and nothing was submitted since.
+
+    `now` is Paris time. The scheduler keeps its jobs in memory, so a
+    machine that reboots at 03:00 (the VM's automatic security updates do,
+    about once a month) or a deploy in the night skips the cron entirely.
+    """
+    due = datetime.combine(now.date(), NIGHTLY_AT, tzinfo=_PARIS)
+    return now >= due and (last_submitted is None or last_submitted < due)
+
+
+async def _job_catch_up_nightly() -> None:
+    """At boot, submit tonight's batch if the restart made the cron miss it.
+
+    A briefing that arrives late beats a briefing that never comes. A batch
+    already submitted since 03:00 means there is nothing to catch up.
+    """
+    try:
+        async with async_session_factory() as session:
+            recent = await batches_repo.list_recent(session, limit=1)
+        last = recent[0].submitted_at if recent else None
+        if not missed_tonight(datetime.now(_PARIS), last):
+            return
+    except Exception:
+        logger.exception("Scheduler: nightly catch-up check failed")
+        return
+    logger.warning("Scheduler: tonight's batch was missed (restart), submitting it now")
+    await _job_submit_nightly()
 
 
 async def _job_poll_pending() -> None:
@@ -247,11 +279,17 @@ def setup_scheduler() -> AsyncIOScheduler:
 
     scheduler.add_job(
         _job_submit_nightly,
-        CronTrigger(hour=3, minute=0, timezone=_PARIS),
+        CronTrigger(hour=NIGHTLY_AT.hour, minute=NIGHTLY_AT.minute, timezone=_PARIS),
         id="submit_nightly_batch",
         replace_existing=True,
         max_instances=1,
         coalesce=True,
+    )
+    scheduler.add_job(
+        _job_catch_up_nightly,
+        DateTrigger(run_date=datetime.now(_PARIS) + timedelta(seconds=90)),
+        id="catch_up_nightly_at_boot",
+        replace_existing=True,
     )
 
     scheduler.add_job(
