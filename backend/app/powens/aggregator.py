@@ -17,6 +17,7 @@ import logging
 import uuid
 from datetime import UTC, date, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -104,16 +105,21 @@ def _parse_date(value: Any) -> date | None:
         return None
 
 
-def _parse_datetime(value: Any) -> datetime | None:
-    """Parse a Powens datetime string. Returns None on failure."""
+# Powens writes its datetimes as Paris wall-clock time, without an offset
+# ("2026-10-10 17:05:12"). Read as UTC they were two hours off, and a phone
+# abroad showed « updated 6 hours ago » for a bank read a minute before.
+POWENS_TZ = ZoneInfo("Europe/Paris")
+
+
+def parse_datetime(value: Any) -> datetime | None:
+    """A Powens datetime, made aware: Paris time unless it says otherwise. None on failure."""
     if not isinstance(value, str) or not value:
         return None
     try:
-        # Powens uses "YYYY-MM-DD HH:MM:SS" (no timezone)
-        # Treat as UTC for consistency with our DB tz-aware columns
-        return datetime.fromisoformat(value.replace(" ", "T")).replace(tzinfo=UTC)
+        parsed = datetime.fromisoformat(value.replace(" ", "T").replace("Z", "+00:00"))
     except ValueError:
         return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=POWENS_TZ)
 
 
 def _extract_institution_name(conn: dict) -> str | None:
@@ -209,10 +215,10 @@ def _extract_bank_account_dto(
         # State
         bookmarked=bool(acc.get("bookmarked", 0)),
         display=bool(acc.get("display", True)),
-        powens_deleted_at=_parse_datetime(acc.get("deleted")),
-        powens_disabled_at=_parse_datetime(acc.get("disabled")),
+        powens_deleted_at=parse_datetime(acc.get("deleted")),
+        powens_disabled_at=parse_datetime(acc.get("disabled")),
         powens_error=acc.get("error"),
-        powens_last_update=_parse_datetime(acc.get("last_update")),
+        powens_last_update=parse_datetime(acc.get("last_update")),
         # Sync tracking
         last_synced_at=synced_at,
         # Loan sub-object
