@@ -1,7 +1,9 @@
 """Persist a `SyncResult`, whatever aggregator produced it.
 
-Accounts are upserted, holdings replaced, transactions inserted once. On a
-first sync the default broker is guessed from the largest investment wrapper.
+Accounts are upserted, holdings replaced, transactions inserted once. An
+account known under another id — the same bank connected again — keeps its
+row and its history. On a first sync the default broker is guessed from the
+largest investment wrapper.
 Shared by the sync routes, the Enable Banking callback and the scheduler.
 """
 
@@ -44,7 +46,10 @@ async def persist_sync_result(
     session: AsyncSession, user_id: uuid.UUID, result: SyncResult
 ) -> Persisted:
     account_id_map: dict[str, uuid.UUID] = {}
-    for acc_dto in result.accounts:
+    # A bank connected twice lists the same account under two ids: only the
+    # freshest is kept, and what the other brings (holdings, transactions) is
+    # left out with it.
+    for acc_dto in accounts_repo.one_per_account(result.accounts):
         orm = await accounts_repo.upsert_account(session, user_id, acc_dto)
         account_id_map[acc_dto.provider_account_id] = orm.id
 

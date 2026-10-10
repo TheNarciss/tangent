@@ -1,8 +1,9 @@
 """BankTransaction repository — append-only with idempotent upsert.
 
-Bank transactions are immutable once posted: we never UPDATE them, we INSERT
-new ones with ON CONFLICT DO NOTHING. This preserves the full history even
-across multiple syncs.
+Bank transactions are immutable once posted: we never UPDATE what they say,
+we INSERT new ones with ON CONFLICT DO NOTHING. This preserves the full
+history even across multiple syncs. Only the provider's id of a row may
+change, when the same transaction comes back under another one.
 """
 
 from __future__ import annotations
@@ -66,6 +67,7 @@ async def upsert_transactions(
     if not new_txs:
         return 0
 
+    await _rekey_known(session, bank_account_id, new_txs)
     rows = [
         {
             "user_id": user_id,
@@ -98,6 +100,71 @@ async def upsert_transactions(
         len(rows) - inserted,
     )
     return inserted
+
+
+def _facts(day: date, amount: float, description: str) -> tuple[date, float, str]:
+    return day, round(amount, 2), description.strip()
+
+
+async def _rekey_known(
+    session: AsyncSession, bank_account_id: uuid.UUID, new_txs: list[Transaction]
+) -> int:
+    """Give its new id to a transaction already recorded under another one.
+
+    Powens numbers transactions per connection: once a bank is connected
+    again, the account's history comes back under new ids. A row of the same
+    account, same day, same amount, same label, that this batch does not
+    name, is that transaction; it keeps its category and takes the new id,
+    one row for one transaction, so two identical coffees stay two.
+    """
+    names = {tx.provider_transaction_id for tx in new_txs}
+    known = set(
+        (
+            await session.execute(
+                select(BankTransaction.provider_transaction_id).where(
+                    BankTransaction.bank_account_id == bank_account_id,
+                    BankTransaction.provider_transaction_id.in_(names),
+                )
+            )
+        ).scalars()
+    )
+    rows = (
+        await session.execute(
+            select(
+                BankTransaction.id,
+                BankTransaction.provider_transaction_id,
+                BankTransaction.transaction_date,
+                BankTransaction.amount,
+                BankTransaction.description,
+            ).where(
+                BankTransaction.bank_account_id == bank_account_id,
+                BankTransaction.transaction_date.in_({tx.transaction_date for tx in new_txs}),
+            )
+        )
+    ).all()
+    unnamed: dict[tuple[date, float, str], list[uuid.UUID]] = {}
+    for row in rows:
+        if row.provider_transaction_id not in names:
+            key = _facts(row.transaction_date, row.amount, row.description)
+            unnamed.setdefault(key, []).append(row.id)
+    moved = 0
+    for tx in new_txs:
+        if tx.provider_transaction_id in known:
+            continue
+        same = unnamed.get(_facts(tx.transaction_date, tx.amount, tx.description))
+        if same:
+            await session.execute(
+                update(BankTransaction)
+                .where(BankTransaction.id == same.pop())
+                .values(provider_transaction_id=tx.provider_transaction_id)
+            )
+            known.add(tx.provider_transaction_id)
+            moved += 1
+    if moved:
+        logger.info(
+            "Recognised %d bank_tx under new ids for bank_account=%s", moved, bank_account_id
+        )
+    return moved
 
 
 LEARNED_SOURCE = "history"  # category_source when a past decision on the same merchant decided
