@@ -11,84 +11,15 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..aggregator import BankAccount as BankAccountDTO
+from ..aggregator.same_account import connection, distinct_connections, identity, row_identity
 from ..db.models import BankAccount, Loan
 
 logger = logging.getLogger(__name__)
-
-
-# ── The same account under a new id ────────────────────────────────────────
-# Powens numbers accounts per connection: a bank connected again brings the
-# same accounts back under new ids, next to the old ones it still lists.
-# Enable Banking's ids already survive a new consent (`identification_hash`).
-# Only accounts of different connections can be one: a bank never lists an
-# account twice in one connection, so two look-alikes there (two loans whose
-# masked numbers end alike) are two accounts, and nothing of theirs is merged.
-_IDS_PER_CONNECTION = frozenset({"powens"})
-
-_NEVER = datetime.min.replace(tzinfo=UTC)
-
-
-def _identity(
-    kind: str, currency: str, iban: str | None, number: str | None, bank: str | None
-) -> tuple[str, ...] | None:
-    """What says two ids are one account: its IBAN, else its number at its bank.
-
-    The kind and the currency go with it: a card is not its current account,
-    and a multi-currency account can share one IBAN between its pockets.
-    """
-    if iban and iban.strip():
-        return ("iban", kind, currency, "".join(iban.split()).upper())
-    if number and number.strip():
-        return ("number", kind, currency, (bank or "").casefold(), "".join(number.split()).upper())
-    return None
-
-
-def identity(account: BankAccountDTO) -> tuple[str, ...] | None:
-    """The account behind a provider id, for the providers whose ids change; else None."""
-    if account.provider not in _IDS_PER_CONNECTION:
-        return None
-    return _identity(
-        account.type.value, account.currency, account.iban, account.number, account.institution_name
-    )
-
-
-def _connection(raw_data: dict | None) -> object:
-    return (raw_data or {}).get("id_connection")
-
-
-def _one_per_connection(connections: list[object]) -> bool:
-    """Whether the look-alikes each come from their own connection: then they are one account."""
-    return None not in connections and len(set(connections)) == len(connections)
-
-
-def one_per_account(accounts: list[BankAccountDTO]) -> list[BankAccountDTO]:
-    """A bank connected twice lists its accounts twice: keep the freshest of each.
-
-    Freshest is the one the bank read last, then the newest id; the other
-    belongs to a connection that no longer reads anything. Order is kept.
-    """
-    groups: dict[tuple[str, ...], list[BankAccountDTO]] = {}
-    for acc in accounts:
-        key = identity(acc)
-        if key is not None:
-            groups.setdefault(key, []).append(acc)
-    dropped: set[int] = set()
-    for group in groups.values():
-        if len(group) > 1 and _one_per_connection([_connection(a.raw_data) for a in group]):
-            freshest = max(group, key=_freshness)
-            dropped.update(id(a) for a in group if a is not freshest)
-    return [acc for acc in accounts if id(acc) not in dropped]
-
-
-def _freshness(account: BankAccountDTO) -> tuple[datetime, int]:
-    pid = account.provider_account_id
-    return account.powens_last_update or _NEVER, int(pid) if pid.isdigit() else -1
 
 
 async def _adopt_oldest_row(
@@ -118,11 +49,11 @@ async def _adopt_oldest_row(
     same = [
         r
         for r in rows
-        if _identity(r.type, r.currency, r.iban, r.number, r.institution_name) == key
+        if row_identity(r.type, r.currency, r.iban, r.number, r.institution_name) == key
     ]
     others = [r for r in same if r.provider_account_id != account_dto.provider_account_id]
-    connections = [_connection(account_dto.raw_data)] + [_connection(r.raw_data) for r in others]
-    if not others or not _one_per_connection(connections):
+    connections = [connection(account_dto.raw_data)] + [connection(r.raw_data) for r in others]
+    if not others or not distinct_connections(connections):
         return
     oldest, *newer = sorted(same, key=lambda r: r.created_at)
     for row in newer:
