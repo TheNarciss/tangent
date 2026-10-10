@@ -31,6 +31,7 @@ from ..aggregator import (
 from ..aggregator import (
     SyncResult as AggregatorSyncResult,
 )
+from ..aggregator.same_account import connection, redundant_connections
 from ..aggregator.types import LOAN_ACCOUNT_TYPES
 from . import yaml_config
 from .client import PowensClient, PowensError
@@ -258,6 +259,7 @@ class PowensAggregator:
         """
         async with PowensClient(token=self._token) as client:
             id_to_institution: dict[int, str] = {}
+            id_to_works: dict[int, bool] = {}
             try:
                 connections = await client.get_connections()
                 for conn in connections:
@@ -265,6 +267,10 @@ class PowensAggregator:
                     name = _extract_institution_name(conn)
                     if isinstance(conn_id, int) and name:
                         id_to_institution[conn_id] = name
+                    if isinstance(conn_id, int):
+                        id_to_works[conn_id] = bool(conn.get("last_update")) and not conn.get(
+                            "error"
+                        )
             except PowensError as exc:
                 logger.warning(
                     "Powens [user=%s]: /connections failed (institution_name will be null): %s",
@@ -283,6 +289,10 @@ class PowensAggregator:
                 institution_name: str | None = None
                 if isinstance(conn_id, int):
                     institution_name = id_to_institution.get(conn_id)
+                    # Whether its connection reads the bank (read once, no error),
+                    # None when unknown: what decides which of two listings of
+                    # one account is kept, and whether a duplicate may go.
+                    acc = {**acc, "connection_works": id_to_works.get(conn_id)}
 
                 accounts.append(
                     _extract_bank_account_dto(
@@ -379,6 +389,12 @@ class PowensAggregator:
         now = datetime.now(UTC)
         try:
             accounts = await self.get_accounts()
+            # A bank connected twice: the connection whose every account a
+            # newer one that works also lists brings nothing, and is removed.
+            redundant = redundant_connections(accounts)
+            if redundant:
+                await self._remove_connections(redundant)
+                accounts = [a for a in accounts if connection(a.raw_data) not in redundant]
 
             all_investments: list[Investment] = []
             all_transactions: list[Transaction] = []
@@ -408,6 +424,25 @@ class PowensAggregator:
                 error=str(exc),
                 synced_at=now,
             )
+
+    async def _remove_connections(self, connection_ids: set[object]) -> None:
+        """Delete at Powens the connections a newer one fully covers; never fails the sync."""
+        async with PowensClient(token=self._token) as client:
+            for conn_id in connection_ids:
+                try:
+                    await client.delete_connection(int(str(conn_id)))
+                    logger.info(
+                        "Powens [user=%s]: connection %s removed, a newer one lists all its accounts",
+                        self._user_id,
+                        conn_id,
+                    )
+                except (PowensError, ValueError) as exc:
+                    logger.warning(
+                        "Powens [user=%s]: duplicate connection %s not removed: %s",
+                        self._user_id,
+                        conn_id,
+                        exc,
+                    )
 
     async def handle_webhook(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Powens webhook handler — currently disabled (cf ADR-019)."""
