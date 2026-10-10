@@ -6,6 +6,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import noload
 
 from ..auth import User, fastapi_users
 from ..db import get_session
@@ -30,8 +31,9 @@ async def list_users(
 
     Important: returns id + email + flags but NEVER the hashed_password.
     """
-    result = await session.execute(select(User))
-    users = result.scalars().all()
+    # The linked OAuth accounts are not listed: not loaded, nor their tokens decrypted.
+    result = await session.execute(select(User).options(noload(User.oauth_accounts)))
+    users = result.unique().scalars().all()
     return [
         {
             "id": str(u.id),
@@ -120,10 +122,10 @@ async def categorize_now(
     what remains goes into a gap-fill batch, whose answers the poller
     applies within the hour.
     """
-    users = (await session.execute(select(User))).scalars().all()
+    user_ids = (await session.execute(select(User.id))).scalars().all()  # type: ignore[call-overload]
     learned = 0
-    for user in users:
-        learned += await tx_repo.apply_learned_categories(session, user.id)
+    for user_id in user_ids:
+        learned += await tx_repo.apply_learned_categories(session, user_id)
     batch = await batch_submitter.submit_nightly_batch(session, gaps_only=True)
     return {"learned": learned, "batch": _batch_to_dict(batch) if batch else None}
 

@@ -264,8 +264,10 @@ async def submit_nightly_batch(
 
 async def _apply_learned_for_everyone(session: AsyncSession) -> int:
     """Categories a past decision on the same merchant decides, for every user."""
-    users = (await session.execute(select(User))).scalars().all()
-    return sum([await tx_repo.apply_learned_categories(session, u.id) for u in users])
+    # The ids alone: a whole User row joins its OAuth accounts, and such a list
+    # is refused without `.unique()` — every night from 16 September on.
+    user_ids = (await session.execute(select(User.id))).scalars().all()  # type: ignore[call-overload]
+    return sum([await tx_repo.apply_learned_categories(session, uid) for uid in user_ids])
 
 
 def _within_budget(
