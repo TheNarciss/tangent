@@ -19,6 +19,7 @@ illegitimate as the account's history.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
 from itertools import pairwise
@@ -40,14 +41,28 @@ MIN_DAYS_TO_ANNUALIZE = 180
 CASH_KEY = "__cash__"
 
 
-def snapshot_inputs(wealth: Wealth) -> tuple[float, dict[str, float], dict[str, float]]:
+# A close more than this factor away from the bank's own unit value is taken
+# for another listing (another share class, another instrument) and the
+# bank's figure stays: a wrong price would sit in the history for good.
+_PLAUSIBLE_FACTOR = 2.0
+
+
+def snapshot_inputs(
+    wealth: Wealth, closes: Mapping[str, float] | None = None
+) -> tuple[float, dict[str, float], dict[str, float]]:
     """(total value, quantities, prices) of the pocket a snapshot can measure.
 
     Only the lines whose quantity is known: listed positions plus the PEA's
     cash. A wrapper the provider values in bulk (a life insurance with no
     line detail) is left out — with no quantity, a contribution into it
     cannot be told from a gain, and counting it would flatter the return.
+
+    `closes` are the market's last closes by ticker. A line that has one is
+    valued at it: the bank's valuation moves only when the bank is read
+    again, and a reading that waits for it stays flat for days while the
+    market moves. A line without a close keeps the bank's valuation.
     """
+    closes = closes or {}
     quantities: dict[str, float] = {}
     prices: dict[str, float] = {}
     total = 0.0
@@ -55,15 +70,29 @@ def snapshot_inputs(wealth: Wealth) -> tuple[float, dict[str, float], dict[str, 
         for position in account.positions:
             if position.quantity <= 0:
                 continue
+            bank = position.current_value / position.quantity
+            unit = _unit_price(position.ticker, bank, closes.get(position.ticker))
             quantities[position.ticker] = quantities.get(position.ticker, 0.0) + position.quantity
-            prices[position.ticker] = position.current_value / position.quantity
-            total += position.current_value
+            prices[position.ticker] = unit
+            total += unit * position.quantity
     cash = wealth.pea_cash_total
     if cash:
         quantities[CASH_KEY] = cash
         prices[CASH_KEY] = 1.0
         total += cash
     return total, quantities, prices
+
+
+def _unit_price(ticker: str, bank: float, close: float | None) -> float:
+    """The market's close when it is a plausible price for the line, else the bank's."""
+    if close is None or close <= 0:
+        return bank
+    if bank > 0 and not 1 / _PLAUSIBLE_FACTOR <= close / bank <= _PLAUSIBLE_FACTOR:
+        logger.warning(
+            "cours de %s trop loin de la banque (%.2f / %.2f), ignoré", ticker, close, bank
+        )
+        return bank
+    return close
 
 
 @dataclass(frozen=True)
