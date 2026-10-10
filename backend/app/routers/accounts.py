@@ -40,6 +40,7 @@ from ..enablebanking import aggregator as enablebanking_agg
 from ..finance.gap_filler.fields.transaction_category import CATEGORIES
 from ..i18n import Locale, current_locale, t
 from ..powens.aggregator import PowensAggregator
+from ..powens.aggregator import parse_datetime as parse_powens_datetime
 from ..powens.client import PowensClient, PowensError
 from ..powens.crypto import decrypt_token
 from ..repositories import account_holdings as holdings_repo
@@ -303,7 +304,7 @@ async def list_bank_connections(
                 connection_id=conn_id,
                 institution_name=institution_name,
                 accounts_count=len(accounts),
-                last_update=_parse_iso(conn.get("last_update")),
+                last_update=parse_powens_datetime(conn.get("last_update")),
                 error=conn.get("error"),
             )
         )
@@ -364,16 +365,6 @@ async def delete_bank_connection(
         connection_id,
         len(accounts),
     )
-
-
-def _parse_iso(s: str | None) -> datetime | None:
-    """Parse an ISO datetime string from Powens (handles trailing Z)."""
-    if not s:
-        return None
-    try:
-        return datetime.fromisoformat(s.replace("Z", "+00:00"))
-    except (TypeError, ValueError):
-        return None
 
 
 @router.get("/{account_id}", response_model=BankAccountResponse)
