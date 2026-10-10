@@ -9,6 +9,7 @@ import os
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Literal
+from urllib.parse import urlencode
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException
@@ -123,6 +124,54 @@ async def get_powens_webview(
 
     logger.info("Powens initiate user=%s: adding bank to existing Powens user", user.id)
     return {"webview_url": f"{base_url}&code={temp_code}"}
+
+
+def reconnect_url(*, code: str, connection_id: int, state: str) -> str:
+    """Powens' webview page that repairs one connection (new password, fresh SCA)."""
+    query = urlencode(
+        {
+            "domain": powens_settings.domain,
+            "client_id": powens_settings.client_id,
+            "redirect_uri": f"{powens_settings.backend_url}/auth/powens/callback",
+            "code": code,
+            "connection_id": connection_id,
+            "state": state,
+        }
+    )
+    return f"https://webview.powens.com/reconnect?{query}"
+
+
+@legacy_router.get("/auth/powens/reconnect")
+async def get_powens_reconnect_webview(
+    connection_id: int,
+    platform: Literal["web", "app"] = "web",
+    user: User = Depends(current_active_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """The webview URL that repairs a connection in error, in place.
+
+    Adding the bank again opens a second connection next to the broken one,
+    which stays broken; reconnecting keeps the connection, its accounts and
+    their ids. The temporary code is scoped to this user's Powens token, so
+    a connection that is not theirs is refused by Powens.
+    """
+    if not powens_settings.domain or not powens_settings.client_id:
+        raise HTTPException(status_code=500, detail="Powens not configured.")
+    stmt = select(PowensCredential).where(PowensCredential.user_id == user.id)
+    cred = (await session.execute(stmt)).scalars().first()
+    if cred is None:
+        raise HTTPException(status_code=404, detail="No Powens credential.")
+    try:
+        async with PowensClient(token=decrypt_token(cred.encrypted_token)) as client:
+            temp_code = await client.get_temporary_code()
+    except PowensError as exc:
+        logger.warning("Powens reconnect user=%s: no temporary code (%s)", user.id, exc)
+        raise HTTPException(status_code=502, detail="Powens unavailable.") from exc
+    logger.info("Powens reconnect user=%s connection=%s", user.id, connection_id)
+    url = reconnect_url(
+        code=temp_code, connection_id=connection_id, state=_sign_state(user.id, platform)
+    )
+    return {"webview_url": url}
 
 
 @legacy_router.get("/auth/powens/callback")

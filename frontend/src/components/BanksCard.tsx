@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 
 import {
   fetchBankConnections,
+  getPowensReconnectUrl,
   startEnableBankingAuth,
   unlinkBankConnection,
   unlinkEnableBankingSession,
@@ -91,8 +92,22 @@ function BankRow({
 }) {
   const { t, tn } = useT();
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Repairs this connection in place: adding the bank again would open a
+  // second one beside it, with the same accounts under new ids.
+  const reconnect = async () => {
+    setBusy(true);
+    try {
+      await openExternalFlow(await getPowensReconnectUrl(connectionId, platform()), navigate);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t("accounts.unknownError"));
+    }
+    setBusy(false);
+  };
 
   const unlink = useMutation({
     mutationFn: () => unlinkBankConnection(connectionId),
@@ -123,16 +138,18 @@ function BankRow({
             )}
           </p>
         </div>
-        {!confirming && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setConfirming(true)}
-            className="ml-auto shrink-0"
-          >
-            {t("accounts.banks.remove")}
-          </Button>
-        )}
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          {hasError && (
+            <Button variant="outline" size="sm" onClick={reconnect} disabled={busy}>
+              {busy ? t("accounts.addBank.redirecting") : t("accounts.banks.reconnect")}
+            </Button>
+          )}
+          {!confirming && (
+            <Button variant="ghost" size="sm" onClick={() => setConfirming(true)}>
+              {t("accounts.banks.remove")}
+            </Button>
+          )}
+        </div>
       </div>
       {confirming && (
         <div className="mt-2 flex flex-wrap items-center justify-end gap-2 text-xs">
