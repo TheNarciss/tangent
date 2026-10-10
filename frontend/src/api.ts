@@ -538,9 +538,23 @@ export function useSyncStatus() {
   });
 }
 
-export async function getPowensWebviewUrl(platform: "web" | "app" = "web"): Promise<string> {
-  // Powens initiate is on /auth/powens/* (ADR-020 Powens exception, not /api/*)
-  const powensRes = await fetch(`${BACKEND_BASE}/auth/powens/initiate?platform=${platform}`, {
+export function getPowensWebviewUrl(platform: "web" | "app" = "web"): Promise<string> {
+  return powensWebviewUrl(`/auth/powens/initiate?platform=${platform}`);
+}
+
+/** The Powens page that repairs a connection in error, in place (new password, fresh SCA). */
+export function getPowensReconnectUrl(
+  connectionId: number,
+  platform: "web" | "app" = "web",
+): Promise<string> {
+  return powensWebviewUrl(
+    `/auth/powens/reconnect?connection_id=${connectionId}&platform=${platform}`,
+  );
+}
+
+async function powensWebviewUrl(path: string): Promise<string> {
+  // Powens routes are on /auth/powens/* (ADR-020 Powens exception, not /api/*)
+  const powensRes = await fetch(`${BACKEND_BASE}${path}`, {
     credentials: "include",
     headers: { "Accept-Language": getLocale() },
   });
