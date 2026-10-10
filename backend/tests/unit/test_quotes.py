@@ -134,3 +134,19 @@ def test_the_route_falls_back_on_the_isin_when_the_bank_ticker_is_unknown(monkey
     assert asked == ["AIRLIQ", "AI.PA"]
     with pytest.raises(TickerNotFoundError):
         quotes_router._history("AIRLIQ", "1y", None)
+
+
+def test_latest_closes_reads_the_last_close_each_known_ticker_has(monkeypatch):
+    frame = pd.DataFrame(
+        {"CW8.PA": [690.0, 696.5], "PE500.PA": [41.0, None]},
+        index=pd.bdate_range("2026-10-08", periods=2),
+    )
+    monkeypatch.setattr(market, "fetch_prices", lambda tickers, period, drop_missing: frame)
+
+    assert market.latest_closes(["CW8.PA", "PE500.PA"]) == {"CW8.PA": 696.5, "PE500.PA": 41.0}
+
+
+def test_latest_closes_is_empty_rather_than_failing_when_yahoo_is_out_of_reach():
+    # The conftest cuts Yahoo off for every test.
+    assert market.latest_closes(["CW8.PA"]) == {}
+    assert market.latest_closes([]) == {}

@@ -235,3 +235,18 @@ def test_the_home_venue_beats_a_secondary_listing():
     assert classification._quote(entries, prefer="SM") == classification.Quote("SAN.MC", "EUR")
     assert classification.home_venue("ES0113900J37") == "SM"
     assert classification.home_venue("LU1681043599") is None
+
+
+@pytest.mark.parametrize(
+    ("ticker", "euros"),
+    [
+        ("CW8.PA", True),
+        ("EUNL.DE", True),
+        ("iwda.as", True),
+        ("AAPL", False),  # a US line is priced in dollars
+        ("VUSA.L", False),  # London quotes some lines in pence
+        ("AMUNDI", False),  # a symbol a bank built from a label
+    ],
+)
+def test_only_a_euro_venue_suffix_says_the_price_is_in_euros(ticker: str, euros: bool):
+    assert classification.quoted_in_euros(ticker) is euros

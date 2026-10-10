@@ -4,10 +4,16 @@ Powens exposes no transaction for investment wrappers, so the only way to
 tell a contribution from a market move is to store, each day, the value and
 the quantities behind it. This job is what gives the app a real history:
 TWR, TRI and the −10 % alert all read the rows it writes.
+
+Quantities come from the last bank read, prices from the market's last
+close for every line quoted in euros: the bank is read only when someone
+opens the accounts screen, and a value taken from it alone stayed flat for
+days while the market moved.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from datetime import date
@@ -19,7 +25,8 @@ from .aggregator.types import INVEST_ACCOUNT_TYPES
 from .auth import User
 from .db.models import BankAccount
 from .deps import get_user_wealth
-from .finance import performance
+from .finance import classification, market, performance
+from .models import Wealth
 from .repositories import snapshots as snapshots_repo
 
 logger = logging.getLogger(__name__)
@@ -49,6 +56,19 @@ async def _users_with_investments(session: AsyncSession) -> list[uuid.UUID]:
     return list((await session.execute(stmt)).scalars().all())
 
 
+async def _closes(wealth: Wealth) -> dict[str, float]:
+    """The last close of every line quoted on a euro venue, read off Yahoo in a thread."""
+    tickers = sorted(
+        {
+            position.ticker
+            for account in wealth.investment_accounts
+            for position in account.positions
+            if position.quantity > 0 and classification.quoted_in_euros(position.ticker)
+        }
+    )
+    return await asyncio.to_thread(market.latest_closes, tickers)
+
+
 async def record_for_user(
     session: AsyncSession,
     user: User,
@@ -58,7 +78,7 @@ async def record_for_user(
     """Write today's snapshot for one user. Returns False when there is nothing to record."""
     day = today or date.today()
     wealth = await get_user_wealth(user=user, session=session)
-    total, quantities, prices = performance.snapshot_inputs(wealth)
+    total, quantities, prices = performance.snapshot_inputs(wealth, await _closes(wealth))
     if not quantities:
         return False
 

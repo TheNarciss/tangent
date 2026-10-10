@@ -90,6 +90,27 @@ def fetch_prices(
     return prices.copy()
 
 
+def latest_closes(tickers: list[str]) -> dict[str, float]:
+    """Each ticker's last daily close; a ticker Yahoo does not know is absent.
+
+    Never raises: the nightly reading keeps the bank's valuation for a line
+    Yahoo cannot price, and for every line when Yahoo is out of reach.
+    """
+    if not tickers:
+        return {}
+    try:
+        prices = fetch_prices(tickers, period="5d", drop_missing=True)
+    except (MarketDataError, TickerNotFoundError) as exc:
+        logger.warning("derniers cours indisponibles, valorisation de la banque gardée: %s", exc)
+        return {}
+    out: dict[str, float] = {}
+    for ticker in prices.columns:
+        closes = prices[ticker].dropna()
+        if not closes.empty:
+            out[str(ticker)] = float(closes.iloc[-1])
+    return out
+
+
 def _file(key: tuple[str, str]) -> Path:
     return _DIR / f"{hashlib.sha256(f'{key[0]}|{key[1]}'.encode()).hexdigest()}.csv"
 
