@@ -6,6 +6,7 @@ import { fetchTermsVersion, useCurrentUser } from "@/api";
 import { t, useLocale } from "@/i18n";
 import { useProfileSync } from "@/lib/profile-sync";
 import { NativeGate } from "@/native/NativeGate";
+import { syncPushOnLaunch } from "@/native/push";
 import { listenForAppReturn } from "@/native/session";
 
 import { AppShell } from "@/components/AppShell";
@@ -48,6 +49,12 @@ function Gate() {
 
   // The phone: a sign-in finished in the system browser comes back as a tangent:// URL.
   useEffect(() => listenForAppReturn(qc, (e) => window.alert(e.message)), [qc]);
+
+  // Apple can hand out a new address for the same phone: say hello at each launch.
+  const signedIn = !!auth.data;
+  useEffect(() => {
+    if (signedIn) void syncPushOnLaunch();
+  }, [signedIn]);
 
   const termsVersionQuery = useQuery({
     queryKey: ["terms-version"],

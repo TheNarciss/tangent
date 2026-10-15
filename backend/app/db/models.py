@@ -709,3 +709,33 @@ class EnableBankingSession(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
+
+
+class DeviceToken(Base):
+    """One iPhone that agreed to be told when its briefing is ready (ADR-037).
+
+    The token is Apple's address for one app on one phone, not a secret of the
+    person's: it is stored in the clear, unique, and dropped as soon as Apple
+    answers that it no longer leads anywhere. `locale` is the language the app
+    showed when it registered, so the notification speaks it even though no
+    request carries an Accept-Language at three in the morning.
+    """
+
+    __tablename__ = "device_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    token: Mapped[str] = mapped_column(String(200), nullable=False, unique=True)
+    platform: Mapped[str] = mapped_column(String(16), nullable=False, default="ios")
+    locale: Mapped[str | None] = mapped_column(String(2), default=None)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )

@@ -46,6 +46,11 @@ const fr = {
   "account.briefing.receive": "Recevoir le briefing du matin",
   "account.briefing.on": "Activé — ton briefing t'attend chaque matin sur l'Aperçu.",
   "account.briefing.off": "Désactivé — active pour recevoir ton premier briefing demain matin.",
+  "account.briefing.notify": "Me prévenir sur cet iPhone",
+  "account.briefing.notifyOn": "Ton iPhone t'avertira quand le briefing sera écrit.",
+  "account.briefing.notifyOff": "Aucune notification ; le briefing t'attend sur l'Aperçu.",
+  "account.briefing.notifyDenied":
+    "Les notifications sont refusées pour Tangent. Autorise-les dans Réglages, Tangent, Notifications.",
 
   "account.export.title": "Exporter mes données",
   "account.export.desc":
@@ -131,6 +136,11 @@ const en: Record<keyof typeof fr, string> = {
   "account.briefing.receive": "Receive the morning briefing",
   "account.briefing.on": "On — your briefing waits for you every morning on the Overview.",
   "account.briefing.off": "Off — turn on to receive your first briefing tomorrow morning.",
+  "account.briefing.notify": "Tell me on this iPhone",
+  "account.briefing.notifyOn": "Your iPhone will let you know once the briefing is written.",
+  "account.briefing.notifyOff": "No notification; the briefing waits for you on the Overview.",
+  "account.briefing.notifyDenied":
+    "Notifications are turned off for Tangent. Allow them in Settings, Tangent, Notifications.",
 
   "account.export.title": "Export my data",
   "account.export.desc":

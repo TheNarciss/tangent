@@ -43,6 +43,7 @@ from .routers import (
     admin,
     analysis,
     dashboard,
+    devices,
     enablebanking,
     envelopes,
     export,
@@ -342,6 +343,7 @@ else:
 
 # ─── Business routers (all require auth via current_active_user) ──────────
 app.include_router(accounts.router, prefix="/api")
+app.include_router(devices.router, prefix="/api")
 app.include_router(password_reset.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 app.include_router(analysis.router, prefix="/api")

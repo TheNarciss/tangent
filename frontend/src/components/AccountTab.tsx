@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -24,6 +24,8 @@ import {
   useCurrentUser,
 } from "@/api";
 import { useProfile } from "@/lib/profile";
+import { isNative } from "@/native/bridge";
+import { disablePush, enablePush, pushState } from "@/native/push";
 import { cn } from "@/lib/utils";
 import {
   LOCALES,
@@ -701,6 +703,56 @@ function DeleteAccountDialog({
 /*  Auto-review opt-in (nightly LLM batch — ADR-018)                        */
 /* ──────────────────────────────────────────────────────────────────────── */
 
+function BriefingNotification() {
+  const { t } = useT();
+  const [state, setState] = useState<{ on: boolean; denied: boolean } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!isNative()) return;
+    void pushState().then(({ granted, askable, token }) =>
+      setState({ on: granted && !!token, denied: !granted && !askable }),
+    );
+  }, []);
+
+  if (!isNative() || state === null) return null;
+
+  const toggle = async () => {
+    setBusy(true);
+    if (state.on) {
+      await disablePush();
+      setState({ on: false, denied: state.denied });
+    } else {
+      const { granted, token } = await enablePush();
+      setState({ on: granted && !!token, denied: !granted });
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div className="mt-2 flex items-start gap-3 rounded-md border bg-muted/30 px-3 py-3">
+      <input
+        id="briefing-push-toggle"
+        type="checkbox"
+        checked={state.on}
+        onChange={() => void toggle()}
+        disabled={busy || state.denied}
+        className="mt-0.5 h-4 w-4 rounded border-input accent-primary cursor-pointer"
+      />
+      <label htmlFor="briefing-push-toggle" className="flex-1 cursor-pointer">
+        <p className="text-sm font-medium">{t("account.briefing.notify")}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          {state.denied
+            ? t("account.briefing.notifyDenied")
+            : state.on
+              ? t("account.briefing.notifyOn")
+              : t("account.briefing.notifyOff")}
+        </p>
+      </label>
+    </div>
+  );
+}
+
 function AutoReviewSection() {
   const { data: user } = useCurrentUser();
   const { t } = useT();
@@ -733,6 +785,7 @@ function AutoReviewSection() {
           </p>
         </label>
       </div>
+      {enabled && <BriefingNotification />}
     </Section>
   );
 }

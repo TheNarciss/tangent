@@ -13,6 +13,32 @@ Le code est dans le dépôt (ADR-035). Ce qui suit se fait dans le compte Apple 
 | Certificat Apple Distribution | exporté en `.p12` avec mot de passe | secrets `IOS_CERTIFICATE_P12_B64`, `IOS_CERTIFICATE_PASSWORD` |
 | Profil de provisionnement App Store | pour l'App ID ci-dessus | secret `IOS_PROVISIONING_PROFILE_B64` |
 
+### Le widget : à faire avant le prochain envoi TestFlight
+
+Le widget d'écran d'accueil lit ce que l'app lui écrit dans un conteneur partagé. Il faut donc, une fois, dans Certificates, Identifiers & Profiles :
+
+1. **App Group** : Identifiers → App Groups → `group.uk.riskybusinesses.tangent`.
+2. **App ID `uk.riskybusinesses.tangent`** : cocher la capacité App Groups et lui rattacher le groupe.
+3. **Nouvel App ID** `uk.riskybusinesses.tangent.widget`, même capacité, même groupe.
+4. **Deux profils App Store**, un par App ID, régénérés après ces changements.
+5. Secrets GitHub : `IOS_PROVISIONING_PROFILE_B64` (l'app) et `IOS_WIDGET_PROVISIONING_PROFILE_B64` (le widget), tous deux en base64.
+
+### Les notifications : la clé APNs
+
+1. **App ID `uk.riskybusinesses.tangent`** : cocher aussi la capacité **Push Notifications** (donc profil à régénérer, à faire en même temps que l'App Group ci-dessus).
+2. **Keys → Apple Push Notifications service (APNs)** : créer une clé, noter son Key ID, télécharger le `.p8` (une seule fois).
+3. Sur la VM, dans `backend/.env` :
+
+```bash
+APNS_KEY_ID=<le Key ID>
+APNS_PRIVATE_KEY_B64=$(base64 -w0 AuthKey_XXXXXXXXXX.p8)
+APNS_ENVIRONMENT=production
+```
+
+Puis redémarrer le backend. Le `.p8` reste sur la machine, jamais dans le dépôt ni dans un chat. Sans ces valeurs, l'app fonctionne et le briefing s'écrit : simplement personne n'est prévenu.
+
+Tant que ce n'est pas fait, la compilation pour le simulateur passe (elle ne signe rien) mais l'archive signée échoue avec « Provisioning profile doesn't include the com.apple.security.application-groups entitlement ». Le widget est donc à fusionner quand cette étape est faite, pas avant.
+
 Sur la VM, dans `backend/.env` : `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY_B64`, `APPLE_CLIENT_ID`, `APPLE_BUNDLE_ID`, puis redémarrer le backend. Le bouton « Continuer avec Apple » apparaît sur le site dès que c'est en place.
 
 ## 2. App Store Connect (appstoreconnect.apple.com)

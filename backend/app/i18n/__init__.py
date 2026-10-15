@@ -13,14 +13,14 @@ from typing import Literal
 
 from fastapi import Request
 
-from .messages import errors, stress, verdicts
+from .messages import errors, push, stress, verdicts
 
 Locale = Literal["fr", "en"]
 LOCALES: tuple[Locale, ...] = ("fr", "en")
 DEFAULT_LOCALE: Locale = "fr"
 
-_FR: dict[str, str] = {**errors.FR, **stress.FR, **verdicts.FR}
-_EN: dict[str, str] = {**errors.EN, **stress.EN, **verdicts.EN}
+_FR: dict[str, str] = {**errors.FR, **push.FR, **stress.FR, **verdicts.FR}
+_EN: dict[str, str] = {**errors.EN, **push.EN, **stress.EN, **verdicts.EN}
 _DICT: dict[Locale, dict[str, str]] = {"fr": _FR, "en": _EN}
 
 

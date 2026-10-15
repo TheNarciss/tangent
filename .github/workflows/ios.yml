@@ -78,6 +78,7 @@ jobs:
     #   IOS_CERTIFICATE_P12_B64     Apple Distribution certificate, .p12 in base64
     #   IOS_CERTIFICATE_PASSWORD    its password
     #   IOS_PROVISIONING_PROFILE_B64  App Store provisioning profile, .mobileprovision in base64
+  #   IOS_WIDGET_PROVISIONING_PROFILE_B64  the same, for uk.riskybusinesses.tangent.widget
     #   APPLE_TEAM_ID               ten characters
     #   APPSTORE_API_KEY_ID, APPSTORE_API_ISSUER_ID, APPSTORE_API_KEY_P8_B64
     #                               an App Store Connect API key (App Manager), .p8 in base64
@@ -112,6 +113,7 @@ jobs:
           P12_B64: ${{ secrets.IOS_CERTIFICATE_P12_B64 }}
           P12_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
           PROFILE_B64: ${{ secrets.IOS_PROVISIONING_PROFILE_B64 }}
+          WIDGET_PROFILE_B64: ${{ secrets.IOS_WIDGET_PROVISIONING_PROFILE_B64 }}
         run: |
           set -euo pipefail
           KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
@@ -124,10 +126,21 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
           security list-keychain -d user -s "$KEYCHAIN"
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          echo "$PROFILE_B64" | base64 --decode > "$RUNNER_TEMP/app.mobileprovision"
-          UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< "$(security cms -D -i "$RUNNER_TEMP/app.mobileprovision")")
-          cp "$RUNNER_TEMP/app.mobileprovision" ~/Library/MobileDevice/Provisioning\ Profiles/"$UUID".mobileprovision
-          echo "PROFILE_UUID=$UUID" >> "$GITHUB_ENV"
+          install_profile() {  # $1 = base64, $2 = name of the variable to export
+            echo "$1" | base64 --decode > "$RUNNER_TEMP/$2.mobileprovision"
+            local uuid
+            uuid=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< "$(security cms -D -i "$RUNNER_TEMP/$2.mobileprovision")")
+            cp "$RUNNER_TEMP/$2.mobileprovision" ~/Library/MobileDevice/Provisioning\ Profiles/"$uuid".mobileprovision
+            echo "$2=$uuid" >> "$GITHUB_ENV"
+          }
+          install_profile "$PROFILE_B64" PROFILE_UUID
+          # The widget extension is a second app ID, so a second profile
+          # (docs/ios-app-store.md). Absent until the App Group is created.
+          if [ -n "${WIDGET_PROFILE_B64:-}" ]; then
+            install_profile "$WIDGET_PROFILE_B64" WIDGET_PROFILE_UUID
+          else
+            echo "IOS_WIDGET_PROVISIONING_PROFILE_B64 manquant : l'archive signée échouera tant que le profil du widget n'existe pas."
+          fi
 
       - name: Archive
         working-directory: frontend/ios/App
@@ -142,7 +155,7 @@ jobs:
             -archivePath "$RUNNER_TEMP/App.xcarchive" \
             CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="$TEAM_ID" \
             CODE_SIGN_IDENTITY="Apple Distribution" \
-            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
+            APP_PROFILE="$PROFILE_UUID" WIDGET_PROFILE="${WIDGET_PROFILE_UUID:-}" \
             CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
             | tail -n 60
 
@@ -160,6 +173,7 @@ jobs:
             <key>signingStyle</key><string>manual</string>
             <key>provisioningProfiles</key><dict>
               <key>uk.riskybusinesses.tangent</key><string>$PROFILE_UUID</string>
+              <key>uk.riskybusinesses.tangent.widget</key><string>${WIDGET_PROFILE_UUID:-}</string>
             </dict>
             <key>uploadSymbols</key><true/>
           </dict></plist>

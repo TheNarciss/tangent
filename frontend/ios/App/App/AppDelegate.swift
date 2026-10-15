@@ -6,6 +6,26 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     var window: UIWindow?
 
+    /// Apple's address for this app on this phone, once the system gives it.
+    /// `TangentNativePlugin.requestPushPermission` waits for it, then hands it
+    /// to the backend so the morning briefing can be announced (ADR-037).
+    static let deviceTokenChanged = Notification.Name("TangentDeviceTokenChanged")
+    static private(set) var deviceToken: String?
+
+    func application(_ application: UIApplication,
+                     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        let hex = deviceToken.map { String(format: "%02x", $0) }.joined()
+        AppDelegate.deviceToken = hex
+        NotificationCenter.default.post(name: AppDelegate.deviceTokenChanged, object: hex)
+    }
+
+    func application(_ application: UIApplication,
+                     didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        // No token: the app works, it simply announces nothing.
+        AppDelegate.deviceToken = nil
+        NotificationCenter.default.post(name: AppDelegate.deviceTokenChanged, object: nil)
+    }
+
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Override point for customization after application launch.
         return true
