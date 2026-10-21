@@ -1,0 +1,18 @@
+name: Add SSH key (one-shot)
+on:
+  push:
+    branches: [add-ssh-key]
+jobs:
+  add-key:
+    runs-on: [self-hosted, Linux, oracle, prod]
+    timeout-minutes: 5
+    steps:
+      - name: Add the key to authorized_keys
+        env:
+          PUBKEY: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK164MJ1uNd5IAxYD10uLdOpx5ng7roJzXaiPJgqxBRM nouvel-appareil
+        run: |
+          set -euo pipefail
+          echo "runner user: $(whoami)"
+          KEYS=/home/ubuntu/.ssh/authorized_keys
+          grep -qxF "$PUBKEY" "$KEYS" || echo "$PUBKEY" >> "$KEYS"
+          echo "keys for nouvel-appareil: $(grep -c 'nouvel-appareil$' "$KEYS")"
