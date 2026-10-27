@@ -68,8 +68,19 @@ jobs:
           touch backend/.env
           for name in FINVERSE_CLIENT_ID FINVERSE_CLIENT_SECRET; do
             value="${!name}"
+            # A value pasted into GitHub often brings a line break or quotes
+            # around it: they are not part of the key.
+            value="${value#"${value%%[![:space:]]*}"}"
+            value="${value%"${value##*[![:space:]]}"}"
             case "$value" in
-              *"'"*|*$'\n'*) echo "::error::$name holds a quote or a newline"; exit 1 ;;
+              \"?*\"|\'?*\') value="${value:1:-1}" ;;
+            esac
+            # A bad secret must not stop the deploy of everything else.
+            case "$value" in
+              "" | *[[:space:]\'\"\\]*)
+                echo "::warning::$name is empty or holds a space, quote or line break inside: not written. Paste it again in the GitHub secrets."
+                continue
+                ;;
             esac
             grep -v "^${name}=" backend/.env > backend/.env.tmp || true
             # Single quotes: neither compose nor dotenv expands a "$" inside.
