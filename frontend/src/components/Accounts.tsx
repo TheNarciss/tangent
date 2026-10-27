@@ -24,6 +24,7 @@ import {
   groupLabel,
   groupOf,
   groupTotal,
+  valueInEur,
   longDate,
   relativeTime,
   typeLabel,
@@ -260,6 +261,7 @@ function AccountCard({ account, onOpen }: { account: BankAccountResponse; onOpen
   const { t } = useT();
   const group = groupOf(account.type);
   const value = accountValue(account);
+  const inEur = valueInEur(account);
   const isLoan = group === "loan";
   const gain = !isLoan && group !== "cash" && group !== "savings" ? account.diff : null;
 
@@ -278,7 +280,7 @@ function AccountCard({ account, onOpen }: { account: BankAccountResponse; onOpen
         {isLoan && account.loan?.next_payment_date && account.loan.next_payment_amount ? (
           <div className="mt-0.5 truncate text-xs text-muted-foreground">
             {t("accounts.card.nextPayment", {
-              amount: fmt.eur(account.loan.next_payment_amount),
+              amount: fmt.amount(account.loan.next_payment_amount, account.currency),
               date: longDate(account.loan.next_payment_date),
             })}
           </div>
@@ -286,8 +288,13 @@ function AccountCard({ account, onOpen }: { account: BankAccountResponse; onOpen
       </div>
       <div className="shrink-0 text-right">
         <div className={cn("font-mono text-base tabular", isLoan && "text-[hsl(var(--loss))]")}>
-          {isLoan ? `−${fmt.eur(value)}` : fmt.eur(value)}
+          {isLoan ? `−${fmt.amount(value, account.currency)}` : fmt.amount(value, account.currency)}
         </div>
+        {account.currency !== "EUR" && inEur !== null && (
+          <div className="font-mono text-xs tabular text-muted-foreground">
+            ≈ {fmt.eur(isLoan ? -inEur : inEur)}
+          </div>
+        )}
         {gain !== null && gain !== undefined && (
           <div
             className={cn(
@@ -295,7 +302,7 @@ function AccountCard({ account, onOpen }: { account: BankAccountResponse; onOpen
               gain >= 0 ? "text-[hsl(var(--gain))]" : "text-[hsl(var(--loss))]",
             )}
           >
-            {fmt.signedEur(gain)}
+            {fmt.signedAmount(gain, account.currency)}
             {account.diff_percent !== null && (
               <span className="hidden sm:inline"> ({fmt.signedPct(account.diff_percent)})</span>
             )}

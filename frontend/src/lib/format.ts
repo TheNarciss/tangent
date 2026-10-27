@@ -83,8 +83,20 @@ function money(v: number, currency: string): string {
   }
 }
 
+/** An account's amount in its own currency; euros keep the house format (ADR-038). */
+function amount(v: number, currency: string | null | undefined): string {
+  return !currency || currency === "EUR" ? F().eur.format(v) : money(v, currency);
+}
+
+function signedAmount(v: number, currency: string | null | undefined): string {
+  if (!currency || currency === "EUR") return F().signedEur.format(v);
+  return `${v > 0 ? "+" : ""}${money(v, currency)}`;
+}
+
 export const fmt = {
   money,
+  amount,
+  signedAmount,
   eur: (v: number) => F().eur.format(v),
   /** Whole euros — yearly fees, amounts « en jeu ». */
   eur0: (v: number) => F().eur0.format(v),

@@ -20,7 +20,7 @@ from sqlalchemy.orm import aliased
 
 from ..aggregator import Transaction
 from ..db.models import BankAccount, BankTransaction
-from ..finance import merchants
+from ..finance import fx, merchants
 
 logger = logging.getLogger(__name__)
 
@@ -294,6 +294,13 @@ async def list_recent_all_accounts(
 _SPENDING_ACCOUNT_TYPES = ("checking", "card", "joint")
 
 
+async def _eur_sum(rows: list[Any]) -> float | None:
+    """(currency, total) rows added up in euros (ADR-038); None when none converts."""
+    factors = await fx.to_eur_factors(ccy for ccy, _ in rows)
+    known = [float(total) * factors[fx.code(ccy)] for ccy, total in rows if fx.code(ccy) in factors]
+    return sum(known) if known else None
+
+
 async def monthly_outflow(
     session: AsyncSession,
     user_id: uuid.UUID,
@@ -309,7 +316,7 @@ async def monthly_outflow(
     """
     since = date.today() - timedelta(days=days)
     stmt = (
-        select(func.sum(BankTransaction.amount))
+        select(BankAccount.currency, func.sum(BankTransaction.amount))
         .join(BankAccount, BankTransaction.bank_account_id == BankAccount.id)
         .where(
             BankTransaction.user_id == user_id,
@@ -317,11 +324,12 @@ async def monthly_outflow(
             BankTransaction.amount < 0,
             BankAccount.type.in_(_SPENDING_ACCOUNT_TYPES),
         )
+        .group_by(BankAccount.currency)
     )
-    total = (await session.execute(stmt)).scalar()
+    total = await _eur_sum(list((await session.execute(stmt)).all()))
     if total is None:
         return None
-    return -float(total) / (days / 30.4375)
+    return -total / (days / 30.4375)
 
 
 # Accounts a transfer *into* is saving: regulated envelopes and investment wrappers.
@@ -356,7 +364,7 @@ async def monthly_inflow_to_savings(
     """
     since = date.today() - timedelta(days=days)
     stmt = (
-        select(func.sum(BankTransaction.amount))
+        select(BankAccount.currency, func.sum(BankTransaction.amount))
         .join(BankAccount, BankTransaction.bank_account_id == BankAccount.id)
         .where(
             BankTransaction.user_id == user_id,
@@ -364,11 +372,12 @@ async def monthly_inflow_to_savings(
             BankTransaction.amount > 0,
             BankAccount.type.in_(_SAVING_ACCOUNT_TYPES),
         )
+        .group_by(BankAccount.currency)
     )
-    total = (await session.execute(stmt)).scalar()
+    total = await _eur_sum(list((await session.execute(stmt)).all()))
     if total is None:
         return None
-    return float(total) / (days / 30.4375)
+    return total / (days / 30.4375)
 
 
 # Money that leaves a current account without being spent: moved to a livret or
@@ -413,7 +422,9 @@ async def spending_by_month_and_category(
     """
     month = func.date_trunc("month", BankTransaction.transaction_date).label("month")
     stmt = (
-        select(month, BankTransaction.category, func.sum(BankTransaction.amount))
+        select(
+            month, BankTransaction.category, BankAccount.currency, func.sum(BankTransaction.amount)
+        )
         .join(BankAccount, BankTransaction.bank_account_id == BankAccount.id)
         .where(
             BankTransaction.user_id == user_id,
@@ -424,15 +435,19 @@ async def spending_by_month_and_category(
             | (BankTransaction.category.not_in(_NOT_SPENDING_CATEGORIES)),
             ~_has_counterpart(BankTransaction),
         )
-        .group_by(month, BankTransaction.category)
+        .group_by(month, BankTransaction.category, BankAccount.currency)
         .order_by(month)
     )
-    res = await session.execute(stmt)
-    out: list[tuple[date, str | None, float]] = []
-    for m, category, total in res.all():
-        first_day = m.date() if isinstance(m, datetime) else m
-        out.append((first_day, category, -float(total)))
-    return out
+    rows = (await session.execute(stmt)).all()
+    factors = await fx.to_eur_factors(ccy for _, _, ccy, _ in rows)
+    spent: dict[tuple[date, str | None], float] = {}
+    for m, category, ccy, total in rows:
+        factor = factors.get(fx.code(ccy))
+        if factor is None:
+            continue
+        key = (m.date() if isinstance(m, datetime) else m, category)
+        spent[key] = spent.get(key, 0.0) - float(total) * factor
+    return [(first_day, category, total) for (first_day, category), total in spent.items()]
 
 
 async def income_by_month(
@@ -449,7 +464,7 @@ async def income_by_month(
     """
     month = func.date_trunc("month", BankTransaction.transaction_date).label("month")
     stmt = (
-        select(month, func.sum(BankTransaction.amount))
+        select(month, BankAccount.currency, func.sum(BankTransaction.amount))
         .join(BankAccount, BankTransaction.bank_account_id == BankAccount.id)
         .where(
             BankTransaction.user_id == user_id,
@@ -458,11 +473,19 @@ async def income_by_month(
             BankAccount.type.in_(_SPENDING_ACCOUNT_TYPES),
             ~_has_counterpart(BankTransaction),
         )
-        .group_by(month)
+        .group_by(month, BankAccount.currency)
         .order_by(month)
     )
-    res = await session.execute(stmt)
-    return [((m.date() if isinstance(m, datetime) else m), float(total)) for m, total in res.all()]
+    rows = (await session.execute(stmt)).all()
+    factors = await fx.to_eur_factors(ccy for _, ccy, _ in rows)
+    earned: dict[date, float] = {}
+    for m, ccy, total in rows:
+        factor = factors.get(fx.code(ccy))
+        if factor is None:
+            continue
+        first_day = m.date() if isinstance(m, datetime) else m
+        earned[first_day] = earned.get(first_day, 0.0) + float(total) * factor
+    return list(earned.items())
 
 
 async def spending_by_description(
@@ -479,6 +502,7 @@ async def spending_by_description(
     stmt = (
         select(
             BankTransaction.description,
+            BankAccount.currency,
             func.sum(BankTransaction.amount),
             func.count(BankTransaction.id),
         )
@@ -492,7 +516,15 @@ async def spending_by_description(
             | (BankTransaction.category.not_in(_NOT_SPENDING_CATEGORIES)),
             ~_has_counterpart(BankTransaction),
         )
-        .group_by(BankTransaction.description)
+        .group_by(BankTransaction.description, BankAccount.currency)
     )
-    res = await session.execute(stmt)
-    return [(str(d), -float(total), int(n)) for d, total, n in res.all()]
+    rows = (await session.execute(stmt)).all()
+    factors = await fx.to_eur_factors(ccy for _, ccy, _, _ in rows)
+    spent: dict[str, tuple[float, int]] = {}
+    for d, ccy, total, n in rows:
+        factor = factors.get(fx.code(ccy))
+        if factor is None:
+            continue
+        before, count = spent.get(str(d), (0.0, 0))
+        spent[str(d)] = (before - float(total) * factor, count + int(n))
+    return [(d, total, n) for d, (total, n) in spent.items()]

@@ -37,6 +37,7 @@ from ..auth import User, current_active_user
 from ..db import get_session
 from ..db.models import BankAccount, EnableBankingSession, FinverseConnection, PowensCredential
 from ..enablebanking import aggregator as enablebanking_agg
+from ..finance import fx
 from ..finance.gap_filler.fields.transaction_category import CATEGORIES
 from ..finverse import aggregator as finverse_agg
 from ..i18n import Locale, current_locale, t
@@ -137,6 +138,10 @@ class BankAccountResponse(BaseModel):
     # Nested loan (one-to-one) — populated when type is loan-like
     loan: LoanResponse | None = None
 
+    # Amounts above are in `currency`; this times them reads in euros (ADR-038).
+    # None when the ECB has no rate for it: the account is left out of totals.
+    to_eur: float | None = 1.0
+
 
 class HoldingResponse(BaseModel):
     id: uuid.UUID
@@ -207,7 +212,7 @@ def _loan_to_response(loan) -> LoanResponse:
     )
 
 
-def _bank_account_to_response(r: BankAccount) -> BankAccountResponse:
+def _bank_account_to_response(r: BankAccount, factors: dict[str, float]) -> BankAccountResponse:
     """Convert an ORM BankAccount row to a Pydantic response, including nested Loan."""
     return BankAccountResponse(
         id=r.id,
@@ -236,6 +241,7 @@ def _bank_account_to_response(r: BankAccount) -> BankAccountResponse:
         display=r.display,
         last_synced_at=r.last_synced_at,
         loan=_loan_to_response(r.loan) if r.loan else None,
+        to_eur=factors.get(fx.code(r.currency)),
     )
 
 
@@ -249,7 +255,8 @@ async def list_accounts(
 ) -> list[BankAccountResponse]:
     """All bank accounts owned by the current user (with nested loan if any)."""
     rows = await accounts_repo.list_accounts(session, user.id)
-    return [_bank_account_to_response(r) for r in rows]
+    factors = await fx.to_eur_factors(r.currency for r in rows)
+    return [_bank_account_to_response(r, factors) for r in rows]
 
 
 class BankConnectionResponse(BaseModel):
@@ -377,7 +384,7 @@ async def get_account(
     row = await accounts_repo.get_account(session, user.id, account_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Account not found")
-    return _bank_account_to_response(row)
+    return _bank_account_to_response(row, await fx.to_eur_factors([row.currency]))
 
 
 @router.get("/{account_id}/holdings", response_model=list[HoldingResponse])

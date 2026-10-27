@@ -98,8 +98,15 @@ export function accountValue(a: BankAccountResponse): number {
   return a.balance;
 }
 
+/** What the account counts for in euros; null when its currency has no rate. */
+export function valueInEur(a: BankAccountResponse): number | null {
+  if (a.to_eur === null) return null;
+  return accountValue(a) * (a.to_eur ?? 1);
+}
+
+/** In euros; an account without a rate is left out, as in the totals above it. */
 export function groupTotal(accounts: BankAccountResponse[]): number {
-  return accounts.reduce((sum, a) => sum + accountValue(a), 0);
+  return accounts.reduce((sum, a) => sum + (valueInEur(a) ?? 0), 0);
 }
 
 /** Drop repeated words some banks put in account names ("Livret A Livret A"). */

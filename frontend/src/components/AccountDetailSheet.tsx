@@ -66,7 +66,7 @@ export function AccountDetailSheet({ account, onClose }: Props) {
                 )}
               >
                 {groupOf(account.type) === "loan" ? "−" : ""}
-                {fmt.eur(accountValue(account))}
+                {fmt.amount(accountValue(account), account.currency)}
               </div>
             </BottomSheetHeader>
             <BottomSheetBody>
@@ -301,7 +301,7 @@ function TransactionRow({
             tx.amount >= 0 ? "text-[hsl(var(--gain))]" : "text-[hsl(var(--loss))]",
           )}
         >
-          {fmt.signedEur(tx.amount)}
+          {fmt.signedAmount(tx.amount, tx.currency)}
         </span>
       </div>
       <div className="mt-0.5 flex items-center justify-between gap-3 text-xs text-muted-foreground">

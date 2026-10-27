@@ -26,6 +26,7 @@ from .auth import User, current_active_user
 from .db import get_session
 from .db.models import BankAccount as _BankAccountRow
 from .finance import envelope_metadata as _envelope_metadata
+from .finance import fx as _fx
 from .models import (
     CashAccount as _CashAccount,
 )
@@ -101,6 +102,10 @@ def _loan_outstanding(acc: _BankAccountRow, loan_dict: dict) -> float:
     return abs(float(acc.balance or 0))
 
 
+def _in_eur(value: float | None, factor: float) -> float | None:
+    return None if value is None else value * factor
+
+
 async def get_user_wealth(
     user: User = Depends(current_active_user),
     session: AsyncSession = Depends(get_session),
@@ -119,8 +124,13 @@ async def get_user_wealth(
     - LOAN / MORTGAGE / CONSUMER_CREDIT / REVOLVING_CREDIT → Loan, outstanding
       = `used_amount` (fallback |balance|)
     - OTHER → ignored (debug log)
+
+    Every amount is in euros (ADR-038): an account held in another currency
+    is converted at the ECB reference rate, and one whose currency has no
+    rate is left out rather than counted as euros.
     """
     bank_accounts = await _accounts_repo.list_accounts(session, user.id)
+    factors = await _fx.to_eur_factors(acc.currency for acc in bank_accounts)
 
     wealth = _Wealth(
         user_id=user.id,
@@ -130,6 +140,14 @@ async def get_user_wealth(
     for acc in bank_accounts:
         acc_type = _AccountType(acc.type)
         institution = acc.institution_name
+        factor = factors.get(_fx.code(acc.currency))
+        if factor is None:
+            logger.warning(
+                "get_user_wealth: no EUR rate for %s, account %r left out",
+                acc.currency,
+                acc.name,
+            )
+            continue
 
         if acc_type in _CASH_TYPES:
             wealth.checking_accounts.append(
@@ -137,8 +155,8 @@ async def get_user_wealth(
                     provider_account_id=acc.provider_account_id,
                     institution_name=institution,
                     name=acc.name,
-                    balance=float(acc.balance or 0),
-                    currency=acc.currency or "EUR",
+                    balance=float(acc.balance or 0) * factor,
+                    currency="EUR",
                 )
             )
             continue
@@ -151,9 +169,9 @@ async def get_user_wealth(
                     provider_account_id=acc.provider_account_id,
                     institution_name=institution,
                     name=acc.name,
-                    balance=float(acc.balance or 0),
+                    balance=float(acc.balance or 0) * factor,
                     envelope_type=yaml_key or acc_type.value,
-                    currency=acc.currency or "EUR",
+                    currency="EUR",
                     display_name=meta.display_name if meta else None,
                     rate_pct=meta.rate_pct if meta else None,
                     ceiling_eur=meta.ceiling_eur if meta else None,
@@ -171,8 +189,8 @@ async def get_user_wealth(
                         provider_account_id=acc.provider_account_id,
                         institution_name=institution,
                         name=acc.name,
-                        balance=float(acc.balance or 0),
-                        currency=acc.currency or "EUR",
+                        balance=float(acc.balance or 0) * factor,
+                        currency="EUR",
                         is_pea_cash=True,
                     )
                 )
@@ -184,16 +202,18 @@ async def get_user_wealth(
                     institution_name=institution,
                     name=acc.name,
                     account_type=acc_type.value,
-                    currency=acc.currency or "EUR",
-                    balance=float(acc.valuation if acc.valuation is not None else acc.balance or 0),
+                    currency="EUR",
+                    balance=float(acc.valuation if acc.valuation is not None else acc.balance or 0)
+                    * factor,
                     positions=[
                         _WealthPosition(
                             ticker=h.ticker,
                             label=h.label or h.ticker,
                             isin=h.isin,
                             quantity=float(h.quantity),
-                            avg_cost=float(h.unit_price),
-                            current_value=float(h.current_value),
+                            # A holding is valued in its account's currency.
+                            avg_cost=float(h.unit_price) * factor,
+                            current_value=float(h.current_value) * factor,
                             currency=h.currency or "EUR",
                             ter=h.ter,
                             ter_source_url=h.ter_source_url,
@@ -220,10 +240,12 @@ async def get_user_wealth(
                     provider_account_id=acc.provider_account_id,
                     institution_name=institution,
                     name=acc.name,
-                    outstanding_balance=_loan_outstanding(acc, loan_dict),
-                    currency=acc.currency or "EUR",
+                    outstanding_balance=_loan_outstanding(acc, loan_dict) * factor,
+                    currency="EUR",
                     interest_rate_pct=rate_pct,
-                    monthly_payment=_safe_float(loan_dict.get("next_payment_amount")),
+                    monthly_payment=_in_eur(
+                        _safe_float(loan_dict.get("next_payment_amount")), factor
+                    ),
                     next_payment_date=_parse_date(loan_dict.get("next_payment_date")),
                     deferral_until=_parse_date(loan_dict.get("deferred_until")),
                     maturity_date=_parse_date(loan_dict.get("maturity_date")),

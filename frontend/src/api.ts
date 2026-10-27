@@ -811,6 +811,9 @@ export interface BankAccountResponse {
 
   // Loan sub-object (only when type is loan-like)
   loan: LoanResponse | null;
+
+  /** Times the amounts above, in euros (ADR-038); null when the ECB has no rate. */
+  to_eur?: number | null;
 }
 
 export interface HoldingResponse {

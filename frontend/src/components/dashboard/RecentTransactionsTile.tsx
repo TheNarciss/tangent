@@ -61,7 +61,7 @@ export function RecentTransactionsTile({ onSeeAll, limit = 5 }: RecentTransactio
                 )}
               >
                 {txn.amount >= 0 ? "+" : ""}
-                {fmt.eur(txn.amount)}
+                {fmt.amount(txn.amount, txn.currency)}
               </div>
             </div>
           ))}
