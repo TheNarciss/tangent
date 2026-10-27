@@ -24,6 +24,7 @@ def test_setup_scheduler_registers_the_expected_jobs() -> None:
         "compute_picks_at_boot",
         "warm_sources_at_boot",
         "sync_enablebanking",
+        "sync_finverse",
         "record_portfolio_snapshots",
         "collect_market_leads",
         "archive_morning",

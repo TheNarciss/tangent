@@ -9,7 +9,9 @@ import {
   startEnableBankingAuth,
   unlinkBankConnection,
   unlinkEnableBankingSession,
+  unlinkFinverseConnection,
   useEnableBankingSessions,
+  useFinverseConnections,
 } from "@/api";
 import { useT } from "@/i18n";
 import { formatDate, relativeTime } from "@/lib/accounts";
@@ -24,11 +26,14 @@ export function BanksCard() {
   const { t } = useT();
   const connections = useQuery({ queryKey: ["bank-connections"], queryFn: fetchBankConnections });
   const sessions = useEnableBankingSessions();
+  const links = useFinverseConnections();
   const nothing =
     connections.data &&
     connections.data.length === 0 &&
     sessions.data &&
-    sessions.data.length === 0;
+    sessions.data.length === 0 &&
+    links.data &&
+    links.data.length === 0;
 
   return (
     <section className="rounded-xl border bg-card p-4 md:p-6">
@@ -60,6 +65,16 @@ export function BanksCard() {
             expired={s.expired}
             lastSync={s.last_sync_at}
             error={s.last_error}
+          />
+        ))}
+        {links.data?.map((l) => (
+          <FinverseRow
+            key={l.id}
+            id={l.id}
+            name={l.institution_name}
+            accountsCount={l.accounts_count}
+            lastSync={l.last_sync_at}
+            error={l.last_error}
           />
         ))}
         {connections.data?.map((conn) => (
@@ -263,6 +278,91 @@ function EnableBankingRow({
             </Button>
           )}
         </div>
+      </div>
+      {confirming && (
+        <div className="mt-2 flex flex-wrap items-center justify-end gap-2 text-xs">
+          <span className="mr-auto text-muted-foreground">
+            {t("accounts.banks.removeConfirm", {
+              name,
+              accounts: tn("accounts.banks.count", accountsCount),
+            })}
+          </span>
+          <Button variant="outline" size="sm" onClick={() => setConfirming(false)}>
+            {t("common.cancel")}
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => unlink.mutate()}
+            disabled={unlink.isPending}
+          >
+            {unlink.isPending ? t("accounts.banks.removing") : t("accounts.banks.remove")}
+          </Button>
+        </div>
+      )}
+      {failure && <p className="mt-1 text-xs text-[hsl(var(--loss))]">{failure}</p>}
+    </div>
+  );
+}
+
+/** A bank linked through Finverse (ADR-037): its last read, and how to remove it. */
+function FinverseRow({
+  id,
+  name,
+  accountsCount,
+  lastSync,
+  error,
+}: {
+  id: string;
+  name: string;
+  accountsCount: number;
+  lastSync: string | null;
+  error: string | null;
+}) {
+  const { t, tn } = useT();
+  const qc = useQueryClient();
+  const [confirming, setConfirming] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+
+  const unlink = useMutation({
+    mutationFn: () => unlinkFinverseConnection(id),
+    onSuccess: () => {
+      for (const key of ["finverse", "bank-accounts", "wealth", "dashboard", "spending"]) {
+        qc.invalidateQueries({ queryKey: [key] });
+      }
+      setConfirming(false);
+    },
+    onError: (e) => setFailure(e instanceof Error ? e.message : t("accounts.unknownError")),
+  });
+
+  return (
+    <div className="rounded-md border px-3 py-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <div className="min-w-[12rem] flex-1">
+          <p className="truncate text-sm font-medium">{name}</p>
+          <p className="text-xs text-muted-foreground">
+            {t("accounts.banks.summary", {
+              accounts: tn("accounts.banks.count", accountsCount),
+              when: relativeTime(lastSync),
+            })}
+          </p>
+          {error && (
+            <p className="mt-0.5 break-words text-xs text-[hsl(var(--loss))]">
+              {t("accounts.banks.lastFetchFailed", { error })}
+            </p>
+          )}
+        </div>
+        {!confirming && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-auto shrink-0"
+            onClick={() => setConfirming(true)}
+          >
+            {t("accounts.banks.remove")}
+          </Button>
+        )}
       </div>
       {confirming && (
         <div className="mt-2 flex flex-wrap items-center justify-end gap-2 text-xs">

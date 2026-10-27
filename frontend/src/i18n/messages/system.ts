@@ -8,6 +8,8 @@ const fr = {
   "system.eb.encryptionNotConfigured":
     "Le serveur ne peut pas chiffrer la session (clé manquante).",
   "system.eb.failed": "La connexion à la banque a échoué ({reason}).",
+  "system.fv.exchange": "Finverse n'a pas pu finaliser la liaison. Réessaie.",
+  "system.fv.bankRead": "Finverse n'a pas pu lire la banque. Réessaie un peu plus tard.",
 
   "system.powens.firstSyncFailed":
     "Banque ajoutée, mais la première récupération des comptes a échoué. Réessaie avec « Mettre à jour ».",
@@ -40,6 +42,8 @@ const en: Record<keyof typeof fr, string> = {
   "system.eb.wrongUser": "The bank's response belongs to another Tangent account.",
   "system.eb.encryptionNotConfigured": "The server cannot encrypt the session (missing key).",
   "system.eb.failed": "The bank connection failed ({reason}).",
+  "system.fv.exchange": "Finverse could not complete the link. Try again.",
+  "system.fv.bankRead": "Finverse could not read the bank. Try again a little later.",
 
   "system.powens.firstSyncFailed":
     "Bank added, but the first retrieval of the accounts failed. Try again with “Update”.",

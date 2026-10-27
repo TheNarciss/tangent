@@ -618,6 +618,46 @@ export async function unlinkEnableBankingSession(id: string): Promise<void> {
   await http<void>(`/enablebanking/sessions/${id}`, { method: "DELETE" });
 }
 
+/* ── Finverse (ADR-037) ─────────────────────────────────────────────── */
+
+export interface FinverseConnection {
+  id: string;
+  institution_name: string;
+  accounts_count: number;
+  last_sync_at: string | null;
+  last_error: string | null;
+}
+
+/** Whether the server holds Finverse credentials. */
+export function useFinverseStatus() {
+  return useQuery({
+    queryKey: ["finverse", "status"],
+    queryFn: () => http<{ configured: boolean }>("/finverse/status"),
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
+export function useFinverseConnections() {
+  return useQuery({
+    queryKey: ["finverse", "connections"],
+    queryFn: () => http<FinverseConnection[]>("/finverse/connections"),
+  });
+}
+
+/** Where Finverse Link opens: the person picks their bank there. */
+export async function startFinverseLink(platform: "web" | "app" = "web"): Promise<string> {
+  const out = await http<{ url: string }>("/finverse/link", {
+    method: "POST",
+    body: JSON.stringify({ platform }),
+  });
+  return out.url;
+}
+
+export async function unlinkFinverseConnection(id: string): Promise<void> {
+  await http<void>(`/finverse/connections/${id}`, { method: "DELETE" });
+}
+
 /* ── Admin ──────────────────────────────────────────────────────────── */
 
 export interface CategorizeReport {

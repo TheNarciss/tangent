@@ -9,6 +9,8 @@ Jobs registered:
                           the stored list is stale -> finance.picks
 - sync_enablebanking    : daily at 07:15 Europe/Paris, every live consent
                           -> enablebanking.aggregator (PSD2 allows four a day)
+- sync_finverse         : daily at 07:20 Europe/Paris, every Finverse link
+                          -> finverse.aggregator (Finverse refreshes the bank itself)
 - record_portfolio_snapshots : daily at 02:00 Europe/Paris -> snapshot_job
 - submit_nightly_batch  : daily at 03:00 Europe/Paris -> batch_submitter
 - poll_pending_batches  : every 15 min, all day -> batch_poller (idempotent,
@@ -34,9 +36,10 @@ from sqlalchemy import select
 from . import archive
 from .aggregator.persist import persist_sync_result
 from .db import async_session_factory
-from .db.models import EnableBankingSession
+from .db.models import EnableBankingSession, FinverseConnection
 from .enablebanking import aggregator as enablebanking_agg
 from .finance import macro, market_leads, picks, stress
+from .finverse import aggregator as finverse_agg
 from .llm import batch_poller, batch_submitter
 from .repositories import review_batches as batches_repo
 from .snapshot_job import record_all_users
@@ -203,6 +206,20 @@ async def _job_sync_enablebanking() -> None:
             logger.exception("Scheduler: Enable Banking sync failed")
 
 
+async def _job_sync_finverse() -> None:
+    """Read every Finverse link, one at a time; a new refresh token is committed at once."""
+    async with async_session_factory() as session:
+        try:
+            rows = (await session.execute(select(FinverseConnection))).scalars().all()
+            for row in rows:
+                result = await finverse_agg.sync_row(row)
+                if result.success:
+                    await persist_sync_result(session, row.user_id, result)
+                await session.commit()
+        except Exception:
+            logger.exception("Scheduler: Finverse sync failed")
+
+
 def setup_scheduler() -> AsyncIOScheduler:
     """Build the scheduler with the nightly jobs (not started yet).
 
@@ -236,6 +253,14 @@ def setup_scheduler() -> AsyncIOScheduler:
         _job_sync_enablebanking,
         CronTrigger(hour=7, minute=15, timezone=_PARIS),
         id="sync_enablebanking",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        _job_sync_finverse,
+        CronTrigger(hour=7, minute=20, timezone=_PARIS),
+        id="sync_finverse",
         replace_existing=True,
         max_instances=1,
         coalesce=True,
@@ -303,6 +328,7 @@ def setup_scheduler() -> AsyncIOScheduler:
 
     logger.info(
         "Scheduler configured: %d jobs registered (compute_picks, sync_enablebanking, "
+        "sync_finverse, "
         "record_portfolio_snapshots, submit_nightly_batch, poll_pending_batches)",
         len(scheduler.get_jobs()),
     )
