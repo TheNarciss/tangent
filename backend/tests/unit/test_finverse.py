@@ -6,7 +6,6 @@ import uuid
 from datetime import UTC, date, datetime
 
 import httpx
-import jwt
 import pytest
 
 from app.aggregator.types import AccountType
@@ -243,20 +242,34 @@ async def test_a_failed_read_shows_on_the_link(monkeypatch):
     assert decrypt_token(row.encrypted_refresh_token) == "refresh-1"
 
 
-def test_the_state_names_the_user_and_refuses_another_purpose(monkeypatch):
+def test_the_state_names_the_user_and_fits_finverse_limit(monkeypatch):
     monkeypatch.setattr(routes, "_STATE_SECRET", "test-secret-for-the-finverse-state-32b")
     user_id = uuid.uuid4()
 
-    claims = routes._read_state(routes._sign_state(user_id, "app"))
-    assert (claims["sub"], claims["platform"]) == (str(user_id), "app")
+    state = routes._sign_state(user_id, "app")
 
-    other = jwt.encode(
-        {"sub": "x", "purpose": "enablebanking"},
-        "test-secret-for-the-finverse-state-32b",
-        algorithm="HS256",
-    )
-    with pytest.raises(jwt.PyJWTError):
-        routes._read_state(other)
+    assert len(state) <= 100  # Finverse: « state in body should be at most 100 chars long »
+    assert routes._read_state(state) == {"sub": str(user_id), "platform": "app"}
+
+
+def test_a_forged_expired_or_foreign_state_is_refused(monkeypatch):
+    monkeypatch.setattr(routes, "_STATE_SECRET", "test-secret-for-the-finverse-state-32b")
+    state = routes._sign_state(uuid.uuid4(), "web")
+    body, _, signature = state.rpartition(".")
+    other_user = f"{uuid.uuid4().hex}.web.{body.split('.')[2]}"
+
+    for bad in (f"{other_user}.{signature}", "junk", "", f"{body}.x", "a.b.c.d.e", f"{body}.é"):
+        with pytest.raises(ValueError):
+            routes._read_state(bad)
+
+    monkeypatch.setattr(routes, "_STATE_SECRET", "another-secret-another-secret-123")
+    with pytest.raises(ValueError):
+        routes._read_state(state)
+
+    monkeypatch.setattr(routes, "_STATE_SECRET", "test-secret-for-the-finverse-state-32b")
+    monkeypatch.setattr(routes.time, "time", lambda: 4_000_000_000)
+    with pytest.raises(ValueError):
+        routes._read_state(state)
 
 
 def test_an_error_code_from_finverse_is_made_safe_for_a_url():

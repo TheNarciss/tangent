@@ -6,13 +6,16 @@ registered in Finverse's dashboard, everything else under /api/finverse.
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import logging
 import os
+import time
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Literal
 
-import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
@@ -98,7 +101,7 @@ async def callback(
         fields.update({k: str(v) for k, v in (await request.form()).items()})
     try:
         claims = _read_state(fields.get("state", ""))
-    except jwt.PyJWTError:
+    except ValueError:
         return _back("error&error=bad_state")
     platform = str(claims.get("platform", "web"))
     code = fields.get("code")
@@ -236,25 +239,30 @@ async def _unlink(row: FinverseConnection) -> None:
 
 
 def _sign_state(user_id: uuid.UUID, platform: str = "web") -> str:
-    now = datetime.now(UTC)
-    return jwt.encode(
-        {
-            "sub": str(user_id),
-            "platform": platform,
-            "purpose": "finverse",
-            "iat": now,
-            "exp": now + _STATE_TTL,
-        },
-        _STATE_SECRET,
-        algorithm="HS256",
-    )
+    """Who started the link, for which screen, until when: about 70 characters.
+
+    Finverse refuses a `state` over 100 characters, which a JWT always is.
+    The same facts, signed with HMAC-SHA256 (128 bits kept), fit.
+    """
+    expires = int(time.time() + _STATE_TTL.total_seconds())
+    body = f"{user_id.hex}.{platform}.{expires}"
+    return f"{body}.{_signature(body)}"
 
 
 def _read_state(state: str) -> dict:
-    claims = jwt.decode(state, _STATE_SECRET, algorithms=["HS256"])
-    if claims.get("purpose") != "finverse":
-        raise jwt.InvalidTokenError("wrong purpose")
-    return claims
+    """The claims of a state we signed; ValueError if forged, malformed or expired."""
+    body, _, signature = state.rpartition(".")
+    if not body or not hmac.compare_digest(signature.encode(), _signature(body).encode()):
+        raise ValueError("bad signature")
+    user_hex, platform, expires = body.split(".")
+    if int(expires) < time.time():
+        raise ValueError("expired")
+    return {"sub": str(uuid.UUID(hex=user_hex)), "platform": platform}
+
+
+def _signature(body: str) -> str:
+    digest = hmac.new(_STATE_SECRET.encode(), f"finverse|{body}".encode(), hashlib.sha256)
+    return base64.urlsafe_b64encode(digest.digest()[:16]).decode().rstrip("=")
 
 
 def _slug(value: str) -> str:
