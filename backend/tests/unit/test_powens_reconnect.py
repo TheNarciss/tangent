@@ -84,4 +84,4 @@ async def test_powens_down_is_said_not_hidden(configured, monkeypatch):
     monkeypatch.setattr(powens_routes, "PowensClient", _client(None))
     with pytest.raises(HTTPException) as err:
         await _call(_Session(SimpleNamespace(encrypted_token="x")))
-    assert err.value.status_code == 502
+    assert err.value.status_code == 503

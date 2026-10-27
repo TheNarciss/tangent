@@ -4,7 +4,7 @@ Every source goes through here so timeout, User-Agent and caching behave the
 same everywhere. The cache lives in the process: a restart refetches, which is
 what we want for series that get revised (Eurostat and FRED both restate).
 
-Failures surface as `DataSourceError` — a 502 for the caller, never a raw
+Failures surface as `DataSourceError` — a 503 for the caller, never a raw
 network exception leaking into a route.
 """
 

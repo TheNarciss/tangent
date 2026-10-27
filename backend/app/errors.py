@@ -8,6 +8,11 @@ else in the app should issue raw `HTTPException`.
 `dashboard.py`) catch those and re-raise as `InsufficientHistoryError`.
 """
 
+# A service we depend on failed (a bank aggregator, a market or data source).
+# Not 502: Cloudflare replaces every 502 and 504 from the origin with its own
+# page, and the reason we give never reaches the app. 503 passes through.
+UPSTREAM_DOWN = 503
+
 
 class AppError(Exception):
     """Base for all expected, recoverable errors. Carries an HTTP status."""
@@ -40,7 +45,7 @@ class TickerNotFoundError(AppError):
 class MarketDataError(AppError):
     """Upstream market data provider failure (network, timeout, etc.)."""
 
-    status_code = 502
+    status_code = UPSTREAM_DOWN
 
 
 class InsufficientHistoryError(AppError):
@@ -52,7 +57,7 @@ class InsufficientHistoryError(AppError):
 class DataSourceError(AppError):
     """External source of truth (FRED, ECB, Eurostat, Ken French, OpenFIGI) failed."""
 
-    status_code = 502
+    status_code = UPSTREAM_DOWN
 
 
 class ConfigurationError(AppError):
