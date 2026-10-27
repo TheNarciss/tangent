@@ -46,6 +46,7 @@ from .routers import (
     enablebanking,
     envelopes,
     export,
+    finverse,
     market_leads,
     oauth_accounts,
     password_reset,
@@ -360,6 +361,8 @@ app.include_router(powens.legacy_router)
 app.include_router(powens.router, prefix="/api")
 app.include_router(enablebanking.legacy_router)
 app.include_router(enablebanking.router, prefix="/api")
+app.include_router(finverse.legacy_router)
+app.include_router(finverse.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(profile.router, prefix="/api")
 app.include_router(account.router, prefix="/api")

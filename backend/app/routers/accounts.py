@@ -35,9 +35,10 @@ from ..aggregator.persist import Persisted, persist_sync_result
 from ..aggregator.types import AccountType, SyncResult
 from ..auth import User, current_active_user
 from ..db import get_session
-from ..db.models import BankAccount, EnableBankingSession, PowensCredential
+from ..db.models import BankAccount, EnableBankingSession, FinverseConnection, PowensCredential
 from ..enablebanking import aggregator as enablebanking_agg
 from ..finance.gap_filler.fields.transaction_category import CATEGORIES
+from ..finverse import aggregator as finverse_agg
 from ..i18n import Locale, current_locale, t
 from ..powens.aggregator import PowensAggregator
 from ..powens.aggregator import parse_datetime as parse_powens_datetime
@@ -581,7 +582,7 @@ async def _do_sync(user: User, session: AsyncSession, locale: Locale = "fr") -> 
     """Actual sync logic — no cache check, always hits the providers.
 
     Powens when the user has a credential, then every live Enable Banking
-    session. One provider failing does not hide the others' data: the report
+    session, then every Finverse link. One provider failing does not hide the others' data: the report
     carries its error next to the counts.
     """
     now = datetime.now(UTC)
@@ -610,6 +611,17 @@ async def _do_sync(user: User, session: AsyncSession, locale: Locale = "fr") -> 
                 session, row, since=date.today() - timedelta(days=DAILY_SYNC_DAYS)
             )
         )
+    links = (
+        (
+            await session.execute(
+                select(FinverseConnection).where(FinverseConnection.user_id == user.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for link in links:
+        results.append(await finverse_agg.sync_row(link))
     await session.commit()
 
     if not results:

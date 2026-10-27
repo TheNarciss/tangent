@@ -51,6 +51,34 @@ jobs:
           git reset --hard origin/main
           echo "New commit: $(git rev-parse --short HEAD)"
 
+      - name: Write the Finverse keys into backend/.env (ADR-037)
+        working-directory: /home/ubuntu/projet_finance
+        env:
+          FINVERSE_CLIENT_ID: ${{ secrets.FINVERSE_CLIENT_ID }}
+          FINVERSE_CLIENT_SECRET: ${{ secrets.FINVERSE_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          # Nothing is printed but the key names. Without both secrets the
+          # file stays as it is.
+          if [ -z "$FINVERSE_CLIENT_ID" ] || [ -z "$FINVERSE_CLIENT_SECRET" ]; then
+            echo "Finverse secrets absent: backend/.env left as is."
+            exit 0
+          fi
+          umask 077
+          touch backend/.env
+          for name in FINVERSE_CLIENT_ID FINVERSE_CLIENT_SECRET; do
+            value="${!name}"
+            case "$value" in
+              *"'"*|*$'\n'*) echo "::error::$name holds a quote or a newline"; exit 1 ;;
+            esac
+            grep -v "^${name}=" backend/.env > backend/.env.tmp || true
+            # Single quotes: neither compose nor dotenv expands a "$" inside.
+            printf "%s='%s'\n" "$name" "$value" >> backend/.env.tmp
+            cat backend/.env.tmp > backend/.env  # keeps the file's owner and mode
+            rm -f backend/.env.tmp
+            echo "$name written."
+          done
+
       - name: Rebuild + restart containers
         working-directory: /home/ubuntu/projet_finance
         run: |

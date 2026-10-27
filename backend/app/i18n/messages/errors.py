@@ -3,6 +3,7 @@
 FR: dict[str, str] = {
     "errors.no_bank": "Aucune banque connectée.",
     "errors.enablebanking_not_configured": "Enable Banking n'est pas configuré.",
+    "errors.finverse_not_configured": "Finverse n'est pas configuré.",
     "errors.llm_budget": "Le budget LLM quotidien est atteint. Réessaye demain.",
     "errors.review_already_today": "Tu as déjà généré une review aujourd'hui. Reviens demain.",
     "errors.leads_not_yet": "Les pistes de marché ne sont pas encore collectées, elles arrivent cette nuit.",
@@ -22,6 +23,7 @@ FR: dict[str, str] = {
 EN: dict[str, str] = {
     "errors.no_bank": "No bank connected.",
     "errors.enablebanking_not_configured": "Enable Banking is not configured.",
+    "errors.finverse_not_configured": "Finverse is not configured.",
     "errors.llm_budget": "The daily LLM budget is spent. Try again tomorrow.",
     "errors.review_already_today": "You already generated a briefing today. Come back tomorrow.",
     "errors.leads_not_yet": "Market leads have not been collected yet; they arrive tonight.",
