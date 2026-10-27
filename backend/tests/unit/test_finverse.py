@@ -263,3 +263,38 @@ def test_an_error_code_from_finverse_is_made_safe_for_a_url():
     assert routes._slug("access_denied") == "access_denied"
     assert routes._slug("a&b=c<script>") == "abcscript"
     assert routes._slug("&&&") == "unknown"
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        (
+            {
+                "code": 604,
+                "error": {
+                    "error_code": "INVALID_PARAMETER",
+                    "details": "client_secret in body should be at least 64 chars long",
+                    "message": "The parameters provided are invalid. See details.",
+                },
+                "message": "client_secret in body should be at least 64 chars long",
+            },
+            "INVALID_PARAMETER: client_secret in body should be at least 64 chars long",
+        ),
+        (
+            {
+                "error": {
+                    "code": 40003,
+                    "error_code": "INVALID_CLIENT",
+                    "message": "Client authentication failed. Please verify client_id and "
+                    "client_secret inputs.",
+                }
+            },
+            "INVALID_CLIENT: Client authentication failed. Please verify client_id and "
+            "client_secret inputs.",
+        ),
+        ("not json", "not json"),
+    ],
+)
+def test_a_refusal_says_finverse_own_reason(body, expected):
+    """As the production API answered on 2026-10-27."""
+    assert fv_client._reason(body) == expected

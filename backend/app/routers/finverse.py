@@ -75,6 +75,7 @@ async def link(
                 user_ref=str(user.id), state=_sign_state(user.id, body.platform)
             )
     except FinverseError as exc:
+        logger.warning("Finverse link user=%s: %s", user.id, exc)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return LinkOut(url=url)
 

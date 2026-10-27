@@ -27,6 +27,21 @@ class FinverseError(Exception):
         self.status = status
 
 
+def _reason(body: Any) -> str:
+    """Finverse's own words: the specific `details` when it gives them, its code, its message.
+
+    « The parameters provided are invalid. See details. » alone says nothing:
+    the reason is in `details` (« client_secret … at least 64 chars long »).
+    """
+    if not isinstance(body, dict):
+        return str(body)[:200]
+    raw = body.get("error")
+    error: dict = raw if isinstance(raw, dict) else {}
+    code = error.get("error_code") or error.get("code")
+    words = error.get("details") or body.get("message") or error.get("message") or body
+    return f"{code}: {words}" if code else str(words)
+
+
 class FinverseClient:
     def __init__(self, *, base_url: str | None = None) -> None:
         self._client = httpx.AsyncClient(
@@ -50,13 +65,7 @@ class FinverseClient:
             raise FinverseError(f"Finverse injoignable: {exc}") from exc
         if response.status_code >= 400:
             try:
-                body = response.json()
-                error = body.get("error") if isinstance(body, dict) else None
-                detail = (
-                    str((error or {}).get("message") or body)
-                    if isinstance(body, dict)
-                    else str(body)
-                )
+                detail = _reason(response.json())
             except ValueError:
                 detail = response.text[:200]
             raise FinverseError(
