@@ -21,6 +21,7 @@ from ..auth import User, current_active_user, current_active_user_optional
 from ..auth import session as app_session
 from ..db.engine import get_session
 from ..db.models import PowensCredential
+from ..errors import UPSTREAM_DOWN
 from ..powens import settings as powens_settings
 from ..powens.client import PowensClient, PowensError
 from ..powens.crypto import decrypt_token, encrypt_token
@@ -166,7 +167,7 @@ async def get_powens_reconnect_webview(
             temp_code = await client.get_temporary_code()
     except PowensError as exc:
         logger.warning("Powens reconnect user=%s: no temporary code (%s)", user.id, exc)
-        raise HTTPException(status_code=502, detail="Powens unavailable.") from exc
+        raise HTTPException(status_code=UPSTREAM_DOWN, detail="Powens unavailable.") from exc
     logger.info("Powens reconnect user=%s connection=%s", user.id, connection_id)
     url = reconnect_url(
         code=temp_code, connection_id=connection_id, state=_sign_state(user.id, platform)

@@ -24,6 +24,7 @@ from ..auth import User, current_active_user, current_active_user_optional
 from ..auth import session as app_session
 from ..db.engine import get_session
 from ..db.models import BankAccount, FinverseConnection
+from ..errors import UPSTREAM_DOWN
 from ..finverse import settings
 from ..finverse.aggregator import PROVIDER, read, wait_for_data
 from ..finverse.client import FinverseClient, FinverseError
@@ -76,7 +77,7 @@ async def link(
             )
     except FinverseError as exc:
         logger.warning("Finverse link user=%s: %s", user.id, exc)
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(status_code=UPSTREAM_DOWN, detail=str(exc)) from exc
     return LinkOut(url=url)
 
 
