@@ -11,7 +11,30 @@ Le code est dans le dépôt (ADR-035). Ce qui suit se fait dans le compte Apple 
 | Services ID | `uk.riskybusinesses.tangent.web`, Sign in with Apple configuré : domaine `riskybusinesses.uk`, Return URL `https://riskybusinesses.uk/api/auth/apple/callback`, groupé sous l'App ID | le site ; `APPLE_CLIENT_ID` |
 | Clé « Sign in with Apple » | un fichier `.p8` téléchargeable une seule fois, et son Key ID | `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY_B64` (`base64 -w0 AuthKey_XXXX.p8`) |
 | Certificat Apple Distribution | exporté en `.p12` avec mot de passe | secrets `IOS_CERTIFICATE_P12_B64`, `IOS_CERTIFICATE_PASSWORD` |
-| Profil de provisionnement App Store | pour l'App ID ci-dessus | secret `IOS_PROVISIONING_PROFILE_B64` |
+| Profils de provisionnement App Store | créés et mis à jour par le build (signature automatique) | rien à stocker |
+
+### Le widget : rien à faire dans le portail
+
+Le widget d'écran d'accueil lit ce que l'app lui écrit dans un conteneur
+partagé (App Group), et l'app reçoit des notifications : deux capacités et un
+second App ID (`uk.riskybusinesses.tangent.widget`). Le workflow TestFlight
+signe en mode automatique avec la clé App Store Connect : Xcode crée ou met à
+jour lui-même les App IDs, le groupe `group.uk.riskybusinesses.tangent`, la
+capacité Push et les profils App Store, à partir des fichiers `.entitlements`
+du dépôt. Les secrets `IOS_*_PROVISIONING_PROFILE_B64` ne servent plus.
+
+### Les notifications : la clé APNs
+
+1. **Keys → Apple Push Notifications service (APNs)** : créer une clé, noter son Key ID, télécharger le `.p8` (une seule fois). La capacité Push de l'App ID, elle, est posée par le build.
+2. Sur la VM, dans `backend/.env` :
+
+```bash
+APNS_KEY_ID=<le Key ID>
+APNS_PRIVATE_KEY_B64=$(base64 -w0 AuthKey_XXXXXXXXXX.p8)
+APNS_ENVIRONMENT=production
+```
+
+Puis redémarrer le backend. Le `.p8` reste sur la machine, jamais dans le dépôt ni dans un chat. Sans ces valeurs, l'app fonctionne et le briefing s'écrit : simplement personne n'est prévenu.
 
 Sur la VM, dans `backend/.env` : `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY_B64`, `APPLE_CLIENT_ID`, `APPLE_BUNDLE_ID`, puis redémarrer le backend. Le bouton « Continuer avec Apple » apparaît sur le site dès que c'est en place.
 

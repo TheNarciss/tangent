@@ -31,6 +31,7 @@ from typing import Any
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .. import notifications
 from ..db.models import ReviewBatch
 from ..finance.gap_filler import engine as gap_filler_engine
 from ..repositories import review_batches as batches_repo
@@ -247,6 +248,7 @@ async def _process_one_batch(
                         generation_mode="batch",
                         batch_id=batch_id,
                     )
+                    await notifications.notify_briefing_ready(session, user_id)
                 except IntegrityError:
                     # Race: user already has today's review (manually generated
                     # between submit and poll).

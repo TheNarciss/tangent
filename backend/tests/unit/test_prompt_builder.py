@@ -467,3 +467,16 @@ def test_user_prompt_instructions_follow_the_locale():
     assert "écris le briefing" in fr
     assert "write the briefing in English" in en
     assert "écris le briefing" not in en
+
+
+def test_leads_answer_the_reader_question_and_unchanged_verdicts_are_not_repeated():
+    """Feedback of 2026-11-13: raw leads were useless, verdicts were repeated every morning."""
+    for sp, question, quiet in (
+        (prompt_builder.SYSTEM_PROMPT, "et moi, je fais quoi ?", "rien de neuf"),
+        (prompt_builder.SYSTEM_PROMPT_EN, "so what do I do?", "nothing new"),
+    ):
+        leads = sp[sp.index("# Pistes" if sp is prompt_builder.SYSTEM_PROMPT else "# Leads") :]
+        assert question in leads  # a lead ends with what it changes for the reader
+        assert "Nvidia" in leads  # the question the news raises gets an explicit answer
+        assert "Nasdaq-100" in leads  # tied to the lines they hold, with the amount
+        assert quiet in sp  # an unchanged verdict is a half-line at most

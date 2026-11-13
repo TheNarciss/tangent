@@ -1,7 +1,10 @@
+import { useEffect } from "react";
+
 import type { WealthSummary } from "@/api";
 import { BentoTile } from "@/components/ui/bento-tile";
 import { useT } from "@/i18n";
 import { fmt } from "@/lib/format";
+import { publishWidgetSnapshot } from "@/native/widget";
 
 interface KpiStripProps {
   wealth: WealthSummary;
@@ -19,6 +22,10 @@ interface KpiStripProps {
  * Unrealized P&L is shown as a sub-line on the Invest tile (signed,
  * colored). Total liabilities, if any, appear as a sub-line on the Net
  * worth tile.
+ *
+ * On the phone, the net worth tile is also what the home-screen widget
+ * shows: the same words, the same amount, handed over as they are written
+ * here (ADR-035).
  */
 export function KpiStrip({ wealth }: KpiStripProps) {
   const { t } = useT();
@@ -27,18 +34,25 @@ export function KpiStrip({ wealth }: KpiStripProps) {
   const debts = wealth.total_liabilities;
   const pnl = wealth.unrealized_pnl;
 
+  const netWorthLabel = t("dashboard.kpi.netWorth");
+  const netWorthValue = fmt.eur(wealth.net_worth);
+  const debtsLine = debts > 0 ? t("dashboard.kpi.debts", { amount: fmt.eur(debts) }) : undefined;
+
+  useEffect(() => {
+    void publishWidgetSnapshot({
+      label: netWorthLabel,
+      value: netWorthValue,
+      sub: debtsLine,
+      positive: debtsLine ? false : undefined,
+    });
+  }, [netWorthLabel, netWorthValue, debtsLine]);
+
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
       <BentoTile
-        label={t("dashboard.kpi.netWorth")}
-        value={fmt.eur(wealth.net_worth)}
-        sub={
-          debts > 0 ? (
-            <span className="text-muted-foreground">
-              {t("dashboard.kpi.debts", { amount: fmt.eur(debts) })}
-            </span>
-          ) : undefined
-        }
+        label={netWorthLabel}
+        value={netWorthValue}
+        sub={debtsLine ? <span className="text-muted-foreground">{debtsLine}</span> : undefined}
         size="lg"
         className="col-span-2"
       />
