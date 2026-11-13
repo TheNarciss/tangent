@@ -80,9 +80,9 @@ jobs:
     #   APPLE_TEAM_ID               ten characters
     #   APPSTORE_API_KEY_ID, APPSTORE_API_ISSUER_ID, APPSTORE_API_KEY_P8_B64
     #                               an App Store Connect API key (App Manager), .p8 in base64
-    # Signing is automatic: with that key, Xcode registers the two App IDs,
-    # their capabilities (App Group, Push) and the App Store profiles itself,
-    # from the entitlements files. Nothing to click in the Apple portal
+    # Signing happens at export, automatically: with that key, Xcode registers
+    # the two App IDs, their capabilities (App Group, Push) and the App Store
+    # profiles itself, from the entitlements files. Nothing to click in the Apple portal
     # (docs/ios-app-store.md); the APNs key alone stays a manual step.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -136,24 +136,20 @@ jobs:
         working-directory: frontend/ios/App
         env:
           TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
-          ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
         run: |
           set -o pipefail
           xcodebuild -resolvePackageDependencies -project App.xcodeproj -scheme App
-          # Automatic signing against the portal: Xcode creates or updates the
-          # App IDs, the App Group, the Push capability and the profiles it
-          # needs, as Xcode's « Automatically manage signing » does on a Mac.
+          # Unsigned archive: an automatic archive wants an Apple Development
+          # certificate, which the runner does not have and must not create
+          # (the account already holds one for « this machine »). The export
+          # signs everything with the Apple Distribution certificate instead.
           xcodebuild archive \
             -project App.xcodeproj -scheme App -configuration Release \
             -destination "generic/platform=iOS" \
             -archivePath "$RUNNER_TEMP/App.xcarchive" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$AUTH_KEY_PATH" \
-            -authenticationKeyID "$KEY_ID" \
-            -authenticationKeyIssuerID "$ISSUER_ID" \
-            CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM="$TEAM_ID" \
-            PROVISIONING_PROFILE_SPECIFIER="" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" PROVISIONING_PROFILE_SPECIFIER="" \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
             CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
             | tail -n 60
 
@@ -174,7 +170,10 @@ jobs:
             <key>uploadSymbols</key><true/>
           </dict></plist>
           PLIST
-          # The App Store profiles are made here, for the app and the widget.
+          # Automatic signing against the portal, with the API key: Xcode
+          # creates or updates the App IDs, the App Group, the Push
+          # capability and the App Store profiles, for the app and the widget,
+          # and signs with the Apple Distribution certificate in the keychain.
           xcodebuild -exportArchive \
             -archivePath "$RUNNER_TEMP/App.xcarchive" \
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
