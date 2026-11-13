@@ -50,6 +50,9 @@ const DATE_OPTIONS: Intl.DateTimeFormatOptions = {
  * Briefing tile — preview of today's briefing, full text and past briefings
  * in a bottom sheet. When the nightly briefing is off, the tile is the
  * place to turn it on (one tap, saved to the profile).
+ *
+ * A night without a briefing never locks the past ones away: the tile then
+ * says so and opens on the latest one instead.
  */
 export function AiBriefTile() {
   const { t } = useT();
@@ -58,7 +61,9 @@ export function AiBriefTile() {
   const [profile, setProfile] = useProfile();
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<PortfolioReviewResponse | null>(null);
-  const history = useReviews(open);
+  // Without today's briefing the tile needs the past ones right away.
+  const history = useReviews(open || (!isLoading && !review));
+  const latest = review ?? history.data?.[0] ?? null;
   const enabled = profile?.auto_review_enabled ?? false;
 
   const header = (
@@ -69,7 +74,7 @@ export function AiBriefTile() {
   );
   const frame = "flex flex-col gap-2 rounded-lg border border-border bg-card p-4 md:p-5";
 
-  if (isLoading) {
+  if (isLoading || (!review && history.isLoading)) {
     return (
       <div className={frame}>
         {header}
@@ -78,7 +83,7 @@ export function AiBriefTile() {
     );
   }
 
-  if (!review) {
+  if (!latest) {
     return (
       <div className={frame}>
         {header}
@@ -115,8 +120,8 @@ export function AiBriefTile() {
     );
   }
 
-  const shown = selected ?? review;
-  const preview = extractPreview(review.content);
+  const shown = selected ?? latest;
+  const preview = extractPreview(latest.content);
 
   return (
     <>
@@ -129,6 +134,12 @@ export function AiBriefTile() {
         )}
       >
         {header}
+        {!review && (
+          <p className="text-xs text-muted-foreground">
+            {t("dashboard.brief.missing")}{" "}
+            {t("dashboard.brief.last", { date: formatDate(latest.review_date, DATE_OPTIONS) })}
+          </p>
+        )}
         <p className="line-clamp-4 text-sm leading-relaxed">{preview}</p>
         <div className="text-[10px] text-muted-foreground">{t("dashboard.brief.read")}</div>
       </button>
@@ -143,7 +154,7 @@ export function AiBriefTile() {
         <BottomSheetContent className="md:max-w-3xl">
           <BottomSheetHeader>
             <BottomSheetTitle>
-              {shown.id === review.id
+              {shown.id === review?.id
                 ? t("dashboard.brief.today")
                 : t("dashboard.brief.dated", { date: formatDate(shown.review_date, DATE_OPTIONS) })}
             </BottomSheetTitle>

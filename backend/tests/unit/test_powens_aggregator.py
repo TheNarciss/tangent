@@ -312,3 +312,16 @@ async def test_get_accounts_falls_back_when_connections_fail(aggregator, monkeyp
     accounts = await aggregator.get_accounts()
     assert len(accounts) == 1
     assert accounts[0].institution_name is None
+
+
+def test_powens_datetimes_read_as_paris_time():
+    """Powens writes Paris wall-clock time without an offset; read as UTC it was 2 h off."""
+    from datetime import UTC, datetime
+
+    from app.powens.aggregator import parse_datetime
+
+    assert parse_datetime("2026-10-10 17:05:12") == datetime(2026, 10, 10, 15, 5, 12, tzinfo=UTC)
+    assert parse_datetime("2026-01-10 17:05:12") == datetime(2026, 1, 10, 16, 5, 12, tzinfo=UTC)
+    assert parse_datetime("2026-10-10T17:05:12Z") == datetime(2026, 10, 10, 17, 5, 12, tzinfo=UTC)
+    assert parse_datetime("pas une date") is None
+    assert parse_datetime(None) is None

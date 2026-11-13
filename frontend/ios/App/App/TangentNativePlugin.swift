@@ -48,7 +48,7 @@ public class TangentNativePlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    // MARK: Notifications (« ton briefing est prêt », ADR-037)
+    // MARK: Notifications (« ton briefing est prêt », ADR-039)
 
     /// Asks iOS, once, then waits for Apple's address for this phone. The web
     /// side sends that address to the backend; refusing is an answer, not an

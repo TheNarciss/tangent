@@ -64,4 +64,6 @@ Template : [`TEMPLATE.md`](./TEMPLATE.md).
 - [ADR-034](034-the-archive-twice-a-day.md) — L'archive : tout ce que l'app sait, écrit deux fois par jour
 - [ADR-035](035-the-iphone-app-shares-the-backend.md) — L'app iPhone est le site, dans une coque native, sur le même backend
 - [ADR-036](036-the-app-speaks-the-language-of-the-device.md) — L'app parle la langue de l'appareil, en français ou en anglais, sans bibliothèque
-- [ADR-037](037-the-phone-says-when-the-briefing-is-written.md) — Le téléphone prévient quand le briefing est écrit, et rien d'autre
+- [ADR-037](037-finverse-asian-banks.md) — Finverse : un troisième agrégateur pour les banques d'Asie
+- [ADR-038](038-amounts-in-euros-at-the-ecb-rate.md) — Les montants en devise comptent en euros, au cours de référence BCE
+- [ADR-039](039-the-phone-says-when-the-briefing-is-written.md) — Le téléphone prévient quand le briefing est écrit, et rien d'autre

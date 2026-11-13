@@ -27,6 +27,7 @@ from ..db.models import BankAccount, EnableBankingSession
 from ..enablebanking import settings
 from ..enablebanking.aggregator import is_expired, sync_row
 from ..enablebanking.client import EnableBankingClient, EnableBankingError
+from ..errors import UPSTREAM_DOWN
 from ..i18n import Locale, current_locale, t
 from ..powens.crypto import decrypt_token, encrypt_token
 
@@ -83,7 +84,7 @@ async def banks(
         async with EnableBankingClient() as client:
             rows = await client.list_banks(country.upper())
     except EnableBankingError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(status_code=UPSTREAM_DOWN, detail=str(exc)) from exc
     return [BankOut(name=str(r["name"]), logo=r.get("logo")) for r in rows if r.get("name")]
 
 
@@ -111,7 +112,7 @@ async def authorize(
                 valid_until=_consent_end(bank.get("maximum_consent_validity")),
             )
     except EnableBankingError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(status_code=UPSTREAM_DOWN, detail=str(exc)) from exc
     return AuthorizeOut(url=str(answer["url"]))
 
 

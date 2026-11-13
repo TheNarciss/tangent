@@ -1,4 +1,4 @@
-"""Telling a phone that its briefing is ready (ADR-037).
+"""Telling a phone that its briefing is ready (ADR-039).
 
 Apple's push service speaks HTTP/2 and nothing else, and authenticates the
 sender with a short JWT signed by a developer key (ES256), not with a

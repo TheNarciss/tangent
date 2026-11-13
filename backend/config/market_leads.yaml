@@ -31,6 +31,9 @@ polymarket:
   min_volume_24h_usd: 25000
   # Une cote qui bouge d'au moins ça en une semaine, en points de probabilité.
   min_week_move: 0.15
+  # Un pari réglé dans moins de deux semaines (« Bitcoin au-dessus de X
+  # vendredi ? ») ne dit rien d'un horizon : il est ignoré.
+  min_days_to_resolution: 14
   # Les marchés les plus actifs sont donnés tels quels : l'état des attentes.
   max_state_leads: 8
 
@@ -42,6 +45,10 @@ insiders:
   cluster_days: 30               # fenêtre pour parler d'achats groupés
   min_insiders: 2                # dirigeants distincts pour un groupe
   keep_days: 45                  # mémoire des achats et des dépôts déjà lus
+  # La SEC publie l'index d'une journée vers 02:00 UTC le lendemain, après
+  # le passage du job : une journée se lit au plus tôt la deuxième nuit. Les
+  # dépôts déjà lus sont mémorisés, relire un index ne coûte qu'une requête.
+  index_lookback_days: 4
 
 funds:
   # Gérants suivis dans leurs 13F. Un CIK identifie un déclarant à la SEC.
@@ -57,8 +64,80 @@ funds:
     - { name: "Renaissance Technologies", cik: 1037389 }
     - { name: "Soros Fund Management", cik: 1029160 }
     - { name: "Viking Global", cik: 1103804 }
-    - { name: "Scion Asset Management", cik: 1649339 }
+    - { name: "Elliott Investment Management", cik: 1791786 }
+    - { name: "Norges Bank", cik: 1374170 }
+    - { name: "Fundsmith", cik: 1569205 }
+    - { name: "Baillie Gifford", cik: 1088875 }
   min_position_usd: 100000000    # une ligne plus petite ne dit rien d'un tel gérant
   min_change_pct: 0.25           # variation du nombre de titres pour parler d'un mouvement
   max_leads_per_filing: 6
-  keep_days: 21                  # une piste 13F reste visible ce temps après le dépôt
+  # Une piste 13F reste visible ce temps après le dépôt. Un trimestre et
+  # quelques jours : le dernier tableau reste lisible jusqu'à ce que le
+  # suivant le remplace, daté du jour du dépôt.
+  keep_days: 100
+
+activists:
+  # Quiconque franchit 5 % d'une société avec une intention le déclare sous
+  # cinq jours (Schedule 13D). Une poignée de dépôts par jour, presque tous
+  # sur des micro-capitalisations : seuls les déclarants suivis ici font une
+  # piste. Un CIK identifie l'entité qui signe le dépôt.
+  followed:
+    - { name: "Elliott", cik: 1791786 }
+    - { name: "Starboard Value", cik: 1517137 }
+    - { name: "Carl Icahn", cik: 921669 }
+    - { name: "Trian", cik: 1345471 }
+    - { name: "ValueAct", cik: 1418814 }
+    - { name: "ValueAct", cik: 1464912 }
+    - { name: "JANA Partners", cik: 1998597 }
+    - { name: "Cevian Capital", cik: 1365341 }
+    - { name: "Engaged Capital", cik: 1559771 }
+    - { name: "Ancora", cik: 1836192 }
+    - { name: "Sachem Head", cik: 1582090 }
+    - { name: "Corvex", cik: 1535472 }
+    - { name: "Mantle Ridge", cik: 1695459 }
+    - { name: "Politan Capital", cik: 1885245 }
+    - { name: "Oasis Management", cik: 1317904 }
+    - { name: "Pershing Square", cik: 1336528 }
+    - { name: "Third Point", cik: 1040273 }
+  keep_days: 30                  # une prise de participation reste une piste ce temps
+  index_lookback_days: 4         # même fenêtre que les Form 4, même raison
+
+positioning:
+  # Positions hebdomadaires des grands intervenants sur les contrats à terme
+  # (CFTC, chaque vendredi pour le mardi) : les fonds à levier sur les
+  # contrats financiers, la gestion spéculative sur les matières premières.
+  # Piste quand leur position nette, en part de l'intérêt ouvert, est au
+  # plus haut ou au plus bas depuis un an, ou change de camp.
+  contracts:
+    - { name: "E-MINI S&P 500", dataset: financial, label: "S&P 500" }
+    - { name: "NASDAQ MINI", dataset: financial, label: "Nasdaq 100" }
+    - { name: "UST 10Y NOTE", dataset: financial, label: "Obligations US à 10 ans" }
+    - { name: "UST 2Y NOTE", dataset: financial, label: "Obligations US à 2 ans" }
+    - { name: "EURO FX", dataset: financial, label: "Euro contre dollar" }
+    - { name: "VIX FUTURES", dataset: financial, label: "Volatilité (VIX)" }
+    - { name: "BITCOIN", dataset: financial, label: "Bitcoin" }
+    - { name: "GOLD", dataset: commodities, label: "Or" }
+    - { name: "CRUDE OIL, LIGHT SWEET-WTI", dataset: commodities, label: "Pétrole WTI" }
+    - { name: "COPPER- #1", dataset: commodities, label: "Cuivre" }
+  weeks: 52                      # la fenêtre du « depuis un an »
+  min_net_share: 0.05            # en dessous, la position n'est pas un parti pris
+
+kalshi:
+  # Marché de prédiction régulé, lu série par série : la décision de la Fed,
+  # le CPI du mois, le chômage, l'emploi, le PIB, les hausses de l'année.
+  # Kalshi ne dit pas de combien une cote a bougé : le job mémorise les
+  # prix quelques jours et compare à une semaine plus tôt.
+  series:
+    - KXFEDDECISION
+    - KXRATEHIKE
+    - KXCPI
+    - KXCPIYOY
+    - KXCPICOREYOY
+    - KXU3
+    - KXPAYROLLS
+    - KXGDP
+  min_volume_24h: 2000           # en contrats d'un dollar ; Kalshi est plus petit que Polymarket
+  min_week_move: 0.15
+  min_days_to_resolution: 14
+  max_state_leads: 6
+  price_memory_days: 10

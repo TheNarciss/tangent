@@ -712,7 +712,7 @@ class EnableBankingSession(Base):
 
 
 class DeviceToken(Base):
-    """One iPhone that agreed to be told when its briefing is ready (ADR-037).
+    """One iPhone that agreed to be told when its briefing is ready (ADR-039).
 
     The token is Apple's address for one app on one phone, not a secret of the
     person's: it is stored in the clear, unique, and dropped as soon as Apple
@@ -737,5 +737,35 @@ class DeviceToken(Base):
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
     last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+
+
+class FinverseConnection(Base):
+    """One bank linked through Finverse Link, per user (ADR-037).
+
+    The refresh token is the credential: encrypted at rest like the Powens
+    token, swapped for a fresh login identity token at every read, and
+    replaced when Finverse hands back a new one.
+    """
+
+    __tablename__ = "finverse_connections"
+    __table_args__ = (
+        UniqueConstraint("user_id", "login_identity_id", name="uq_finverse_user_login_identity"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    login_identity_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    encrypted_refresh_token: Mapped[str] = mapped_column(String, nullable=False)
+    institution_name: Mapped[str] = mapped_column(String(128), nullable=False, default="Banque")
+    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    last_error: Mapped[str | None] = mapped_column(Text, default=None)
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )

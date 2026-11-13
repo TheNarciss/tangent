@@ -5,6 +5,7 @@ import {
   PieChart,
   Radar,
   Receipt,
+  Search,
   TrendingUp,
   Wallet,
   type LucideIcon,
@@ -20,6 +21,7 @@ export type NavView =
   | "accounts"
   | "spending"
   | "investments"
+  | "quotes"
   | "picks"
   | "leads"
   | "projection"
@@ -33,6 +35,7 @@ export const NAV_PATHS: Record<NavView, string> = {
   accounts: "/comptes",
   spending: "/depenses",
   investments: "/placements",
+  quotes: "/placements/cours",
   picks: "/placements/liste",
   leads: "/placements/pistes",
   projection: "/projection",
@@ -87,6 +90,7 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: PieChart,
     children: [
       { view: "investments", labelKey: "nav.investments", icon: PieChart },
+      { view: "quotes", labelKey: "nav.quotes", icon: Search },
       { view: "picks", labelKey: "nav.picks", icon: ListOrdered },
       { view: "leads", labelKey: "nav.leads", icon: Radar },
     ],

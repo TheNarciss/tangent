@@ -1,4 +1,4 @@
-"""The phones that agreed to be told when a briefing is ready (ADR-037)."""
+"""The phones that agreed to be told when a briefing is ready (ADR-039)."""
 
 from __future__ import annotations
 

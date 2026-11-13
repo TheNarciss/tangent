@@ -5,7 +5,9 @@ import { useNavigate } from "react-router-dom";
 import {
   getPowensWebviewUrl,
   startEnableBankingAuth,
+  startFinverseLink,
   useEnableBankingStatus,
+  useFinverseStatus,
   useSyncStatus,
 } from "@/api";
 import {
@@ -22,6 +24,9 @@ import { openExternalFlow, platform } from "@/native/flows";
 
 /** The bank Enable Banking carries for us; everything else goes through Powens (ADR-032). */
 const ENABLEBANKING_BANK = "Revolut";
+
+/** Revolut by Enable Banking, Asian banks by Finverse (ADR-037), the rest by Powens. */
+type Flow = "revolut" | "other" | "asia";
 
 /** Header button: opens the sheet where the user picks how to connect a bank. */
 export function AddBankButton() {
@@ -48,18 +53,21 @@ function AddBankSheet({
   const { t } = useT();
   const powens = useSyncStatus();
   const enablebanking = useEnableBankingStatus();
-  const [busy, setBusy] = useState<"revolut" | "other" | null>(null);
+  const finverse = useFinverseStatus();
+  const [busy, setBusy] = useState<Flow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  const go = async (which: "revolut" | "other") => {
+  const go = async (which: Flow) => {
     setBusy(which);
     setError(null);
     try {
       const url =
         which === "revolut"
           ? await startEnableBankingAuth(ENABLEBANKING_BANK, "FR", platform())
-          : await getPowensWebviewUrl(platform());
+          : which === "asia"
+            ? await startFinverseLink(platform())
+            : await getPowensWebviewUrl(platform());
       await openExternalFlow(url, navigate);
       setBusy(null);
       onOpenChange(false);
@@ -71,6 +79,7 @@ function AddBankSheet({
 
   const powensReady = powens.data?.configured ?? true;
   const revolutReady = enablebanking.data?.configured ?? true;
+  const asiaReady = finverse.data?.configured ?? true;
 
   return (
     <BottomSheet open={open} onOpenChange={onOpenChange}>
@@ -101,6 +110,15 @@ function AddBankSheet({
             disabled={!powensReady || busy !== null}
             busy={busy === "other"}
             onClick={() => go("other")}
+          />
+          <Choice
+            title={t("accounts.addBank.asiaBank")}
+            detail={
+              asiaReady ? t("accounts.addBank.asiaDetail") : t("accounts.addBank.asiaUnavailable")
+            }
+            disabled={!asiaReady || busy !== null}
+            busy={busy === "asia"}
+            onClick={() => go("asia")}
           />
           {error && <p className="text-xs text-[hsl(var(--loss))]">{error}</p>}
         </div>

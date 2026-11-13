@@ -18,7 +18,10 @@ import { AddBankButton } from "@/components/AddBankButton";
 import { AuthScreen } from "@/components/auth/AuthScreen";
 import { UserMenu } from "@/components/auth/UserMenu";
 import { Dashboard } from "@/components/Dashboard";
-import { EnableBankingCallbackHandler } from "@/components/EnableBankingCallback";
+import {
+  EnableBankingCallbackHandler,
+  FinverseCallbackHandler,
+} from "@/components/EnableBankingCallback";
 import { Methode } from "@/components/Methode";
 import { OAuthCallbackHandler } from "@/components/OAuthCallback";
 import { Picks } from "@/components/Picks";
@@ -27,6 +30,7 @@ import { Placements } from "@/components/Placements";
 import { PowensCallbackHandler } from "@/components/PowensCallback";
 import { ProfilePage } from "@/components/Profile";
 import { Projection } from "@/components/Projection";
+import { Quotes } from "@/components/Quotes";
 import { Spending } from "@/components/Spending";
 import { TermsGate } from "@/components/TermsGate";
 
@@ -95,6 +99,7 @@ function Shell() {
     <>
       <PowensCallbackHandler />
       <EnableBankingCallbackHandler />
+      <FinverseCallbackHandler />
       <OAuthCallbackHandler />
       <AppShell
         pageTitle={config.title}
@@ -110,6 +115,7 @@ function Shell() {
           <Route path={NAV_PATHS.accounts} element={<Accounts />} />
           <Route path={NAV_PATHS.spending} element={<Spending />} />
           <Route path={NAV_PATHS.investments} element={<Placements />} />
+          <Route path={NAV_PATHS.quotes} element={<Quotes />} />
           <Route path={NAV_PATHS.picks} element={<Picks />} />
           <Route path={NAV_PATHS.leads} element={<MarketLeads />} />
           <Route path={NAV_PATHS.projection} element={<Projection />} />
@@ -153,6 +159,8 @@ function getViewConfig(pathname: string, inputs: ViewConfigInputs): ViewConfig {
       return { title: t("nav.projection"), subtitle: t("view.projection.subtitle") };
     case NAV_PATHS.investments:
       return { title: t("nav.investments"), subtitle: t("view.investments.subtitle") };
+    case NAV_PATHS.quotes:
+      return { title: t("nav.quotes"), subtitle: t("view.quotes.subtitle") };
     case NAV_PATHS.picks:
       return { title: t("nav.picks"), subtitle: t("view.picks.subtitle") };
     case NAV_PATHS.leads:

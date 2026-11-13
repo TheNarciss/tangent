@@ -63,6 +63,18 @@ _VENUES: tuple[tuple[str, str, str], ...] = (
     ("US", "", "USD"),  # US composite
 )
 
+_EURO_SUFFIXES: tuple[str, ...] = tuple(suffix for _, suffix, cur in _VENUES if cur == "EUR")
+
+
+def quoted_in_euros(ticker: str) -> bool:
+    """Whether a Yahoo symbol's suffix names one of the euro venues above.
+
+    A bare US symbol, a London line or a symbol a bank built from a label
+    does not qualify: its Yahoo price is not a price in euros, or not a
+    price for this line at all.
+    """
+    return ticker.strip().upper().endswith(_EURO_SUFFIXES)
+
 
 # The home venue of an ISIN, by the country that issued it. Santander trades
 # in Frankfurt too, but Madrid carries its whole history and the volume; a

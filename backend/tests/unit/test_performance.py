@@ -173,3 +173,25 @@ def test_a_wrapper_valued_in_bulk_is_left_out_rather_than_flattering_the_return(
     total, quantities, _ = performance.snapshot_inputs(_wealth(with_bulk_account=True))
     assert total == pytest.approx(5_500.0)
     assert "av" not in quantities
+
+
+def test_a_line_with_a_close_is_valued_at_the_market_not_at_the_bank():
+    """The reading moves with the market even on a night the bank was not read."""
+    total, _, prices = performance.snapshot_inputs(_wealth(), {"CW8.PA": 520.0})
+    assert total == pytest.approx(10 * 520.0 + 500.0)
+    assert prices["CW8.PA"] == pytest.approx(520.0)
+
+
+def test_two_nights_without_a_bank_read_still_see_the_market_move():
+    """The user's case: same quantities, same bank figure, two different closes."""
+    wealth = _wealth()
+    monday, q_monday, _ = performance.snapshot_inputs(wealth, {"CW8.PA": 510.0})
+    tuesday, q_tuesday, p_tuesday = performance.snapshot_inputs(wealth, {"CW8.PA": 515.0})
+    assert tuesday - monday == pytest.approx(50.0)
+    assert net_flow_between(q_monday, q_tuesday, p_tuesday) == pytest.approx(0.0)
+
+
+def test_a_close_far_from_the_bank_figure_is_taken_for_another_listing():
+    total, _, prices = performance.snapshot_inputs(_wealth(), {"CW8.PA": 5.2})
+    assert total == pytest.approx(5_500.0)
+    assert prices["CW8.PA"] == pytest.approx(500.0)

@@ -35,11 +35,14 @@ from ..aggregator.persist import Persisted, persist_sync_result
 from ..aggregator.types import AccountType, SyncResult
 from ..auth import User, current_active_user
 from ..db import get_session
-from ..db.models import BankAccount, EnableBankingSession, PowensCredential
+from ..db.models import BankAccount, EnableBankingSession, FinverseConnection, PowensCredential
 from ..enablebanking import aggregator as enablebanking_agg
+from ..finance import fx
 from ..finance.gap_filler.fields.transaction_category import CATEGORIES
+from ..finverse import aggregator as finverse_agg
 from ..i18n import Locale, current_locale, t
 from ..powens.aggregator import PowensAggregator
+from ..powens.aggregator import parse_datetime as parse_powens_datetime
 from ..powens.client import PowensClient, PowensError
 from ..powens.crypto import decrypt_token
 from ..repositories import account_holdings as holdings_repo
@@ -135,6 +138,10 @@ class BankAccountResponse(BaseModel):
     # Nested loan (one-to-one) — populated when type is loan-like
     loan: LoanResponse | None = None
 
+    # Amounts above are in `currency`; this times them reads in euros (ADR-038).
+    # None when the ECB has no rate for it: the account is left out of totals.
+    to_eur: float | None = 1.0
+
 
 class HoldingResponse(BaseModel):
     id: uuid.UUID
@@ -205,7 +212,7 @@ def _loan_to_response(loan) -> LoanResponse:
     )
 
 
-def _bank_account_to_response(r: BankAccount) -> BankAccountResponse:
+def _bank_account_to_response(r: BankAccount, factors: dict[str, float]) -> BankAccountResponse:
     """Convert an ORM BankAccount row to a Pydantic response, including nested Loan."""
     return BankAccountResponse(
         id=r.id,
@@ -234,6 +241,7 @@ def _bank_account_to_response(r: BankAccount) -> BankAccountResponse:
         display=r.display,
         last_synced_at=r.last_synced_at,
         loan=_loan_to_response(r.loan) if r.loan else None,
+        to_eur=factors.get(fx.code(r.currency)),
     )
 
 
@@ -247,7 +255,8 @@ async def list_accounts(
 ) -> list[BankAccountResponse]:
     """All bank accounts owned by the current user (with nested loan if any)."""
     rows = await accounts_repo.list_accounts(session, user.id)
-    return [_bank_account_to_response(r) for r in rows]
+    factors = await fx.to_eur_factors(r.currency for r in rows)
+    return [_bank_account_to_response(r, factors) for r in rows]
 
 
 class BankConnectionResponse(BaseModel):
@@ -303,7 +312,7 @@ async def list_bank_connections(
                 connection_id=conn_id,
                 institution_name=institution_name,
                 accounts_count=len(accounts),
-                last_update=_parse_iso(conn.get("last_update")),
+                last_update=parse_powens_datetime(conn.get("last_update")),
                 error=conn.get("error"),
             )
         )
@@ -366,16 +375,6 @@ async def delete_bank_connection(
     )
 
 
-def _parse_iso(s: str | None) -> datetime | None:
-    """Parse an ISO datetime string from Powens (handles trailing Z)."""
-    if not s:
-        return None
-    try:
-        return datetime.fromisoformat(s.replace("Z", "+00:00"))
-    except (TypeError, ValueError):
-        return None
-
-
 @router.get("/{account_id}", response_model=BankAccountResponse)
 async def get_account(
     account_id: uuid.UUID,
@@ -385,7 +384,7 @@ async def get_account(
     row = await accounts_repo.get_account(session, user.id, account_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Account not found")
-    return _bank_account_to_response(row)
+    return _bank_account_to_response(row, await fx.to_eur_factors([row.currency]))
 
 
 @router.get("/{account_id}/holdings", response_model=list[HoldingResponse])
@@ -590,7 +589,7 @@ async def _do_sync(user: User, session: AsyncSession, locale: Locale = "fr") -> 
     """Actual sync logic — no cache check, always hits the providers.
 
     Powens when the user has a credential, then every live Enable Banking
-    session. One provider failing does not hide the others' data: the report
+    session, then every Finverse link. One provider failing does not hide the others' data: the report
     carries its error next to the counts.
     """
     now = datetime.now(UTC)
@@ -619,6 +618,17 @@ async def _do_sync(user: User, session: AsyncSession, locale: Locale = "fr") -> 
                 session, row, since=date.today() - timedelta(days=DAILY_SYNC_DAYS)
             )
         )
+    links = (
+        (
+            await session.execute(
+                select(FinverseConnection).where(FinverseConnection.user_id == user.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for link in links:
+        results.append(await finverse_agg.sync_row(link))
     await session.commit()
 
     if not results:

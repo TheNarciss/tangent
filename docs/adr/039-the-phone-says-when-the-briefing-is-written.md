@@ -1,4 +1,4 @@
-# ADR-037: Le téléphone prévient quand le briefing est écrit, et rien d'autre
+# ADR-039: Le téléphone prévient quand le briefing est écrit, et rien d'autre
 
 - **Status** : accepted
 - **Date** : 2026-09-18

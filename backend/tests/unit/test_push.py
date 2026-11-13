@@ -49,7 +49,7 @@ async def test_nothing_to_send_is_not_an_error():
 async def test_a_retired_token_is_reported_dead_and_the_others_still_go(monkeypatch):
     seen: list[str] = []
 
-    async def fake_post(self, url, **kwargs):  # noqa: ANN001
+    async def fake_post(self, url, **kwargs):
         token = url.rsplit("/", 1)[-1]
         seen.append(token)
         if token == "dead":
@@ -69,7 +69,7 @@ async def test_a_retired_token_is_reported_dead_and_the_others_still_go(monkeypa
 
 @pytest.mark.asyncio
 async def test_apns_unreachable_never_raises(monkeypatch):
-    async def boom(self, url, **kwargs):  # noqa: ANN001
+    async def boom(self, url, **kwargs):
         raise httpx.ConnectError("nope")
 
     monkeypatch.setattr(httpx.AsyncClient, "post", boom)

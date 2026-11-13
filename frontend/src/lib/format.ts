@@ -66,7 +66,37 @@ function kEur(v: number): string {
   return en ? `€${Math.round(v)}` : `${Math.round(v)} €`;
 }
 
+const moneyCache: Record<string, Intl.NumberFormat> = {};
+
+/** A price in the instrument's own currency: 696,47 € / $187.20 / 12,50 £. */
+function money(v: number, currency: string): string {
+  const key = `${getLocale()}|${currency}`;
+  try {
+    moneyCache[key] ??= new Intl.NumberFormat(LOCALE_TAGS[getLocale()], {
+      style: "currency",
+      currency,
+      maximumFractionDigits: Math.abs(v) < 1 ? 4 : 2,
+    });
+    return moneyCache[key].format(v);
+  } catch {
+    return `${F().dec.format(v)} ${currency}`; // a currency code Intl does not know
+  }
+}
+
+/** An account's amount in its own currency; euros keep the house format (ADR-038). */
+function amount(v: number, currency: string | null | undefined): string {
+  return !currency || currency === "EUR" ? F().eur.format(v) : money(v, currency);
+}
+
+function signedAmount(v: number, currency: string | null | undefined): string {
+  if (!currency || currency === "EUR") return F().signedEur.format(v);
+  return `${v > 0 ? "+" : ""}${money(v, currency)}`;
+}
+
 export const fmt = {
+  money,
+  amount,
+  signedAmount,
   eur: (v: number) => F().eur.format(v),
   /** Whole euros — yearly fees, amounts « en jeu ». */
   eur0: (v: number) => F().eur0.format(v),

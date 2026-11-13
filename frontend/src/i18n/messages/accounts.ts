@@ -115,6 +115,9 @@ const fr = {
   "accounts.addBank.otherBank": "Une autre banque",
   "accounts.addBank.otherDetail": "BNP, Boursorama, Crédit Agricole… via Powens.",
   "accounts.addBank.otherUnavailable": "Powens n'est pas configuré côté serveur.",
+  "accounts.addBank.asiaBank": "Une banque d'Asie",
+  "accounts.addBank.asiaDetail": "DBS, POSB, OCBC… à Singapour et Hong Kong, via Finverse.",
+  "accounts.addBank.asiaUnavailable": "Finverse n'est pas configuré côté serveur.",
   "accounts.addBank.redirecting": "Redirection…",
 
   // ── Account detail (AccountDetailSheet.tsx) ───────────────────────────
@@ -265,6 +268,9 @@ const en: Record<keyof typeof fr, string> = {
   "accounts.addBank.otherBank": "Another bank",
   "accounts.addBank.otherDetail": "BNP, Boursorama, Crédit Agricole… via Powens.",
   "accounts.addBank.otherUnavailable": "Powens is not configured on the server.",
+  "accounts.addBank.asiaBank": "A bank in Asia",
+  "accounts.addBank.asiaDetail": "DBS, POSB, OCBC… in Singapore and Hong Kong, via Finverse.",
+  "accounts.addBank.asiaUnavailable": "Finverse is not configured on the server.",
   "accounts.addBank.redirecting": "Redirecting…",
 
   // ── Account detail (AccountDetailSheet.tsx) ───────────────────────────

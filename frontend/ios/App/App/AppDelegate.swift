@@ -8,7 +8,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     /// Apple's address for this app on this phone, once the system gives it.
     /// `TangentNativePlugin.requestPushPermission` waits for it, then hands it
-    /// to the backend so the morning briefing can be announced (ADR-037).
+    /// to the backend so the morning briefing can be announced (ADR-039).
     static let deviceTokenChanged = Notification.Name("TangentDeviceTokenChanged")
     static private(set) var deviceToken: String?
 

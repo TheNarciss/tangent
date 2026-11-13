@@ -1,5 +1,5 @@
 /**
- * « Préviens-moi quand mon briefing est prêt » (ADR-037).
+ * « Préviens-moi quand mon briefing est prêt » (ADR-039).
  *
  * Three things have to agree: iOS must allow it, Apple must hand the app an
  * address for this phone, and the backend must know that address. The switch

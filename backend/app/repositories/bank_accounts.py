@@ -16,9 +16,59 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..aggregator import BankAccount as BankAccountDTO
+from ..aggregator.same_account import connection, distinct_connections, identity, row_identity
 from ..db.models import BankAccount, Loan
 
 logger = logging.getLogger(__name__)
+
+
+async def _adopt_oldest_row(
+    session: AsyncSession, user_id: uuid.UUID, account_dto: BankAccountDTO
+) -> None:
+    """Give this id to the account's oldest row; drop the duplicates made since.
+
+    The oldest row carries the history — transactions, categories decided —
+    and answers to the new id from now on. A row an earlier sync created for
+    the same account under another connection is a duplicate, and goes.
+    """
+    key = identity(account_dto)
+    if key is None:
+        return
+    rows = (
+        (
+            await session.execute(
+                select(BankAccount).where(
+                    BankAccount.user_id == user_id,
+                    BankAccount.provider == account_dto.provider,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    same = [
+        r
+        for r in rows
+        if row_identity(r.type, r.currency, r.iban, r.number, r.institution_name) == key
+    ]
+    others = [r for r in same if r.provider_account_id != account_dto.provider_account_id]
+    connections = [connection(account_dto.raw_data)] + [connection(r.raw_data) for r in others]
+    if not others or not distinct_connections(connections):
+        return
+    oldest, *newer = sorted(same, key=lambda r: r.created_at)
+    for row in newer:
+        logger.info("bank_account %s is a duplicate of %s, removed", row.id, oldest.id)
+        await session.delete(row)
+    await session.flush()
+    if oldest.provider_account_id != account_dto.provider_account_id:
+        logger.info(
+            "bank_account %s recognised under a new id: %s → %s",
+            oldest.id,
+            oldest.provider_account_id,
+            account_dto.provider_account_id,
+        )
+        oldest.provider_account_id = account_dto.provider_account_id
+        await session.flush()
 
 
 # ── BankAccount field set extracted from DTO ───────────────────────────────
@@ -115,9 +165,13 @@ async def upsert_account(
 ) -> BankAccount:
     """Insert or update based on (user_id, provider, provider_account_id).
 
+    An account already known under another id (a bank connected again) is
+    updated in place: its oldest row takes the new id first.
+
     If the DTO carries a `loan` sub-object, also upserts the Loan row
     transactionally (one-to-one with the BankAccount).
     """
+    await _adopt_oldest_row(session, user_id, account_dto)
     stmt = select(BankAccount).where(
         BankAccount.user_id == user_id,
         BankAccount.provider == account_dto.provider,

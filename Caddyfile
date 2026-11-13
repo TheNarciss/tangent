@@ -6,10 +6,11 @@
         #   - /auth/powens/* (OAuth initiate + callback)
         #   - /webhooks/powens (external POST from Powens, currently disabled)
         # Same exception for Enable Banking: the callback URL is registered at
-        # the provider (ADR-032).
+        # the provider (ADR-032), and for Finverse (ADR-037).
         path /api/*
         path /auth/powens/*
         path /auth/enablebanking/*
+        path /auth/finverse/*
         path /webhooks/powens
     }
 

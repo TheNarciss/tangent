@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { getLocale, t } from "@/i18n";
 import { clearProfile } from "@/lib/profile";
@@ -542,9 +542,23 @@ export function useSyncStatus() {
   });
 }
 
-export async function getPowensWebviewUrl(platform: "web" | "app" = "web"): Promise<string> {
-  // Powens initiate is on /auth/powens/* (ADR-020 Powens exception, not /api/*)
-  const powensRes = await fetch(`${BACKEND_BASE}/auth/powens/initiate?platform=${platform}`, {
+export function getPowensWebviewUrl(platform: "web" | "app" = "web"): Promise<string> {
+  return powensWebviewUrl(`/auth/powens/initiate?platform=${platform}`);
+}
+
+/** The Powens page that repairs a connection in error, in place (new password, fresh SCA). */
+export function getPowensReconnectUrl(
+  connectionId: number,
+  platform: "web" | "app" = "web",
+): Promise<string> {
+  return powensWebviewUrl(
+    `/auth/powens/reconnect?connection_id=${connectionId}&platform=${platform}`,
+  );
+}
+
+async function powensWebviewUrl(path: string): Promise<string> {
+  // Powens routes are on /auth/powens/* (ADR-020 Powens exception, not /api/*)
+  const powensRes = await fetch(`${BACKEND_BASE}${path}`, {
     credentials: "include",
     headers: { "Accept-Language": getLocale() },
   });
@@ -606,6 +620,46 @@ export async function startEnableBankingAuth(
 
 export async function unlinkEnableBankingSession(id: string): Promise<void> {
   await http<void>(`/enablebanking/sessions/${id}`, { method: "DELETE" });
+}
+
+/* ── Finverse (ADR-037) ─────────────────────────────────────────────── */
+
+export interface FinverseConnection {
+  id: string;
+  institution_name: string;
+  accounts_count: number;
+  last_sync_at: string | null;
+  last_error: string | null;
+}
+
+/** Whether the server holds Finverse credentials. */
+export function useFinverseStatus() {
+  return useQuery({
+    queryKey: ["finverse", "status"],
+    queryFn: () => http<{ configured: boolean }>("/finverse/status"),
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
+export function useFinverseConnections() {
+  return useQuery({
+    queryKey: ["finverse", "connections"],
+    queryFn: () => http<FinverseConnection[]>("/finverse/connections"),
+  });
+}
+
+/** Where Finverse Link opens: the person picks their bank there. */
+export async function startFinverseLink(platform: "web" | "app" = "web"): Promise<string> {
+  const out = await http<{ url: string }>("/finverse/link", {
+    method: "POST",
+    body: JSON.stringify({ platform }),
+  });
+  return out.url;
+}
+
+export async function unlinkFinverseConnection(id: string): Promise<void> {
+  await http<void>(`/finverse/connections/${id}`, { method: "DELETE" });
 }
 
 /* ── Admin ──────────────────────────────────────────────────────────── */
@@ -761,6 +815,9 @@ export interface BankAccountResponse {
 
   // Loan sub-object (only when type is loan-like)
   loan: LoanResponse | null;
+
+  /** Times the amounts above, in euros (ADR-038); null when the ECB has no rate. */
+  to_eur?: number | null;
 }
 
 export interface HoldingResponse {
@@ -1120,7 +1177,8 @@ export async function generateReviewNow(): Promise<void> {
 
 /* ── Market leads (ADR-033) ─────────────────────────────────────────── */
 
-export type MarketLeadSource = "polymarket" | "edgar_form4" | "edgar_13f";
+export type MarketLeadSource =
+  "polymarket" | "kalshi" | "edgar_form4" | "edgar_13f" | "edgar_13d" | "cftc";
 
 export interface MarketLead {
   source: MarketLeadSource;
@@ -1146,6 +1204,65 @@ export function useMarketLeads() {
     staleTime: 60 * 60_000,
     retry: false,
     refetchInterval: (query) => (query.state.data ? false : 60_000),
+  });
+}
+
+/* ── Quotes: one line's own price ───────────────────────────────────── */
+
+export type QuoteScale = "1d" | "1w" | "1m" | "6m" | "1y" | "5y" | "max";
+/** Shortest first: the order of the buttons, and the direction a pinch walks. */
+export const QUOTE_SCALES: readonly QuoteScale[] = ["1d", "1w", "1m", "6m", "1y", "5y", "max"];
+
+export interface QuotePoint {
+  t: string; // ISO-8601 with the exchange's offset
+  close: number;
+}
+
+export interface QuoteHistory {
+  symbol: string;
+  name: string | null;
+  currency: string;
+  scale: QuoteScale;
+  interval: string; // the bar size served: 5m, 15m, 1h, 1d, 1wk, 1mo
+  points: QuotePoint[];
+  previous_close: number | null; // the close before the window, for the one-day change
+}
+
+export interface QuoteMatch {
+  symbol: string;
+  name: string;
+  exchange: string;
+  kind: "equity" | "etf" | "index";
+}
+
+/**
+ * The closes of one symbol at one scale. `isin` lets the backend fall back
+ * on the venue OpenFIGI names when Yahoo does not know the bank's ticker.
+ * The previous scale's curve stays on screen while the next one loads.
+ */
+export function useQuoteHistory(symbol: string | null, scale: QuoteScale, isin?: string | null) {
+  const params = new URLSearchParams({ symbol: symbol ?? "", scale });
+  if (isin) params.set("isin", isin);
+  return useQuery({
+    queryKey: ["quotes", "history", symbol, scale, isin ?? null],
+    queryFn: () => http<QuoteHistory>(`/quotes/history?${params}`),
+    enabled: symbol !== null && symbol !== "",
+    staleTime: 5 * 60_000,
+    retry: false,
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** Instruments matching a name or symbol; asks nothing under two characters. */
+export function useQuoteSearch(query: string) {
+  const q = query.trim();
+  return useQuery({
+    queryKey: ["quotes", "search", q.toLowerCase()],
+    queryFn: () => http<QuoteMatch[]>(`/quotes/search?q=${encodeURIComponent(q)}`),
+    enabled: q.length >= 2,
+    staleTime: 60 * 60_000,
+    retry: false,
+    placeholderData: keepPreviousData,
   });
 }
 

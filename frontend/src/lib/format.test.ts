@@ -94,3 +94,16 @@ describe("French abbreviations", () => {
     expect(normalize(fmt.approxEur(12_345))).toMatch(/^12 000 €$/);
   });
 });
+
+describe("fmt.amount", () => {
+  it("keeps the euro format for euros", () => {
+    expect(fmt.amount(12.5, "EUR")).toBe(fmt.eur(12.5));
+    expect(fmt.signedAmount(-3, "EUR")).toBe(fmt.signedEur(-3));
+  });
+
+  it("shows another currency in its own symbol", () => {
+    expect(normalize(fmt.amount(1500, "SGD"))).toMatch(/1.500,00|1 500,00/);
+    expect(normalize(fmt.amount(1500, "SGD"))).toContain("SG"); // « 1 500,00 $SG »
+    expect(normalize(fmt.signedAmount(25, "SGD")).startsWith("+")).toBe(true);
+  });
+});

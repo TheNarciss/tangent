@@ -9,6 +9,8 @@ Jobs registered:
                           the stored list is stale -> finance.picks
 - sync_enablebanking    : daily at 07:15 Europe/Paris, every live consent
                           -> enablebanking.aggregator (PSD2 allows four a day)
+- sync_finverse         : daily at 07:20 Europe/Paris, every Finverse link
+                          -> finverse.aggregator (Finverse refreshes the bank itself)
 - record_portfolio_snapshots : daily at 02:00 Europe/Paris -> snapshot_job
 - submit_nightly_batch  : daily at 03:00 Europe/Paris -> batch_submitter
 - poll_pending_batches  : every 15 min, all day -> batch_poller (idempotent,
@@ -23,7 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -34,15 +36,18 @@ from sqlalchemy import select
 from . import archive
 from .aggregator.persist import persist_sync_result
 from .db import async_session_factory
-from .db.models import EnableBankingSession
+from .db.models import EnableBankingSession, FinverseConnection
 from .enablebanking import aggregator as enablebanking_agg
 from .finance import macro, market_leads, picks, stress
+from .finverse import aggregator as finverse_agg
 from .llm import batch_poller, batch_submitter
+from .repositories import review_batches as batches_repo
 from .snapshot_job import record_all_users
 
 logger = logging.getLogger(__name__)
 
 _PARIS = ZoneInfo("Europe/Paris")
+NIGHTLY_AT = time(3, 0)  # the nightly batch: briefings and gap filling, Paris time
 
 
 async def _job_submit_nightly() -> None:
@@ -64,6 +69,36 @@ async def _job_submit_nightly() -> None:
                 )
         except Exception:
             logger.exception("Scheduler: nightly batch submit failed")
+
+
+def missed_tonight(now: datetime, last_submitted: datetime | None) -> bool:
+    """Whether tonight's batch was due and nothing was submitted since.
+
+    `now` is Paris time. The scheduler keeps its jobs in memory, so a
+    machine that reboots at 03:00 (the VM's automatic security updates do,
+    about once a month) or a deploy in the night skips the cron entirely.
+    """
+    due = datetime.combine(now.date(), NIGHTLY_AT, tzinfo=_PARIS)
+    return now >= due and (last_submitted is None or last_submitted < due)
+
+
+async def _job_catch_up_nightly() -> None:
+    """At boot, submit tonight's batch if the restart made the cron miss it.
+
+    A briefing that arrives late beats a briefing that never comes. A batch
+    already submitted since 03:00 means there is nothing to catch up.
+    """
+    try:
+        async with async_session_factory() as session:
+            recent = await batches_repo.list_recent(session, limit=1)
+        last = recent[0].submitted_at if recent else None
+        if not missed_tonight(datetime.now(_PARIS), last):
+            return
+    except Exception:
+        logger.exception("Scheduler: nightly catch-up check failed")
+        return
+    logger.warning("Scheduler: tonight's batch was missed (restart), submitting it now")
+    await _job_submit_nightly()
 
 
 async def _job_poll_pending() -> None:
@@ -171,6 +206,20 @@ async def _job_sync_enablebanking() -> None:
             logger.exception("Scheduler: Enable Banking sync failed")
 
 
+async def _job_sync_finverse() -> None:
+    """Read every Finverse link, one at a time; a new refresh token is committed at once."""
+    async with async_session_factory() as session:
+        try:
+            rows = (await session.execute(select(FinverseConnection))).scalars().all()
+            for row in rows:
+                result = await finverse_agg.sync_row(row)
+                if result.success:
+                    await persist_sync_result(session, row.user_id, result)
+                await session.commit()
+        except Exception:
+            logger.exception("Scheduler: Finverse sync failed")
+
+
 def setup_scheduler() -> AsyncIOScheduler:
     """Build the scheduler with the nightly jobs (not started yet).
 
@@ -204,6 +253,14 @@ def setup_scheduler() -> AsyncIOScheduler:
         _job_sync_enablebanking,
         CronTrigger(hour=7, minute=15, timezone=_PARIS),
         id="sync_enablebanking",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        _job_sync_finverse,
+        CronTrigger(hour=7, minute=20, timezone=_PARIS),
+        id="sync_finverse",
         replace_existing=True,
         max_instances=1,
         coalesce=True,
@@ -247,11 +304,17 @@ def setup_scheduler() -> AsyncIOScheduler:
 
     scheduler.add_job(
         _job_submit_nightly,
-        CronTrigger(hour=3, minute=0, timezone=_PARIS),
+        CronTrigger(hour=NIGHTLY_AT.hour, minute=NIGHTLY_AT.minute, timezone=_PARIS),
         id="submit_nightly_batch",
         replace_existing=True,
         max_instances=1,
         coalesce=True,
+    )
+    scheduler.add_job(
+        _job_catch_up_nightly,
+        DateTrigger(run_date=datetime.now(_PARIS) + timedelta(seconds=90)),
+        id="catch_up_nightly_at_boot",
+        replace_existing=True,
     )
 
     scheduler.add_job(
@@ -265,6 +328,7 @@ def setup_scheduler() -> AsyncIOScheduler:
 
     logger.info(
         "Scheduler configured: %d jobs registered (compute_picks, sync_enablebanking, "
+        "sync_finverse, "
         "record_portfolio_snapshots, submit_nightly_batch, poll_pending_batches)",
         len(scheduler.get_jobs()),
     )

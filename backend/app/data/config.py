@@ -97,6 +97,16 @@ class EdgarConfig(BaseModel):
     min_seconds_between_requests: float = Field(default=0.12, ge=0)
 
 
+class CftcConfig(BaseModel):
+    base_url: str
+    financial_dataset: str
+    commodities_dataset: str
+
+
+class KalshiConfig(BaseModel):
+    base_url: str
+
+
 class DataSourcesConfig(BaseModel):
     http_timeout_seconds: float = Field(default=20.0, gt=0)
     user_agent: str = "tangent/1.0"
@@ -112,6 +122,8 @@ class DataSourcesConfig(BaseModel):
     xtrackers: XtrackersConfig
     polymarket: PolymarketConfig
     edgar: EdgarConfig
+    cftc: CftcConfig
+    kalshi: KalshiConfig
 
 
 @lru_cache(maxsize=1)

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Compass } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -6,6 +7,7 @@ import { useT } from "@/i18n";
 import { fmt } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { PlacementsAdvanced } from "@/components/PlacementsAdvanced";
+import { QuoteSheet, type QuoteRef } from "@/components/QuoteChart";
 import { NAV_PATHS } from "@/components/Sidebar";
 
 const COLORS = ["#60a5fa", "#f97316", "#a78bfa", "#22d3ee", "#facc15", "#f472b6", "#10b981"];
@@ -77,6 +79,7 @@ export function Placements() {
 
 function WhatIHave({ metrics }: { metrics: PortfolioMetrics }) {
   const { t } = useT();
+  const [quote, setQuote] = useState<QuoteRef | null>(null);
   const assets = [...metrics.assets].sort((a, b) => b.weight - a.weight);
   const gain = metrics.total_pnl;
   return (
@@ -111,31 +114,39 @@ function WhatIHave({ metrics }: { metrics: PortfolioMetrics }) {
 
       <ul className="mt-3 divide-y rounded-md border text-sm">
         {assets.map((a, i) => (
-          <li key={a.ticker} className="flex items-center gap-3 px-3 py-2">
-            <span
-              className="h-2.5 w-2.5 shrink-0 rounded-full"
-              style={{ background: COLORS[i % COLORS.length] }}
-            />
-            <div className="min-w-0 flex-1">
-              <div className="truncate">{name(a)}</div>
-              <div className="text-xs text-muted-foreground">
-                {t("investments.whatIHave.share", { pct: fmt.pct(a.weight) })}
+          <li key={a.ticker}>
+            <button
+              type="button"
+              onClick={() => setQuote({ symbol: a.ticker, label: a.label })}
+              aria-label={`${t("market.quotes.open")} · ${name(a)}`}
+              className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-accent/40"
+            >
+              <span
+                className="h-2.5 w-2.5 shrink-0 rounded-full"
+                style={{ background: COLORS[i % COLORS.length] }}
+              />
+              <div className="min-w-0 flex-1">
+                <div className="truncate">{name(a)}</div>
+                <div className="text-xs text-muted-foreground">
+                  {t("investments.whatIHave.share", { pct: fmt.pct(a.weight) })}
+                </div>
               </div>
-            </div>
-            <div className="shrink-0 text-right">
-              <div className="font-mono tabular">{fmt.eur(a.value)}</div>
-              <div
-                className={cn(
-                  "font-mono text-xs tabular",
-                  a.pnl >= 0 ? "text-[hsl(var(--gain))]" : "text-[hsl(var(--loss))]",
-                )}
-              >
-                {fmt.signedEur(a.pnl)}
+              <div className="shrink-0 text-right">
+                <div className="font-mono tabular">{fmt.eur(a.value)}</div>
+                <div
+                  className={cn(
+                    "font-mono text-xs tabular",
+                    a.pnl >= 0 ? "text-[hsl(var(--gain))]" : "text-[hsl(var(--loss))]",
+                  )}
+                >
+                  {fmt.signedEur(a.pnl)}
+                </div>
               </div>
-            </div>
+            </button>
           </li>
         ))}
       </ul>
+      <QuoteSheet quote={quote} onClose={() => setQuote(null)} />
     </Block>
   );
 }
