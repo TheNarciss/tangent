@@ -11,7 +11,7 @@ Le code est dans le dépôt (ADR-035). Ce qui suit se fait dans le compte Apple 
 | Services ID | `uk.riskybusinesses.tangent.web`, Sign in with Apple configuré : domaine `riskybusinesses.uk`, Return URL `https://riskybusinesses.uk/api/auth/apple/callback`, groupé sous l'App ID | le site ; `APPLE_CLIENT_ID` |
 | Clé « Sign in with Apple » | un fichier `.p8` téléchargeable une seule fois, et son Key ID | `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY_B64` (`base64 -w0 AuthKey_XXXX.p8`) |
 | Certificat Apple Distribution | exporté en `.p12` avec mot de passe | secrets `IOS_CERTIFICATE_P12_B64`, `IOS_CERTIFICATE_PASSWORD` |
-| Profil de provisionnement App Store | pour l'App ID ci-dessus | secret `IOS_PROVISIONING_PROFILE_B64` |
+| Profils de provisionnement App Store | créés et mis à jour par le build (signature automatique) | rien à stocker |
 
 ### Le widget : rien à faire dans le portail
 
